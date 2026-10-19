@@ -5,6 +5,9 @@
 -- Its pressure field is drawn here, dithered in mint round its feet, denser
 -- where it presses harder (Flock.pressure, the same curve the sheep feel). It
 -- goes cream when the dog is fast enough to panic them.
+--
+-- It can bark (Flock's barkRadius): a ring goes out from it, and the flock
+-- inside takes a shove. Then it has to catch its breath.
 
 local Models = require "models"
 local Flock = require "flock"
@@ -28,12 +31,22 @@ local CONFIG = {
 Dog.CONFIG = CONFIG
 
 function Dog.new(x, z)
-    return setmetatable({ x = x, z = z, vx = 0, vz = 0, h = 0, gait = 0, speed = 0, radius = CONFIG.radius }, Dog)
+    return setmetatable({ x = x, z = z, vx = 0, vz = 0, h = 0, gait = 0, speed = 0, radius = CONFIG.radius,
+        barkT = 99, barked = false }, Dog)
+end
+
+-- Asked for a bark: true if it had the breath for one. The flock hears it on
+-- its next update (`barked` is up for that one frame).
+function Dog:bark()
+    if self.barkT < Flock.CONFIG.barkCooldown then return false end
+    self.barkT, self.barked = 0, true
+    return true
 end
 
 -- `move` is what input.lua answers: { dir = true, x, z } for a stick or keys
 -- (length 0..1), { point = true, x, z } for a field point to go to, or nil.
 function Dog:update(dt, move, level)
+    self.barkT = self.barkT + dt
     local tx, tz = 0, 0
     if move and move.dir then
         tx, tz = move.x * CONFIG.runSpeed, move.z * CONFIG.runSpeed
@@ -93,6 +106,23 @@ function Dog:drawField(camx, camy)
     local k = self:panicky() and "w" or "m"
     G.points(k, inner)
     G.points(k, rim)
+    self:drawBark(cx, cy, ix, iy)
+end
+
+-- The bark: a ring out to barkRadius, thinning as it goes.
+local RING = 0.32
+function Dog:drawBark(cx, cy, ix, iy)
+    local t = self.barkT / RING
+    if t >= 1 then return end
+    local R = 6 + (Flock.CONFIG.barkRadius - 6) * (1 - (1 - t) ^ 2)
+    local pts = {}
+    local steps = floor(R * 5)
+    for n = 0, steps - 1 do
+        local a = n / steps * TAU
+        local i, j = floor(cx + math.cos(a) * R), floor(cy + math.sin(a) * R * T.SE)
+        if t < 0.5 or (i + ix + j + iy) % 2 == 0 then G.plot(pts, i, j) end
+    end
+    G.points("w", pts)
 end
 
 function Dog:queue(into, camx, camy)
@@ -101,10 +131,15 @@ function Dog:queue(into, camx, camy)
     local gait = moving and floor(self.gait) % 4 or 0
     -- Low when creeping, up when standing or running.
     local crouch = (moving and not self:panicky()) and 2 or (self.speed > 2 and 1 or 0)
-    local pic = Models.dog(self.h, gait, crouch)
+    local barking = self.barkT < 0.25
+    if barking then crouch = 0 end
+    local pic = Models.dog(self.h, gait, crouch, barking)
     into[#into + 1] = { z = self.z, draw = function()
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(pic.img, sx - pic.oi, sy - pic.oj)
+        if barking then
+            G.label("w", "WOOF", sx - 7, sy - pic.oj - 8)
+        end
     end }
 end
 

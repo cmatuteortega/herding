@@ -7,7 +7,11 @@
 --
 -- A fence is a segment, solid for FENCE_R either side. A pen is a rectangle of
 -- fences with one gap in it (`gate`: the side, where along it 0..1, and how
--- wide). The field is fenced all round.
+-- wide). The field is fenced all round. A pond is a circle of water, as solid
+-- as a rock to everything on four legs, but flat: painted into the ground.
+--
+-- A flock entry is a bunch: `n` sheep of `kind` (a ewe unless it says) round
+-- (x, z), with `lambs` more that keep to them. `goal` is the share to pen.
 
 local G = require "gfx"
 local T = require "tracer"
@@ -56,6 +60,45 @@ Level.DEFS = {
         },
         rocks = { { 120, 62, 13 }, { 96, 176, 11 }, { 150, 205, 8 }, { 290, 190, 15 }, { 318, 150, 9 }, { 236, 60, 10 } },
     },
+    {
+        name = "THE POND",
+        hint = "LAMBS KEEP TO THEIR MOTHERS. MIND THE WATER.",
+        w = 380, h = 260,
+        flock = { { x = 80, z = 76, n = 4, r = 20, lambs = 3 }, { x = 92, z = 192, n = 3, r = 18, lambs = 2 } },
+        dog = { x = 26, z = 132 },
+        pen = { x = 290, z = 88, w = 70, h = 84, side = "w", at = 0.5, gap = 30 },
+        fences = {},
+        rocks = { { 150, 34, 8 }, { 236, 228, 9 } },
+        ponds = { { 192, 130, 38 } },
+    },
+    {
+        name = "THE BLACK SHEEP",
+        hint = "SHE WON'T BUDGE FOR A LOOK. GET CLOSE, OR BARK.",
+        w = 380, h = 250,
+        goal = 1,
+        flock = { { x = 76, z = 170, n = 5, r = 22 }, { x = 326, z = 204, n = 1, r = 0, kind = "black" } },
+        dog = { x = 30, z = 224 },
+        pen = { x = 150, z = 18, w = 80, h = 70, side = "s", at = 0.5, gap = 28 },
+        -- She grazes behind a fence: the way out to her is round the top.
+        fences = { { 270, 112, 270, 250 } },
+        rocks = { { 96, 84, 10 }, { 316, 58, 9 }, { 196, 196, 11 } },
+        ponds = { { 330, 150, 18 } },
+    },
+    {
+        name = "HOME PASTURE",
+        hint = "THE LONG WAY ROUND. TAKE YOUR TIME.",
+        w = 480, h = 320,
+        flock = {
+            { x = 70, z = 70, n = 5, r = 22, lambs = 2 }, { x = 92, z = 150, n = 4, r = 20 },
+            { x = 48, z = 292, n = 1, r = 0, kind = "black" },
+        },
+        dog = { x = 196, z = 40 },
+        pen = { x = 380, z = 212, w = 80, h = 88, side = "n", at = 0.5, gap = 28 },
+        -- Over the first fence, under the second, down into the pen.
+        fences = { { 240, 196, 240, 320 }, { 330, 0, 330, 150 } },
+        rocks = { { 200, 282, 10 }, { 420, 64, 12 }, { 286, 258, 9 }, { 160, 40, 8 } },
+        ponds = { { 128, 232, 30 }, { 284, 92, 22 } },
+    },
 }
 
 function Level.count() return #Level.DEFS end
@@ -92,6 +135,8 @@ function Level.new(n)
     end
 
     for _, r in ipairs(def.rocks) do L.rocks[#L.rocks + 1] = { x = r[1], z = r[2], r = r[3] } end
+    L.ponds = {}
+    for _, r in ipairs(def.ponds or {}) do L.ponds[#L.ponds + 1] = { x = r[1], z = r[2], r = r[3] } end
     -- A hay bale at the back of the pen: something for the penned to stand by.
     local hx, hz = p.x + p.w / 2, p.z + 10
     if p.side == "n" then hz = p.z + p.h - 10 end
@@ -139,10 +184,12 @@ function Level:collide(x, z, r)
                 x, z = cx + (x - cx) / d * need, cz + (z - cz) / d * need
             end
         end
-        for _, o in ipairs(self.rocks) do
-            local dx, dz = x - o.x, z - o.z
-            local d, need = sqrt(dx * dx + dz * dz), r + o.r
-            if d < need and d > 1e-6 then x, z = o.x + dx / d * need, o.z + dz / d * need end
+        for _, list in ipairs({ self.rocks, self.ponds }) do
+            for _, o in ipairs(list) do
+                local dx, dz = x - o.x, z - o.z
+                local d, need = sqrt(dx * dx + dz * dz), r + o.r
+                if d < need and d > 1e-6 then x, z = o.x + dx / d * need, o.z + dz / d * need end
+            end
         end
     end
     return max(r + FENCE_R, min(self.w - r - FENCE_R, x)), max(r + FENCE_R, min(self.h - r - FENCE_R, z))
@@ -165,10 +212,12 @@ function Level:repel(x, z, vx, vz, range)
         local cx, cz, d = nearest(s, x, z)
         if d > 1e-6 then add((x - cx) / d, (z - cz) / d, d - FENCE_R) end
     end
-    for _, o in ipairs(self.rocks) do
-        local dx, dz = x - o.x, z - o.z
-        local d = sqrt(dx * dx + dz * dz)
-        if d > 1e-6 then add(dx / d, dz / d, d - o.r) end
+    for _, list in ipairs({ self.rocks, self.ponds }) do
+        for _, o in ipairs(list) do
+            local dx, dz = x - o.x, z - o.z
+            local d = sqrt(dx * dx + dz * dz)
+            if d > 1e-6 then add(dx / d, dz / d, d - o.r) end
+        end
     end
     return fx, fz
 end
@@ -227,6 +276,14 @@ function Level:paintGround()
         local x, z = i - M, (j - M) / SE
         return x > p.x and x < p.x + p.w and z > p.z and z < p.z + p.h
     end
+    -- How far inside the nearest pond's shore (i, j) is: > 0 is wet.
+    local function wet(i, j)
+        local x, z, best = i - M, (j - M) / SE, -math.huge
+        for _, o in ipairs(self.ponds) do
+            best = max(best, o.r - sqrt((x - o.x) ^ 2 + (z - o.z) ^ 2))
+        end
+        return best
+    end
     for j = 0, h - 1 do
         for i = 0, w - 1 do
             local k
@@ -234,6 +291,17 @@ function Level:paintGround()
             if not inside(i, j) then
                 -- Past the fence: the hedge-dark rough, a little lighter in places.
                 k = (n > 0.6 and G.dither(i, j, (n - 0.6) * 1.2)) and "g" or "t"
+            elseif wet(i, j) > -2 then
+                -- A pond: a sandy lip, a stony one, then water, lighter
+                -- toward the middle, with the odd glint on it.
+                local d = wet(i, j)
+                if d <= 0 then k = "b"
+                elseif d < 1.5 then k = "s"
+                else
+                    k = "t"
+                    if d > 6 and G.dither(i, j, min(0.45, (d - 6) * 0.03)) then k = "g" end
+                    if hash(i, j) < 0.012 then k = "m" end
+                end
             elseif inPen(i, j) then
                 local r = hash(i, j)
                 k = r < 0.05 and "w" or (r < 0.08 and "s" or "b")
@@ -250,7 +318,7 @@ function Level:paintGround()
     local rnd = love.math.newRandomGenerator(self.n * 31 + 7)
     for _ = 1, floor(w * h / 260) do
         local i, j = rnd:random(0, w - 1), rnd:random(0, h - 1)
-        if inside(i, j) and not inPen(i, j) then
+        if inside(i, j) and not inPen(i, j) and wet(i, j) < -3 then
             local r = rnd:random()
             if r < 0.82 then
                 -- A tuft: two blades, lit tips, dark roots.

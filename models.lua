@@ -26,6 +26,8 @@ local RAMP = {
     rock = ramp("w", "m", "s", "t"),
     wood = ramp("w", "b", "s", "p"),
     hay = ramp("w", "w", "b", "s"),
+    darkWool = ramp("s", "s", "p", "o"),
+    paleFace = ramp("w", "w", "b", "s"),
 }
 
 local cache = {}
@@ -47,11 +49,14 @@ local function angle(step) return step / M.HEADINGS * TAU end
 --- the sheep ----------------------------------------------------------------------
 
 -- `squash` 0..3 (flattened as it lands from a hop), `graze` true with its head
--- down in the grass, `leg` 0..1 (which pair is forward).
-function M.sheep(h, squash, graze, leg)
+-- down in the grass, `leg` 0..1 (which pair is forward). `kind` is nil for a
+-- ewe, "lamb" (the same body, smaller) or "black" (dark wool, a pale face).
+function M.sheep(h, squash, graze, leg, kind)
     local hs = M.step(h)
-    return kept(("sheep%d.%d.%s.%d"):format(hs, squash, graze and 1 or 0, leg), function()
-        local W = RAMP.wool
+    kind = kind or "ewe"
+    return kept(("sheep%d.%d.%s.%d.%s"):format(hs, squash, graze and 1 or 0, leg, kind), function()
+        local W = kind == "black" and RAMP.darkWool or RAMP.wool
+        local F = kind == "black" and RAMP.paleFace or RAMP.face
         -- A cloud of wool: one material, so neighbouring puffs crease into
         -- each other, but each its own part, so a puff in front is inked.
         local function puff(x, y, z, rx, ry, rz, id)
@@ -69,17 +74,18 @@ function M.sheep(h, squash, graze, leg)
         }
         local hx, hy = 6.4, 6.6
         if graze then hx, hy = 7.2, 2.8 end
-        parts[#parts + 1] = ell(hx, hy, 0, 3.0, 2.7, 2.5, RAMP.face, 2)
-        parts[#parts + 1] = ell(hx + 2.0, hy - 0.8, 0, 1.5, 1.6, 1.6, RAMP.face, 2)
-        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, 2.8, 0.8, 1.0, 1.4, RAMP.face, 3)
-        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, -2.8, 0.8, 1.0, 1.4, RAMP.face, 3)
+        parts[#parts + 1] = ell(hx, hy, 0, 3.0, 2.7, 2.5, F, 2)
+        parts[#parts + 1] = ell(hx + 2.0, hy - 0.8, 0, 1.5, 1.6, 1.6, F, 2)
+        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, 2.8, 0.8, 1.0, 1.4, F, 3)
+        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, -2.8, 0.8, 1.0, 1.4, F, 3)
         parts[#parts + 1] = puff(hx - 1.6, hy + 2.2, 0, 2.0, 1.4, 1.8, 16) -- the topknot
         local s = leg == 1 and 0.9 or -0.9
         for _, l in ipairs({ { 3.4, 2.4, s }, { 3.4, -2.4, -s }, { -3.4, 2.4, -s }, { -3.4, -2.4, s } }) do
             parts[#parts + 1] = ell(l[1] + l[3], 1.2, l[2], 1.0, 1.7, 1.0, RAMP.face, 4)
         end
         local q = squash * 0.06
-        return T.place(parts, A.mul(A.rotY(-angle(hs)), A.scale(1 + q, 1 - q * 1.6, 1 + q)))
+        local z = kind == "lamb" and 0.66 or 1
+        return T.place(parts, A.mul(A.rotY(-angle(hs)), A.scale(z * (1 + q), z * (1 - q * 1.6), z * (1 + q))))
     end)
 end
 
@@ -87,24 +93,26 @@ end
 
 -- A small collie: dark coat, cream chest, muzzle and tail tip. `gait` 0..3 is
 -- where the legs are in the stride; `crouch` 0..2 is how low it slinks (the
--- stalk a herding dog does when it is creeping up on a flock).
-function M.dog(h, gait, crouch)
+-- stalk a herding dog does when it is creeping up on a flock); `bark` lifts
+-- the head and opens the mouth.
+function M.dog(h, gait, crouch, bark)
     local hs = M.step(h)
-    return kept(("dog%d.%d.%d"):format(hs, gait, crouch), function()
+    return kept(("dog%d.%d.%d.%s"):format(hs, gait, crouch, bark and 1 or 0), function()
         local C, Wt = RAMP.coat, RAMP.white
         local lo = crouch * 1.2
-        local hy = 9.4 - lo * 1.5
+        local hy = 9.4 - lo * 1.5 + (bark and 1.6 or 0)
         local parts = {
             ell(0, 6.4 - lo, 0, 6.2, 3.6, 3.4, C, 1),
             ell(4.2, 6.4 - lo, 0, 2.8, 3.2, 3.0, Wt, 2),     -- the white chest and ruff
             ell(7.2, hy, 0, 3.1, 2.9, 2.8, C, 3),
-            ell(9.8, hy - 1.0, 0, 2.0, 1.4, 1.5, Wt, 4),     -- muzzle
+            ell(9.8, hy - 1.0 + (bark and 0.5 or 0), 0, 2.0, 1.4, 1.5, Wt, 4),     -- muzzle
             ell(10.9, hy - 0.6, 0, 0.7, 0.6, 0.7, C, 9),     -- nose
             ell(6.4, hy + 2.6, 1.6, 0.8, 1.6, 0.9, C, 5),
             ell(6.4, hy + 2.6, -1.6, 0.8, 1.6, 0.9, C, 5),
             ell(-7.0, 7.2 - lo, 0, 3.0, 1.7, 1.6, C, 6),     -- a brush of a tail
             ell(-9.6, 7.8 - lo * 1.2, 0, 1.6, 1.4, 1.3, Wt, 7),
         }
+        if bark then parts[#parts + 1] = ell(9.4, hy - 2.4, 0, 1.6, 0.6, 1.2, C, 10) end -- the jaw, dropped
         local swing = sin(gait / 4 * TAU) * 1.8
         for _, l in ipairs({ { 3.8, 2.0, 1 }, { 3.8, -2.0, -1 }, { -3.8, 2.0, -1 }, { -3.8, -2.0, 1 } }) do
             parts[#parts + 1] = ell(l[1] + swing * l[3], 1.6, l[2], 1.1, 2.0 - lo * 0.3, 1.1,

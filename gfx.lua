@@ -107,6 +107,7 @@ local GLYPHS = {
     ["!"] = { ".#.", ".#.", ".#.", "...", ".#." }, ["?"] = { "##.", "..#", ".#.", "...", ".#." },
     ["+"] = { "...", ".#.", "###", ".#.", "..." }, [","] = { "...", "...", "...", ".#.", "#.." },
     ["'"] = { ".#.", ".#.", "...", "...", "..." }, ["%"] = { "#.#", "..#", ".#.", "#..", "#.#" },
+    [">"] = { "#..", ".#.", "..#", ".#.", "#.." }, ["<"] = { "..#", ".#.", "#..", ".#.", "..#" },
 }
 local ADVANCE = 4
 
@@ -130,6 +131,49 @@ function G.text(k, s, x, y)
     end
     G.points(k, pts)
 end
+
+-- Text blown up `sc` times, as rectangles: points don't scale.
+function G.bigText(k, s, x, y, sc)
+    G.set(k)
+    x, y = floor(x), floor(y)
+    s = s:upper()
+    for n = 1, #s do
+        local g = GLYPHS[s:sub(n, n)]
+        if g then
+            for r = 1, 5 do
+                for c = 1, 3 do
+                    if g[r]:byte(c) == 35 then
+                        love.graphics.rectangle("fill", x + (c - 1) * sc, y + (r - 1) * sc, sc, sc)
+                    end
+                end
+            end
+        end
+        x = x + ADVANCE * sc
+    end
+end
+
+function G.bigWidth(s, sc) return (#s * ADVANCE - 1) * sc end
+
+-- A little picture from rows of "#", with an ink edge when `edge` is set.
+function G.sprite(k, rows, x, y, edge)
+    x, y = floor(x), floor(y)
+    local function put(key, ox, oy)
+        local pts = {}
+        for r, row in ipairs(rows) do
+            for c = 1, #row do
+                if row:byte(c) == 35 then G.plot(pts, x + c - 1 + ox, y + r - 1 + oy) end
+            end
+        end
+        G.points(key, pts)
+    end
+    if edge then
+        for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do put("o", d[1], d[2]) end
+    end
+    put(k, 0, 0)
+end
+
+G.HEART = { "##.##", "#####", ".###.", "..#.." }
+G.LOCK = { ".#.", "#.#", "###", "###" }
 
 -- Text with a one-pixel ink edge, for reading over grass.
 function G.label(k, s, x, y)

@@ -6,6 +6,9 @@
 -- Touch:   hold a finger down and the dog goes to it, as the mouse does. That
 --          is the whole control: a herding dog only needs a place to be.
 --
+-- Bark:    space, the right mouse button, a gamepad's A or X, or a second
+--          finger put down while the first is held.
+--
 -- Everything is reported in canvas pixels, never window pixels (Survive
 -- School's rule), and main.lua turns those into field units.
 
@@ -18,6 +21,8 @@ Input.held = false
 Input.lastMouse = -10
 Input.usingTouch = false
 Input.tapped = false -- any press this frame, for "continue"
+Input.barked = false -- a bark asked for this frame
+Input.clicked = nil  -- canvas pixel of a left click or a first finger this frame, for menus
 
 local OS = love.system.getOS()
 Input.MOBILE = OS == "Android" or OS == "iOS"
@@ -35,6 +40,9 @@ function Input.mousepressed(x, y, b, istouch)
     if b == 1 then
         Input.held = true
         Input.pointer = { toCanvas(x, y) }
+        Input.clicked = { toCanvas(x, y) }
+    elseif b == 2 then
+        Input.barked = true
     end
 end
 
@@ -57,6 +65,9 @@ function Input.touchpressed(id, x, y)
         touchId = id
         Input.held = true
         Input.pointer = { toCanvas(x, y) }
+        Input.clicked = { toCanvas(x, y) }
+    else
+        Input.barked = true
     end
 end
 
@@ -115,8 +126,19 @@ function Input.move()
     end
 end
 
-function Input.gamepadpressed() Input.tapped = true end
+function Input.gamepadpressed(_, b)
+    Input.tapped = true
+    if b == "a" or b == "x" then Input.barked = true end
+end
 
-function Input.keypressed() Input.tapped = true end
+function Input.keypressed(key)
+    Input.tapped = true
+    if key == "space" then Input.barked = true end
+end
+
+-- Called at the end of every frame: the one-frame flags drop.
+function Input.endFrame()
+    Input.tapped, Input.barked, Input.clicked = false, false, nil
+end
 
 return Input

@@ -9,6 +9,14 @@
 -- few seconds to wear off. Squeezed too hard in a gap, they fret too, so a gate
 -- rushed is a gate jammed.
 --
+-- A bark is a shove at a distance: everything in `barkRadius` is pushed off
+-- the dog at once and jumps a little, but not into a panic unless it was
+-- already half there. It is how a grazing black sheep is got moving.
+--
+-- Not every sheep is the same (`KINDS`): a lamb is small, frets easily and
+-- keeps to its mother; a black sheep is stubborn, feels the dog less and would
+-- rather graze.
+--
 -- Every number worth turning is in CONFIG.
 
 local Models = require "models"
@@ -58,8 +66,27 @@ local CONFIG = {
     obstacleRange = 14,      -- fences and rocks start pushing this far off their surface
     obstacleWeight = 2.2,
     penPull = 0.35,          -- inside the pen, a gentle drift toward its heart
+
+    -- the bark
+    barkRadius = 74,
+    barkPush = 70,           -- velocity kicked into a sheep at the dog's feet
+    barkPanic = 0.32,        -- panic added at the dog's feet: alone, not enough to scare
+    barkCooldown = 1.1,
+
+    -- the calm count: a sheep crossing this is one scare (and the panic mark over it)
+    scareLevel = 0.55,
 }
 Flock.CONFIG = CONFIG
+
+-- What each kind changes. flee and panic scale the dog's pull on it; graze
+-- scales grazeChance; hold is the pressure it takes to lift its head.
+local KINDS = {
+    ewe = { radius = 5.5, flee = 1, panic = 1, response = 1, graze = 1, hold = 0.05, speed = 1 },
+    lamb = { radius = 3.8, flee = 1.1, panic = 1.6, response = 1.3, graze = 0.6, hold = 0.05, speed = 0.95,
+        follow = 0.9 },
+    black = { radius = 5.5, flee = 0.55, panic = 0.45, response = 0.6, graze = 3, hold = 0.4, speed = 0.85 },
+}
+Flock.KINDS = KINDS
 
 -- How hard the dog presses at distance d, 0..1.
 function Flock.pressure(d)
@@ -73,22 +100,36 @@ local function clampLen(x, z, m)
     return x, z
 end
 
--- Sheep in little bunches round each spawn point, facing every which way.
+-- Sheep in little bunches round each spawn point, facing every which way. A
+-- bunch may say `kind` for all of it, or bring `lambs` along with its ewes.
 function Flock.new(level)
-    local self = setmetatable({ list = {}, level = level }, Flock)
-    for _, s in ipairs(level.def.flock) do
-        for _ = 1, s.n do
-            local a, r = random() * TAU, sqrt(random()) * s.r
-            local h = random() * TAU
-            self.list[#self.list + 1] = {
-                x = s.x + cos(a) * r, z = s.z + sin(a) * r,
-                vx = 0, vz = 0, h = h, wander = h,
-                panic = 0, graze = random() < 0.5 and random() * 4 or 0,
-                bob = random() * TAU, breath = random() * TAU, crowd = 0,
-            }
+    local self = setmetatable({ list = {}, level = level, scares = 0 }, Flock)
+    local function add(x, z, kind)
+        local h = random() * TAU
+        local K = KINDS[kind]
+        local s = {
+            x = x, z = z, kind = kind, K = K, r = K.radius,
+            vx = 0, vz = 0, h = h, wander = h,
+            panic = 0, graze = random() < 0.5 and random() * 4 or 0,
+            bob = random() * TAU, breath = random() * TAU, crowd = 0, speed = 0,
+        }
+        if kind == "black" then s.graze = 6 end
+        self.list[#self.list + 1] = s
+        return s
+    end
+    for _, b in ipairs(level.def.flock) do
+        local ewes = {}
+        for _ = 1, b.n do
+            local a, r = random() * TAU, sqrt(random()) * b.r
+            ewes[#ewes + 1] = add(b.x + cos(a) * r, b.z + sin(a) * r, b.kind or "ewe")
+        end
+        for k = 1, b.lambs or 0 do
+            local mum = ewes[(k - 1) % #ewes + 1]
+            local l = add(mum.x + random() * 8 - 4, mum.z + random() * 8 - 4, "lamb")
+            l.mum = mum
         end
     end
-    for _, s in ipairs(self.list) do s.x, s.z = level:collide(s.x, s.z, CONFIG.radius) end
+    for _, s in ipairs(self.list) do s.x, s.z = level:collide(s.x, s.z, s.r) end
     return self
 end
 
@@ -125,13 +166,22 @@ function Flock:update(dt, dog)
         -- The dog.
         local ddx, ddz = s.x - dog.x, s.z - dog.z
         local dd = sqrt(ddx * ddx + ddz * ddz) + 1e-6
+        local K = s.K
         local press = Flock.pressure(dd)
-        local fx, fz = ddx / dd * press * C.fleeStrength, ddz / dd * press * C.fleeStrength
+        local fx, fz = ddx / dd * press * C.fleeStrength * K.flee, ddz / dd * press * C.fleeStrength * K.flee
+
+        -- A bark: a kick off the dog now, and a start.
+        if dog.barked and dd < C.barkRadius then
+            local b = 1 - dd / C.barkRadius
+            s.vx, s.vz = s.vx + ddx / dd * C.barkPush * b, s.vz + ddz / dd * C.barkPush * b
+            s.panic = s.panic + C.barkPanic * b * K.panic
+            s.graze = 0
+        end
 
         -- Panic: built by a dog rushing in, caught off neighbours, and from
         -- being squeezed; it wears off on its own.
         local p = s.panic
-        p = p + overspeed * press * C.panicGain * dt * 2
+        p = p + overspeed * press * C.panicGain * dt * 2 * K.panic
         if count > 0 then
             local lift = nbPanic / count * C.panicSpread
             if lift > p then p = p + (lift - p) * min(1, dt * 1.5) end
@@ -139,14 +189,21 @@ function Flock:update(dt, dog)
         if crowd > 3 then p = p + (crowd - 3) * C.crowdStress * dt end
         p = p - C.panicDecay * dt
         s.panic = max(0, min(1, p))
+        if s.panic > C.scareLevel and not s.scared then
+            s.scared = true
+            self.scares = self.scares + 1
+        elseif s.panic < 0.2 then
+            s.scared = false
+        end
         local calm = 1 - s.panic
 
         -- Grazing: a calm, idle sheep puts its head down for a while.
         local speed = sqrt(s.vx * s.vx + s.vz * s.vz)
         if s.graze > 0 then
             s.graze = s.graze - dt
-            if press > 0.05 or s.panic > 0.15 then s.graze = 0 end
-        elseif press == 0 and s.panic < 0.05 and speed < C.walkSpeed * 0.4 and random() < C.grazeChance * dt then
+            if press > K.hold or s.panic > 0.15 then s.graze = 0 end
+        elseif press <= K.hold and s.panic < 0.05 and speed < C.walkSpeed * 0.4
+            and random() < C.grazeChance * K.graze * dt then
             s.graze = C.grazeTime[1] + random() * (C.grazeTime[2] - C.grazeTime[1])
         end
 
@@ -168,6 +225,17 @@ function Flock:update(dt, dog)
         sx, sz = clampLen(sx, sz, 2)
         local sepW = C.separationWeight * (1 + s.panic)
 
+        -- A lamb keeps to its mother, and wanders less for it.
+        if s.mum then
+            local dx, dz = s.mum.x - s.x, s.mum.z - s.z
+            local d = sqrt(dx * dx + dz * dz) + 1e-6
+            if d > 10 then
+                local w = min(1.5, (d - 10) / 30) * K.follow
+                kx, kz = kx + dx / d * w, kz + dz / d * w
+            end
+            wx, wz = wx * 0.4, wz * 0.4
+        end
+
         local ox, oz = L:repel(s.x, s.z, s.vx, s.vz, C.obstacleRange)
 
         local px, pz = 0, 0
@@ -185,9 +253,9 @@ function Flock:update(dt, dog)
         local dz = sz * sepW + kz + gz + wz + fz + oz * C.obstacleWeight + pz + jz
         if s.graze > 0 then dx, dz = sx * sepW + fx + ox * C.obstacleWeight, sz * sepW + fz + oz * C.obstacleWeight end
 
-        local top = C.walkSpeed * 1.5 + (C.panicSpeed - C.walkSpeed * 1.5) * s.panic
+        local top = (C.walkSpeed * 1.5 + (C.panicSpeed - C.walkSpeed * 1.5) * s.panic) * K.speed
         local tvx, tvz = clampLen(dx * C.walkSpeed, dz * C.walkSpeed, top)
-        local k = min(1, (C.response + (C.panicResponse - C.response) * s.panic) * dt)
+        local k = min(1, (C.response + (C.panicResponse - C.response) * s.panic) * K.response * dt)
         s.nvx, s.nvz = s.vx + (tvx - s.vx) * k, s.vz + (tvz - s.vz) * k
     end
 
@@ -208,13 +276,13 @@ function Flock:update(dt, dog)
     end
 
     -- Bodies don't overlap: each pair pushed apart, so a gap takes only so many.
-    local R2 = CONFIG.radius * 2
     for i = 1, n do
         local a = list[i]
         for j = i + 1, n do
             local b = list[j]
             local dx, dz = b.x - a.x, b.z - a.z
             local d2 = dx * dx + dz * dz
+            local R2 = a.r + b.r
             if d2 < R2 * R2 and d2 > 1e-8 then
                 local d = sqrt(d2)
                 local push = (R2 - d) / 2
@@ -225,10 +293,10 @@ function Flock:update(dt, dog)
         -- And the dog is solid to them.
         local dx, dz = a.x - dog.x, a.z - dog.z
         local d = sqrt(dx * dx + dz * dz)
-        local need = CONFIG.radius + dog.radius
+        local need = a.r + dog.radius
         if d < need and d > 1e-6 then a.x, a.z = dog.x + dx / d * need, dog.z + dz / d * need end
     end
-    for _, s in ipairs(list) do s.x, s.z = L:collide(s.x, s.z, CONFIG.radius) end
+    for _, s in ipairs(list) do s.x, s.z = L:collide(s.x, s.z, s.r) end
 end
 
 function Flock:penned()
@@ -258,11 +326,11 @@ function Flock:queue(into, camx, camy)
             squash = sin(s.breath) > 0.6 and 1 or 0
         end
         local leg = moving and (floor(s.bob / math.pi) % 2) or 0
-        local pic = Models.sheep(s.h, squash, s.graze > 0, leg)
+        local pic = Models.sheep(s.h, squash, s.graze > 0, leg, s.kind ~= "ewe" and s.kind or nil)
         into[#into + 1] = { z = s.z, draw = function()
             love.graphics.setColor(1, 1, 1)
             love.graphics.draw(pic.img, sx - pic.oi, sy - pic.oj - lift)
-            if s.panic > 0.55 then
+            if s.panic > CONFIG.scareLevel then
                 G.rect("o", sx - 1, sy - pic.oj - lift - 6, 3, 6)
                 G.rect("w", sx, sy - pic.oj - lift - 5, 1, 2)
                 G.rect("w", sx, sy - pic.oj - lift - 2, 1, 1)
@@ -275,7 +343,8 @@ function Flock:shadows(camx, camy)
     local SE = T.SE
     for _, s in ipairs(self.list) do
         local k = self.level:inPen(s.x, s.z) and "s" or "t"
-        G.ellipse(k, s.x - camx, s.z * SE - camy + 1, 6, 3)
+        local big = s.kind ~= "lamb"
+        G.ellipse(k, s.x - camx, s.z * SE - camy + 1, big and 6 or 4, big and 3 or 2)
     end
 end
 
