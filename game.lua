@@ -33,11 +33,24 @@ for _, d in ipairs(C.dreamShop) do
     DREAMS[#DREAMS + 1] = it
     BY_ID[it.id] = it
 end
+-- Restless nights: challenges, by id too.
+local CHALLENGES, CH = {}, {}
+for _, c in ipairs(C.challenges) do
+    CHALLENGES[#CHALLENGES + 1] = c
+    CH[c.id] = c
+end
 Game.ITEMS, Game.BY_ID, Game.GENS, Game.DREAMS = ITEMS, BY_ID, GENS, DREAMS
+Game.CHALLENGES, Game.CH = CHALLENGES, CH
 
 local function freshOwned()
     local o = {}
     for _, it in ipairs(ITEMS) do o[it.id] = 0 end
+    return o
+end
+
+local function freshMade()
+    local o = {}
+    for _, g in ipairs(GENS) do o[g.id] = 0 end
     return o
 end
 
@@ -53,6 +66,8 @@ local function freshRun(s)
     s.runTotal = N.zero()
     s.runTime = 0
     s.owned = freshOwned()
+    s.made = freshMade() -- helpers the chain built this night, in fractions
+    s.challenge = nil -- the restless night's id, while under one
     s.goldenIn = C.golden.firstDelay
     s.golden = nil -- { t, lane } while one is crossing
     s.stage = 1
@@ -71,6 +86,7 @@ function Game.fresh()
         dreamEarned = 0, -- ever earned: the production bonus
         dreams = 0,
         dream = freshDream(), -- the Dream shop, owned
+        done = {}, -- restless nights slept through: id = true
         lastNight = 0, -- how long the last night lasted, in seconds
         -- "nights" (counting sheep), or "lucid": past the first night
         -- shorter than C.lucid.under, the next phase (a placeholder for now).
@@ -88,25 +104,58 @@ end
 Game.events = {}
 local function emit(e) Game.events[#Game.events + 1] = e end
 
+-- Restless nights: the one you're under, and the ones slept through.
+local function under(s, key)
+    local c = s.challenge and CH[s.challenge]
+    return c and c[key]
+end
+function Game.done(s, id) return s.done[id] == true end
+
+-- What each Barn and Lullaby adds, after Cold Feet.
+function Game.comfortAdd(s, it)
+    return it.add * (Game.done(s, "coldFeet") and CH.coldFeet.rewardComforts or 1)
+end
+
+-- What each level of a Dream shop multiplier multiplies by, after Wide Awake.
+function Game.dreamMult(s, it)
+    if it.id == "deepSleep" and Game.done(s, "wideAwake") then return CH.wideAwake.rewardDeep end
+    return it.mult
+end
+
 function Game.globalMult(s)
     local m = 1
     for _, it in ipairs(ITEMS) do
-        if it.kind == "mult" then m = m * (1 + it.add * s.owned[it.id]) end
+        if it.kind == "mult" then m = m * (1 + Game.comfortAdd(s, it) * s.owned[it.id]) end
     end
     for _, it in ipairs(DREAMS) do
-        if it.mult then m = m * it.mult ^ s.dream[it.id] end
+        if it.mult then m = m * Game.dreamMult(s, it) ^ s.dream[it.id] end
     end
     return m * (1 + C.prestige.bonusPerPoint * s.dreamEarned)
 end
 
+-- How many of a helper count: bought, and built by the chain.
+function Game.helpers(s, id)
+    return s.owned[id] + s.made[id]
+end
+
+-- Heavy Sleeper's multiplier on the helpers.
+function Game.helperMult(s)
+    local it = BY_ID.heavySleeper
+    return it.helperMult ^ s.dream.heavySleeper
+end
+
 function Game.perSecond(s)
     local r = 0
-    for _, g in ipairs(GENS) do r = r + g.rate * s.owned[g.id] end
-    return N.mul(N.from(r), Game.globalMult(s))
+    for _, g in ipairs(GENS) do r = r + g.rate * Game.helpers(s, g.id) end
+    return N.mul(N.from(r * Game.helperMult(s)), Game.globalMult(s))
 end
+
+-- Wide Awake: the Dream shop's automation sleeps through the night.
+local function autoOn(s) return not under(s, "noAuto") end
 
 -- Sleepwalking's taps a second.
 function Game.autoTaps(s)
+    if not autoOn(s) then return 0 end
     return BY_ID.sleepwalk.taps * s.dream.sleepwalk
 end
 
@@ -116,10 +165,26 @@ function Game.totalPerSecond(s)
 end
 
 function Game.genRate(s, id)
-    return N.mul(N.from(BY_ID[id].rate * s.owned[id]), Game.globalMult(s))
+    return N.mul(N.from(BY_ID[id].rate * Game.helpers(s, id) * Game.helperMult(s)), Game.globalMult(s))
 end
 
-function Game.tapValue(s)
+-- What the chain builds of the helper before `id`, a second.
+function Game.builds(s, id)
+    local g = BY_ID[id]
+    return (g.builds or 0) * Game.helpers(s, id)
+end
+
+-- A tap's worth. `own` is a tap of your own hand, which Light Sleeper pays
+-- a share of a second's production on top (Sleepwalking's taps don't get it).
+function Game.tapValue(s, own)
+    local v = Game.baseTap(s)
+    if own and s.dream.lightSleeper > 0 then
+        v = N.add(v, N.mul(Game.perSecond(s), N.from(BY_ID.lightSleeper.tapShare * s.dream.lightSleeper)))
+    end
+    return v
+end
+
+function Game.baseTap(s)
     local v = C.tapBase
     for _, it in ipairs(ITEMS) do
         if it.kind == "tap" and it.add then v = v + it.add * s.owned[it.id] end
@@ -130,8 +195,15 @@ function Game.tapValue(s)
     return N.mul(N.from(v), Game.globalMult(s))
 end
 
+-- The sheep this night needs to fall asleep.
+function Game.target(s)
+    local t = C.drowsiness.target * (under(s, "target") or 1)
+    if Game.done(s, "insomnia") then t = t * CH.insomnia.rewardTarget end
+    return t
+end
+
 function Game.drowsiness(s)
-    local share = N.toNumber(N.div(s.runTotal, N.from(C.drowsiness.target)))
+    local share = N.toNumber(N.div(s.runTotal, N.from(Game.target(s))))
     return min(1, max(0, share) ^ C.drowsiness.curve)
 end
 
@@ -152,11 +224,32 @@ local function capLeft(s, it)
     return math.huge
 end
 
--- Dream shop items come one at a time, priced in Dream Points.
+-- The price of a helper or anything else in the night's shop rises by this
+-- much a copy: Sheep Shortage raises it for helpers, and lowers it once done.
+function Game.growthOf(s, it)
+    if it.kind ~= "gen" then return it.growth end
+    return under(s, "growth") or (Game.done(s, "shortage") and CH.shortage.rewardGrowth) or it.growth
+end
+
+local function dreamCost(it, level) return floor(it.base * it.growth ^ level + 0.5) end
+
+-- The Dream Points spent on the way of sleeping you'd turn over from.
+local function refund(s, it)
+    if not it.other then return 0 end
+    local o = BY_ID[it.other]
+    local r = 0
+    for k = 0, s.dream[o.id] - 1 do r = r + dreamCost(o, k) end
+    return r
+end
+
+-- Dream shop items come one at a time, priced in Dream Points. `turn` is
+-- what turning over from the other way of sleeping gives back.
 local function dreamQuote(s, it)
     if capLeft(s, it) == 0 then return { n = 0, cost = 0, ok = false, maxed = true } end
-    local cost = floor(it.base * it.growth ^ s.dream[it.id] + 0.5)
-    return { n = 1, cost = cost, ok = s.dreamPoints >= cost, maxed = false, dp = true }
+    local cost = dreamCost(it, s.dream[it.id])
+    local turn = refund(s, it)
+    return { n = 1, cost = cost, ok = s.dreamPoints + turn >= cost, maxed = false, dp = true,
+        turn = turn > 0 or (it.other and s.dream[it.other] > 0) or nil }
 end
 
 -- What buying `mode` ("1", "10" or "max") of an item would mean now:
@@ -168,11 +261,12 @@ function Game.quote(s, id, mode)
     local left = capLeft(s, it)
     if left == 0 then return { n = 0, cost = N.zero(), ok = false, maxed = true } end
     local n
-    if mode == "max" then n = min(left, N.maxAffordable(it.base, it.growth, k, N.toNumber(s.sheep)))
+    local g = Game.growthOf(s, it)
+    if mode == "max" then n = min(left, N.maxAffordable(it.base, g, k, N.toNumber(s.sheep)))
     else n = min(left, tonumber(mode)) end
     local some = n > 0
     if not some then n = 1 end
-    local cost = N.from(N.sumGeometric(it.base, it.growth, k, n))
+    local cost = N.from(N.sumGeometric(it.base, g, k, n))
     return { n = n, cost = cost, ok = some and N.gte(s.sheep, cost), maxed = false }
 end
 
@@ -180,7 +274,11 @@ end
 -- upgrades once the run has counted a share of their price.
 function Game.visible(s, id)
     local it = BY_ID[id]
-    if it.kind == "dream" then return s.dreams > 0 or s.dreamEarned > 0 end
+    if it.kind == "dream" then
+        if it.opens then return s.dreams >= it.opens end
+        return s.dreams > 0 or s.dreamEarned > 0
+    end
+    if under(s, "noKind") == it.kind then return false end
     if s.owned[id] > 0 then return true end
     if it.kind == "gen" then return it.index == 1 or s.owned[GENS[it.index - 1].id] > 0 end
     return N.gte(s.runTotal, N.from(it.base * C.revealAt))
@@ -207,6 +305,11 @@ function Game.buy(s, id, mode, auto)
     local it = BY_ID[id]
     local first = have(s, it) == 0
     if it.kind == "dream" then
+        -- Turning over: the other way of sleeping, given back in points.
+        if it.other then
+            s.dreamPoints = s.dreamPoints + refund(s, it)
+            s.dream[it.other] = 0
+        end
         s.dreamPoints = s.dreamPoints - q.cost
         s.dream[id] = s.dream[id] + 1
     else
@@ -221,6 +324,7 @@ end
 -- per level), Sleep Talking's tap upgrades, Tucked In's comforts.
 function Game.automated(s, id)
     local it = BY_ID[id]
+    if not autoOn(s) then return false end
     if it.kind == "gen" then return it.index <= BY_ID.nightShift.tiers * s.dream.nightShift end
     if it.kind == "tap" then return s.dream.sleepTalk > 0 end
     if it.kind == "mult" then return s.dream.tuckedIn > 0 end
@@ -237,7 +341,7 @@ function Game.autoBuy(s)
     for _, it in ipairs(ORDER) do
         if Game.automated(s, it.id) and capLeft(s, it) > 0 then
             local budget = N.toNumber(s.sheep) * C.auto.share
-            local n = min(capLeft(s, it), N.maxAffordable(it.base, it.growth, s.owned[it.id], budget))
+            local n = min(capLeft(s, it), N.maxAffordable(it.base, Game.growthOf(s, it), s.owned[it.id], budget))
             if n > 0 then Game.buy(s, it.id, tostring(n), true) end
         end
     end
@@ -245,7 +349,7 @@ end
 
 function Game.tap(s)
     if s.asleep then return N.zero() end
-    local v = Game.tapValue(s)
+    local v = Game.tapValue(s, true)
     count(s, v)
     s.taps = s.taps + 1
     return v
@@ -254,6 +358,13 @@ end
 function Game.goldenReward(s)
     return N.max(N.mul(Game.perSecond(s), N.from(C.golden.rewardSeconds)),
         N.mul(Game.tapValue(s), N.from(C.golden.minTaps)))
+end
+
+-- Golden sheep: Light Sleeper sees them more often, Heavy Sleeper never.
+function Game.goldenOn(s) return s.dream.heavySleeper == 0 end
+local function goldenWait(s, d)
+    if s.dream.lightSleeper > 0 then return d / BY_ID.lightSleeper.goldenFaster end
+    return d
 end
 
 function Game.catchGolden(s, auto)
@@ -279,7 +390,7 @@ local function settle(s, night)
         s.golden = nil
         s.lastNight = s.runTime
         emit({ type = "asleep" })
-        if night and s.phase == "nights" and s.runTime < C.lucid.under then
+        if night and s.phase == "nights" and not s.challenge and s.runTime < C.lucid.under then
             s.lucidNight = true
             emit({ type = "lucid" })
         end
@@ -304,15 +415,24 @@ function Game.step(s, dt, rand)
         s.autoIn = C.auto.buyEvery
         Game.autoBuy(s)
     end
-    if s.golden and s.dream.goldenDreams > 0 and s.golden.t >= C.auto.goldenAfter then Game.catchGolden(s, true) end
+    -- The chain: each helper that builds makes the one before it.
+    for i = #GENS, 2, -1 do
+        local g = GENS[i]
+        if g.builds then
+            local below = GENS[i - 1].id
+            s.made[below] = s.made[below] + Game.builds(s, g.id) * dt
+        end
+    end
+    if s.golden and s.dream.goldenDreams > 0 and autoOn(s) and s.golden.t >= C.auto.goldenAfter then Game.catchGolden(s, true) end
+    if not Game.goldenOn(s) then s.golden = nil end
     if s.golden then
         s.golden.t = s.golden.t + dt
         if s.golden.t >= C.golden.crossTime then s.golden = nil end
     else
-        s.goldenIn = s.goldenIn - dt
+        s.goldenIn = s.goldenIn - (Game.goldenOn(s) and dt or 0)
         if s.goldenIn <= 0 then
             s.golden = { t = 0, lane = rand() }
-            s.goldenIn = C.golden.minDelay + rand() * (C.golden.maxDelay - C.golden.minDelay)
+            s.goldenIn = goldenWait(s, C.golden.minDelay + rand() * (C.golden.maxDelay - C.golden.minDelay))
             emit({ type = "goldenAppears" })
         end
     end
@@ -344,9 +464,12 @@ function Game.dreamPointsFor(s)
     return floor(N.toNumber(N.sqrt(N.div(s.runTotal, N.from(C.prestige.divisor)))) * catchers * Game.pace(s))
 end
 
--- Fall asleep for real: Dream Points banked, and a new night.
+-- Fall asleep for real: Dream Points banked, and a new night. A restless
+-- night slept through is done for good; the second value is its id.
 function Game.dreamAgain(s)
     local gained = Game.dreamPointsFor(s)
+    local won = s.asleep and s.challenge or nil
+    if won then s.done[won] = true end
     s.dreamPoints = s.dreamPoints + gained
     s.dreamEarned = s.dreamEarned + gained
     s.dreams = s.dreams + 1
@@ -355,7 +478,28 @@ function Game.dreamAgain(s)
     for _, g in ipairs(GENS) do keep[g.id] = floor(s.owned[g.id] * BY_ID.warmBed.keep * s.dream.warmBed) end
     freshRun(s)
     for id, n in pairs(keep) do s.owned[id] = n end
-    return gained
+    return gained, won
+end
+
+-- Restless nights open one a night, and each can be slept through once.
+function Game.challengeOpen(s, id)
+    return s.phase == "nights" and s.dreams >= CH[id].opens
+end
+
+-- Start a restless night: the night you're in ends, nothing kept, no points.
+function Game.startChallenge(s, id)
+    if not Game.challengeOpen(s, id) or Game.done(s, id) or s.challenge == id or s.asleep then return false end
+    freshRun(s)
+    s.challenge = id
+    emit({ type = "challenge", id = id })
+    return true
+end
+
+-- Give up a restless night: a plain night again, from nothing.
+function Game.giveUp(s)
+    if not s.challenge or s.asleep then return false end
+    freshRun(s)
+    return true
 end
 
 -- After a lucid night: its Dream Points banked, and on to the next phase.
@@ -397,12 +541,19 @@ function Game.deserialize(o)
     if type(o) ~= "table" then return nil end
     local s = Game.fresh()
     for k, v in pairs(s) do
-        if k ~= "owned" and k ~= "dream" and o[k] ~= nil and type(o[k]) == type(v) then s[k] = o[k] end
+        if k ~= "owned" and k ~= "dream" and k ~= "made" and k ~= "done" and o[k] ~= nil and type(o[k]) == type(v) then s[k] = o[k] end
     end
     if type(o.golden) == "table" and tonumber(o.golden.t) then s.golden = { t = o.golden.t, lane = tonumber(o.golden.lane) or 0.5 } end
     if type(o.owned) == "table" then
         for id in pairs(s.owned) do s.owned[id] = max(0, floor(tonumber(o.owned[id]) or 0)) end
     end
+    if type(o.made) == "table" then
+        for id in pairs(s.made) do s.made[id] = max(0, tonumber(o.made[id]) or 0) end
+    end
+    if type(o.done) == "table" then
+        for id in pairs(CH) do if o.done[id] == true then s.done[id] = true end end
+    end
+    if type(o.challenge) == "string" and CH[o.challenge] then s.challenge = o.challenge end
     if type(o.dream) == "table" then
         for _, it in ipairs(DREAMS) do
             s.dream[it.id] = clamp(floor(tonumber(o.dream[it.id]) or 0), 0, it.max or math.huge)

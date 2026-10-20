@@ -1,6 +1,7 @@
 -- The rules' tests and the balance sim, no LÖVE needed:
 --   luajit tests/run.lua          the tests
 --   luajit tests/run.lua sim      the sim: a greedy player at 3, 1.5 and 0.5 taps a second
+io.stdout:setvbuf("line")
 package.path = "./?.lua;./lib/?.lua;" .. package.path
 
 local Game = require "game"
@@ -67,34 +68,53 @@ local function sim(tapRate, dreamPoints, s)
 end
 
 -- Night after night: at each new night the Dream Points go on the cheapest
--- thing in the Dream shop, again and again, and the night is played.
-local function nights(tapRate, n)
+-- thing in the Dream shop, again and again, and the night is played. A
+-- tapping player sleeps light, one who doesn't tap sleeps heavy, unless
+-- `sleeps` says ("light" or "heavy"). With `restless`, each restless night is
+-- played as soon as it opens.
+local function nights(tapRate, n, restless, sleeps)
     local s = Game.fresh()
-    print(("night after night at %.1f taps a second:"):format(tapRate))
+    sleeps = sleeps or (tapRate > 0 and "light" or "heavy")
+    local way = sleeps == "light" and "heavySleeper" or "lightSleeper" -- the one not taken
+    print(("night after night at %.1f taps a second, sleeping %s%s:"):format(tapRate, sleeps,
+        restless and ", restless nights first" or ""))
     for k = 1, n do
         while true do
             local best, bc
             for _, it in ipairs(Game.DREAMS) do
                 local q = Game.quote(s, it.id, "1")
-                if q.ok and (not bc or q.cost < bc) then best, bc = it.id, q.cost end
+                if it.id ~= way and Game.visible(s, it.id) and q.ok and (not bc or q.cost < bc) then best, bc = it.id, q.cost end
             end
             if not best then break end
             Game.buy(s, best, "1")
+        end
+        if restless then
+            for _, c in ipairs(Game.CHALLENGES) do
+                if not s.challenge and not Game.done(s, c.id) and Game.challengeOpen(s, c.id) then Game.startChallenge(s, c.id) end
+            end
         end
         Game.events = {}
         local t = sim(tapRate, nil, s)
         local lv = {}
         for _, it in ipairs(Game.DREAMS) do lv[#lv + 1] = s.dream[it.id] end
         local lucid = s.lucidNight and "  LUCID" or ""
+        local name = s.challenge and ("  " .. Game.CH[s.challenge].name:upper()) or ""
+        if not s.asleep then name = name .. " (NOT ASLEEP)" end
         local gained = Game.dreamAgain(s)
-        print(("  %2d  %7.1f s  +%-5d DP  x%-9s levels %s%s"):format(k, t, gained, N.format(Game.globalMult(s)),
-            table.concat(lv, " "), lucid))
+        print(("  %2d  %7.1f s  +%-5d DP  x%-9s levels %s%s%s"):format(k, t, gained, N.format(Game.globalMult(s)),
+            table.concat(lv, " "), lucid, name))
     end
+end
+
+if arg[1] == "nights" and arg[4] then
+    nights(tonumber(arg[2]) or 1.5, tonumber(arg[3]) or 15, arg[5] == "restless", arg[4])
+    return
 end
 
 if arg[1] == "nights" then
     nights(tonumber(arg[2]) or 1.5, tonumber(arg[3]) or 15)
     nights(0, tonumber(arg[3]) or 15)
+    nights(tonumber(arg[2]) or 1.5, tonumber(arg[3]) or 15, true)
     return
 end
 
@@ -255,6 +275,79 @@ test("old saves and the dream shop", function()
     s.dream.nightShift, s.dreamEarned = 2, 9
     back = Game.deserialize(Game.serialize(s))
     eq(back.dream.nightShift, 2); eq(back.dreamEarned, 9)
+end)
+test("the chain", function()
+    local s = Game.fresh()
+    s.owned.os = 10
+    Game.step(s, 1)
+    assert(math.abs(s.made.drones - 10 * Game.BY_ID.os.builds) < 1e-9, "Sheep-OS builds drones")
+    eq(Game.quote(s, "drones", "1").cost, Game.BY_ID.drones.base) -- built ones don't raise the price
+    s.made.drones = 0
+    local before = Game.perSecond(s)
+    s.made.drones = 5
+    eq(Game.perSecond(s), before + 5 * Game.BY_ID.drones.rate * Game.globalMult(s))
+    s.dream.warmBed = 5
+    Game.dreamAgain(s)
+    eq(s.made.drones, 0); eq(s.owned.os, 10) -- built helpers don't stay the night
+end)
+test("ways of sleeping", function()
+    local s = Game.fresh()
+    s.dreams, s.dreamPoints, s.dreamEarned = 1, 100, 100
+    assert(not Game.buy(s, "lightSleeper", "1"), "opens on the second night")
+    s.dreams = 2
+    assert(Game.buy(s, "lightSleeper", "1") and Game.buy(s, "lightSleeper", "1"))
+    eq(s.dreamPoints, 100 - 6 - 18)
+    s.owned.dog = 10
+    local base = Game.baseTap(s)
+    eq(Game.tapValue(s), base) -- Sleepwalking's taps: no share
+    eq(Game.tapValue(s, true), base + Game.perSecond(s) * 0.4)
+    -- Turning over: the points come back, light is gone, heavy is in.
+    local q = Game.quote(s, "heavySleeper", "1")
+    assert(q.ok and q.turn)
+    assert(Game.buy(s, "heavySleeper", "1"))
+    eq(s.dream.lightSleeper, 0); eq(s.dream.heavySleeper, 1); eq(s.dreamPoints, 100 - 6)
+    eq(Game.perSecond(s), 10 * 1.4 * Game.globalMult(s))
+    s.goldenIn = 0.01
+    Game.step(s, 1)
+    assert(not s.golden, "a heavy sleeper sees no golden sheep")
+end)
+test("restless nights", function()
+    local s = Game.fresh()
+    s.dreams = 1
+    s.owned.dog = 5
+    assert(not Game.startChallenge(s, "insomnia"), "not open yet")
+    s.dreams = 2
+    assert(Game.startChallenge(s, "insomnia"))
+    eq(s.owned.dog, 0); eq(s.challenge, "insomnia") -- the night starts over
+    eq(Game.target(s), C.drowsiness.target * 4)
+    s.runTotal, s.runTime = Game.target(s), 0.5
+    Game.step(s, 1 / 30)
+    assert(s.asleep and not s.lucidNight, "a restless night never goes lucid")
+    local _, won = Game.dreamAgain(s)
+    eq(won, "insomnia"); assert(Game.done(s, "insomnia") and not s.challenge)
+    eq(Game.target(s), C.drowsiness.target / 2)
+    assert(not Game.startChallenge(s, "insomnia"), "once is enough")
+    -- Under Wide Awake the Dream shop's automation sleeps; Cold Feet hides the comforts.
+    s.dreams, s.dream.sleepwalk, s.dream.nightShift = 5, 3, 1
+    assert(Game.startChallenge(s, "wideAwake"))
+    eq(Game.autoTaps(s), 0); assert(not Game.automated(s, "dog"))
+    assert(Game.giveUp(s) and not s.challenge and Game.autoTaps(s) == 6)
+    assert(Game.startChallenge(s, "coldFeet"))
+    s.runTotal = 1e9
+    assert(not Game.visible(s, "barn"))
+    assert(Game.startChallenge(s, "shortage"), "one restless night for another")
+    eq(Game.growthOf(s, Game.BY_ID.dog), 1.3); eq(Game.growthOf(s, Game.BY_ID.barn), 4)
+    s.done.shortage, s.done.wideAwake, s.done.coldFeet, s.challenge = true, true, true, nil
+    eq(Game.growthOf(s, Game.BY_ID.dog), 1.13)
+    s.dream.deepSleep = 2
+    s.owned.barn = 1
+    eq(Game.globalMult(s), 9 * 1.5 * (1 + C.prestige.bonusPerPoint * s.dreamEarned))
+    local back = Game.deserialize(Game.serialize(s))
+    assert(back.done.shortage and back.done.insomnia and not back.done.bogus)
+    s.challenge, s.made.pen = "coldFeet", 2.5
+    back = Game.deserialize(Game.serialize(s))
+    eq(back.challenge, "coldFeet"); eq(back.made.pen, 2.5)
+    eq(Game.deserialize({ challenge = "bogus" }).challenge, nil)
 end)
 print(("%d passed, %d failed"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

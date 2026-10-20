@@ -25,16 +25,20 @@ return {
     },
 
     -- In unlock order: each is revealed once the one before it is owned. The
-    -- rates are the brief's; the costs past the dog are raised so a night lasts
-    -- 25-30 minutes (the brief's: 120, 1.2K, 14K, 180K, 2.5M ran out in 9).
+    -- rates are the brief's; the costs past the dog are raised so a first night
+    -- lasts 18-23 minutes with the chain (the brief's: 120, 1.2K, 14K, 180K,
+    -- 2.5M ran out in 9).
     generators = {
         { id = "dog", name = "Shepherd Dog", desc = "Herds the stragglers", rate = 1, base = 15 },
         { id = "meadow", name = "Meadow", desc = "Sheep wander in to graze", rate = 8, base = 150 },
         { id = "pen", name = "Breeding Pen", desc = "More sheep. Somehow.", rate = 50, base = 2500 },
-        { id = "mill", name = "Wool Mill", desc = "Wool in, pajama sheep out", rate = 300, base = 90000 },
-        { id = "drones", name = "Counting Drones", desc = "They count from above", rate = 2000, base = 2e6 },
-        { id = "os", name = "Sheep-OS", desc = "An AI that counts for you", rate = 15000, base = 5e7 },
+        { id = "mill", name = "Wool Mill", desc = "Wool in, pajama sheep out", rate = 300, base = 90000, builds = 0.01 },
+        { id = "drones", name = "Counting Drones", desc = "They count from above", rate = 2000, base = 2e6, builds = 0.01 },
+        { id = "os", name = "Sheep-OS", desc = "An AI that counts for you", rate = 15000, base = 5e7, builds = 0.01 },
     },
+    -- The chain (Antimatter Dimensions' trick): a helper with `builds` makes
+    -- that many of the helper before it a second, each. Built helpers count
+    -- like bought ones but don't raise the price, and don't stay the night.
 
     -- Added up per copy owned, then multiplied with each other and with the
     -- Dream Point bonus: production = gens * (1 + barns/4) * (1 + lullabies/2) * (1 + dream).
@@ -97,6 +101,30 @@ return {
         -- you had when you fell asleep, up to all of them.
         { id = "warmBed", group = "boost", name = "Warm Bed", desc = "Keeps 20% of your helpers each night", base = 50, growth = 2, max = 5, keep = 0.2 },
         { id = "dreamCatcher", group = "boost", name = "Dream Catcher", desc = "+50% Dream Points", base = 20, growth = 4, add = 0.5 },
+        -- The way you sleep: one or the other, never both. Buying the other
+        -- one turns you over, and the points spent on the first come back.
+        -- Light Sleeper pays the hand that taps (yours, not Sleepwalking's)
+        -- and the golden sheep; Heavy Sleeper pays the helpers, and sleeps
+        -- through the golden sheep.
+        { id = "lightSleeper", group = "path", name = "Light Sleeper", desc = "Your taps count 20% of a second's sheep",
+            base = 6, growth = 3, max = 3, tapShare = 0.2, goldenFaster = 2, other = "heavySleeper", opens = 2 },
+        { id = "heavySleeper", group = "path", name = "Heavy Sleeper", desc = "Helpers x1.4. No golden sheep",
+            base = 6, growth = 3, max = 3, helperMult = 1.4, other = "lightSleeper", opens = 2 },
+    },
+
+    -- Restless nights (Antimatter Dimensions' challenges): a night under a
+    -- rule, started from the Dream shop. Fall asleep under it and its reward
+    -- is yours forever. One opens a night, from the night `opens` dreams in.
+    -- Starting one ends the night you're in, with nothing kept.
+    challenges = {
+        { id = "insomnia", name = "Insomnia", rule = "You need 4x the sheep to fall asleep",
+            reward = "Nights need half the sheep", opens = 2, target = 4, rewardTarget = 0.5 },
+        { id = "shortage", name = "Sheep Shortage", rule = "Helpers get dearer much faster (x1.3 each)",
+            reward = "Helpers get dearer slower (x1.13 each)", opens = 3, growth = 1.3, rewardGrowth = 1.13 },
+        { id = "wideAwake", name = "Wide Awake", rule = "The Dream shop's helpers stay in bed",
+            reward = "Deep Sleep triples instead of doubling", opens = 4, noAuto = true, rewardDeep = 3 },
+        { id = "coldFeet", name = "Cold Feet", rule = "No Barns or Lullabies",
+            reward = "Barns and Lullabies twice as strong", opens = 5, noKind = "mult", rewardComforts = 2 },
     },
 
     -- What the automation does, each step.

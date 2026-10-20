@@ -654,6 +654,10 @@ local ART = {
         "..y.......y......", "......y..........",
     },
     heart = { ".l.l.", "lllll", ".lll.", "..l.." },
+    eye = {
+        "....ooooooo.....", "..oowwwwwwwoo...", ".owwwwoooowwwo..", "owwwwoyyyyowwwo.",
+        "owwwwoyooyowwwwo", ".owwwoyyyyowwwo.", "..oowwoooowwoo..", "....ooooooo.....",
+    },
     z = { "llll", "..l.", ".l..", "llll" },
     bed = {
         "oo..............", "owo.............", "owo..ooooooooooo", "owoooowwwwlllllo",
@@ -706,6 +710,26 @@ function Scene.icon(id, x, y)
     elseif id == "warmBed" then
         G.art(ART.bed, x + 6, y + 9)
         G.art(ART.z, x + 20, y + 2)
+    -- The ways of sleeping: a hand that wakes for the gold, a bed that doesn't.
+    elseif id == "lightSleeper" then
+        G.art(ART.hand, x + 7, y + 4)
+        G.art({ ".y.", "yyy", ".y." }, x + 21, y + 2)
+    elseif id == "heavySleeper" then
+        G.art(ART.bed, x + 6, y + 10)
+        G.art(ART.z, x + 13, y + 3)
+        G.art(ART.z, x + 20, y + 1)
+    -- Restless nights.
+    elseif id == "insomnia" then G.art(ART.eye, x + 6, y + 7)
+    elseif id == "shortage" then
+        blit(Models.sheep(0.35, 0, 0, "plain", false, 0.75), x + 12, y + 19)
+        G.art({ "..y..", ".yyy.", "y.y.y", "..y..", "..y.." }, x + 21, y + 2)
+    elseif id == "wideAwake" then
+        blit(Models.sheep(0.35, 0, 1, "pj"), x + 13, y + 19)
+        G.art({ "yy", "yy", "yy", "..", "yy" }, x + 22, y + 2)
+    elseif id == "coldFeet" then
+        G.art(ART.barn, x + 6, y + 6)
+        G.art({ "w...w", ".....", "..w..", "w...." }, x + 3, y + 1)
+        G.art({ "....w", "w....", "...w." }, x + 19, y + 2)
     end
 end
 

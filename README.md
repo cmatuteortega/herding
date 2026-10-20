@@ -5,7 +5,10 @@ tap the fence and a sheep hops over. It starts with one fence at dusk and ends
 with sheep in orbit and an AI counting for you. The numbers get bigger while the
 sky gets darker, and when the Drowsiness bar fills, you fall asleep. Then you
 Dream Again, keeping Dream Points to spend in the Dream shop. It sells
-automation that plays the night for you, and boosts that make it shorter.
+automation that plays the night for you, boosts that make it shorter, and a
+way of sleeping (light, for players who tap, or heavy, for those who don't).
+From the third night on, restless nights (challenges) open one a night: a
+night under a rule, with a reward kept forever.
 Each night is quicker than the last, until the bar fills in under a second.
 Then the dream turns lucid, the door to the game's next phase.
 
@@ -23,7 +26,9 @@ love . --sounds            # dev: every sound and pad layer written as a .wav
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
 luajit tests/run.lua sim   # dev: the balance sim (a greedy player at 3, 1.5, 0.5 taps/s,
                            # then twelve nights in a row spending Dream Points)
-luajit tests/run.lua nights 1.5 15   # dev: N nights in a row at a tap rate, then with no taps
+luajit tests/run.lua nights 1.5 15   # dev: N nights in a row at a tap rate, then with no taps,
+                                     # then playing each restless night as it opens
+luajit tests/run.lua nights 3 20 heavy restless  # dev: one run, sleeping light or heavy
 luacheck .                 # dev: the lint
 ```
 
@@ -84,11 +89,15 @@ small helpers) and **json.lua** 0.1.2 (the save file).
   sheep, runTotal, allTime,       -- Num: spendable, counted this run, counted ever
   runTime,                        -- seconds into this run
   owned = { tapPower, betterFence, dog, meadow, pen, mill, drones, os, barn, lullaby },
+  made = { dog, meadow, pen, mill, drones, os }, -- built by the chain this run, in fractions
+  challenge,                      -- the restless night you're under, or nil
   stage,                          -- 1 Dusk, 2 The Field, 3 The Factory, 4 Orbit
   golden, goldenIn,               -- a golden sheep crossing { t, lane }, and when the next comes
   asleep,                         -- the night is over; waiting for Dream Again
   dreamPoints, dreamEarned,       -- prestige: to spend, and ever earned (the bonus)
-  dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, warmBed, dreamCatcher },
+  dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, warmBed, dreamCatcher,
+                    lightSleeper, heavySleeper },
+  done = { insomnia, shortage, wideAwake, coldFeet }, -- restless nights slept through: true
   lastNight, lucidNight,          -- the last night's length; this one was under a second
   phase,                          -- "nights", or "lucid" (the next phase's placeholder)
   taps, buyMode, muted, lastSeen,
@@ -113,8 +122,14 @@ the same happens if the game sat frozen in the background for a while.
 - **Costs:** `cost = base * growth^owned`, with growth 1.15 unless an item sets
   its own. Better Fence (×7), the Barn (×4) and the Lullaby (×6, at most 5) grow
   faster; at 1.15 a few of them would outweigh every generator.
-- **Production:** `sum(rate * owned) * (1 + 0.25*barns) * (1 + 0.5*lullabies) *
-  2^deepSleep * (1 + 0.01*dreamEarned)`. Taps get the same multiplier.
+- **Production:** `sum(rate * (owned + made)) * 1.4^heavySleeper * (1 + 0.25*barns) *
+  (1 + 0.5*lullabies) * 2^deepSleep * (1 + 0.01*dreamEarned)`. Taps get the same
+  multiplier (not Heavy Sleeper's), and a tap of your own adds `0.2*lightSleeper`
+  seconds of production.
+- **The chain:** a helper with `builds` makes that many of the helper before it
+  a second, each (Sheep-OS builds Drones, Drones build Mills, Mills build Pens).
+  Built helpers count like bought ones, don't raise the price and don't stay the
+  night (Warm Bed keeps bought ones only).
 - **Night length** is `drowsiness.target`, the sheep counted that put you to
   sleep. The bar is `(runTotal / target) ^ curve`; a quarter power turns fast
   early growth and slow late growth into a bar that fills at about even speed.
@@ -129,6 +144,15 @@ the same happens if the game sat frozen in the background for a while.
   in points. `auto.share` is the most of your sheep one auto-buyer trip spends on
   any one thing (without it, Night Shift spends everything on Dogs and the night
   gets slower). `lucid.under` is the night length that opens the next phase.
+- **Ways of sleeping** (`group = "path"` in `dreamShop`) are one or the other:
+  buying one while you own the other turns you over, and gives back every point
+  spent on the other. Light Sleeper is worth it to a player tapping about 1.5 a
+  second or more; at 0 taps Heavy Sleeper wins.
+- **Restless nights** are `challenges`: each opens once `dreams >= opens`, and
+  its rule (`target`, `growth`, `noKind`, `noAuto`) holds while it's
+  `s.challenge`. Starting one ends the night you're in with nothing kept;
+  falling asleep under it sets `done[id]` and its reward for good. A restless
+  night never goes lucid.
 
 ### Pacing as shipped
 
@@ -137,24 +161,35 @@ checked against the real game with `--speed 10 --autoplay 300`:
 
 | taps a second | Wool Mill | Sheep-OS | asleep |
 | --- | --- | --- | --- |
-| 3 | 3.0 min | 11.5 min | 21 min |
-| 1.5 | 3.8 min | 13.5 min | 25 min |
-| 0.5 | 5.0 min | 16 min | 28 min |
+| 3 | 3.0 min | 10.7 min | 18 min |
+| 1.5 | 3.8 min | 12.7 min | 21 min |
+| 0.5 | 5.0 min | 14.3 min | 23 min |
 
-Night after night (`luajit tests/run.lua nights`: 1.5 taps a second, and each
-night's Dream Points go on the cheapest thing in the Dream shop):
+The chain took three to five minutes off the first night (it was 21, 25 and 28).
 
-| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 15 | 17 | 18 | 19 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| seconds | 1494 | 599 | 522 | 406 | 207 | 150 | 122 | 76 | 42 | 34 | 25 | 7.3 | 4.5 | 2.5 | 1.4 | **0.6** |
-| Dream Points | 22 | 30 | 32 | 37 | 44 | 75 | 80 | 107 | 116 | 168 | 188 | 289 | 430 | 532 | 651 | 776 |
+Night after night (`luajit tests/run.lua nights`: 1.5 taps a second sleeping
+light, and each night's Dream Points go on the cheapest thing in the Dream shop):
 
-The automation is all bought by night 7, and Warm Bed keeps every helper by
-night 17. Night 19 is the first to fill the bar
-in under a second, so the dream turns lucid: about an hour of play in all,
-most of it the first few nights. With no taps at all after the first night,
-it's night 20. The auto-buyers shop every 0.05 seconds, or a night near the end
-would be over before their second trip.
+| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12 | 14 | 16 | 18 | 19 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| seconds | 1249 | 503 | 374 | 306 | 260 | 130 | 92 | 51 | 22 | 23 | 12 | 3.4 | 1.8 | 1.0 | **0.5** |
+| Dream Points | 23 | 32 | 36 | 40 | 41 | 78 | 89 | 109 | 146 | 194 | 239 | 474 | 592 | 738 | 740 |
+
+The same, playing each restless night as soon as it opens (nights 3 to 6):
+
+| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| restless | | | Insomnia | Shortage | Wide Awake | Cold Feet | | | | | |
+| seconds | 1249 | 503 | 538 | 243 | 91 | 207 | 16 | 7.7 | 1.8 | 1.4 | **0.3** |
+| Dream Points | 23 | 32 | 64 | 31 | 42 | 47 | 115 | 150 | 252 | 418 | 425 |
+
+Both take about 50 minutes to the first lucid night. Without the restless
+nights it's 19 nights, the last ten of them under a minute; with them it's 11,
+and the time goes on four nights that each play differently. The way of
+sleeping matters: at 3 taps a second, sleeping light reaches lucid on night
+16 and heavy on 17, with light's nights 3 to 8 much shorter; at no taps,
+heavy reaches it on night 18 and light on 20. The auto-buyers shop every 0.05
+seconds, or a night near the end would be over before their second trip.
 
 In the first five minutes something new turns up every 20 to 60 seconds (Tap
 Power, the Dog, the Meadow, Better Fence, the Barn, the Pen, the first Lullaby),
@@ -175,7 +210,8 @@ their value comes from what they buy.
   floats up, and quick taps pile into one growing number.
 - **The shop:** Tap Power, Better Fence (the fence turns white, then
   gold-capped), and six helpers, each unlocked by owning the one before it (the
-  next one teased as a dashed `???` card). Then the Barn, the Lullaby, and the
+  next one teased as a dashed `???` card). The last three build the one before
+  them (the chain), and a card shows bought and built: `X24+14`. Then the Barn, the Lullaby, and the
   golden sheep: 60 seconds of production when you catch it (or 40 taps' worth
   early on). Buy ×1, ×10 or Max.
 - **The stages:**
@@ -197,6 +233,18 @@ their value comes from what they buy.
     each), **Warm Bed** starts each night with 20% of the helpers you fell
     asleep with per level (all of them at level 5; Barns, Lullabies and tap
     upgrades still reset), and **Dream Catcher** adds +50% Dream Points.
+  - *Way of sleeping* (from the third night), one or the other: **Light
+    Sleeper** makes each tap of yours count 20% of a second's sheep per level
+    and brings golden sheep twice as often; **Heavy Sleeper** makes helpers
+    ×1.4 per level, and you sleep through every golden sheep. The other's card
+    says TURN OVER, and turning over gives back what the first cost.
+  - *Restless nights*, one more each night from the third, the next one dashed
+    with the night it opens. START asks first (the night you're in ends,
+    nothing kept), then the rule replaces the narrator in gold; GIVE UP goes
+    back to a plain night. **Insomnia** (4× the sheep) halves every night's
+    sheep after; **Sheep Shortage** (helpers ×1.3 dearer each) makes them ×1.13
+    dearer each instead of ×1.15; **Wide Awake** (no Dream shop automation)
+    makes Deep Sleep triple; **Cold Feet** (no Barns or Lullabies) doubles them.
   - A gold star on the button means there's something you can buy. After Dream
     Again, the shop opens on it.
 - **Lucid:** every night that fills the bar in under a second ends as *A lucid
@@ -229,6 +277,7 @@ their value comes from what they buy.
 - Achievements
 - A stats screen
 - A second prestige layer (lucid dreaming is the gate to one, the content isn't built)
+- Restless nights past the four, or doing one again
 - Settings beyond mute and motion (volume, notation, a reset button)
 - Per-generator upgrades, combos, click frenzies
 - Cloud saves, import and export

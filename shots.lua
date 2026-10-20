@@ -16,7 +16,7 @@ local function preset(total, owned, extra)
     s.taps = 50
     s.muted = true
     for k, v in pairs(extra or {}) do
-        if k == "dream" then for id, n in pairs(v) do s.dream[id] = n end else s[k] = v end
+        if k == "dream" or k == "made" or k == "done" then for id, n in pairs(v) do s[k][id] = n end else s[k] = v end
     end
     return s
 end
@@ -47,6 +47,18 @@ local MOMENTS = {
     { "10-lucid-phase", function()
         return preset(0, {}, { phase = "lucid", dreams = 22, dreamPoints = 340, dreamEarned = 9800, dream = { sleepwalk = 5, deepSleep = 5 } })
     end, 0, "lucid" },
+    { "11-ways", function()
+        return preset(3e3, { dog = 3, tapPower = 2 }, { dreams = 5, dreamPoints = 40, dreamEarned = 160,
+            dream = { sleepwalk = 3, nightShift = 2, deepSleep = 2, warmBed = 1, lightSleeper = 2 }, done = { insomnia = true } })
+    end, 0, "dreams-low" },
+    { "12-restless", function()
+        return preset(6e7, { dog = 30, meadow = 25, pen = 12, mill = 8, drones = 4, tapPower = 15, betterFence = 3, barn = 3 },
+            { dreams = 5, dreamEarned = 160, challenge = "shortage", made = { pen = 14.5, mill = 2.2 },
+                dream = { sleepwalk = 3, nightShift = 2, deepSleep = 2, heavySleeper = 2 }, done = { insomnia = true } })
+    end, 2 },
+    { "13-start-restless", function()
+        return preset(3e3, { dog = 3 }, { dreams = 5, dreamEarned = 160, done = { insomnia = true } })
+    end, 0, "ask" },
 }
 
 function Shots.run(UI, fit)
@@ -69,7 +81,9 @@ function Shots.run(UI, fit)
                 local dt = 1 / 60
                 Game.step(s, dt)
                 if m[3] > 0 and i % 7 == 0 and i <= m[3] * 7 then UI.pressed(r.x + r.w / 2, r.y + r.h * 0.8, "shot") end
-                if i == 2 and m[4] == "dreams" then UI.key("d") end
+                if i == 2 and (m[4] == "dreams" or m[4] == "dreams-low") then UI.key("d") end
+                if i == 4 and m[4] == "dreams-low" then UI.wheel(-40) end
+                if i == 2 and m[4] == "ask" then UI.askRestless("wideAwake") end
                 if i == 50 and m[4] == nil then
                     -- A purchase, for the pop: the first card that can be paid for.
                     UI.key("1")

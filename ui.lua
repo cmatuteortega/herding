@@ -120,12 +120,22 @@ local function layoutShop()
         sections = {
             { group = "auto", title = "WHILE YOU SLEEP" },
             { group = "boost", title = "DEEPER SLEEP" },
+            { group = "path", title = "WAY OF SLEEPING: ONE OR THE OTHER" },
+            { restless = true, title = "RESTLESS NIGHTS" },
         }
     end
     local tease = Game.teaser(S)
     for _, sec in ipairs(sections) do
         local list = {}
-        for _, it in ipairs(sec.group and Game.DREAMS or Game.ITEMS) do
+        if sec.restless then
+            -- Each opens a night; the next one waits, dashed, saying when.
+            for _, c in ipairs(Game.CHALLENGES) do
+                if Game.challengeOpen(S, c.id) then list[#list + 1] = { challenge = c }
+                else list[#list + 1] = { challenge = c, locked = true }; break end
+            end
+            if not Game.challengeOpen(S, Game.CHALLENGES[1].id) then list = {} end
+        end
+        for _, it in ipairs(sec.restless and {} or sec.group and Game.DREAMS or Game.ITEMS) do
             local mine = sec.group and it.group == sec.group or (not sec.group and it.kind == sec.kind)
             if mine and Game.visible(S, it.id) then list[#list + 1] = it end
         end
@@ -133,7 +143,7 @@ local function layoutShop()
         -- A section the automation buys all of folds into one row.
         local allAuto = sec.kind and #list > 0
         for _, it in ipairs(list) do
-            if it.teaser or not Game.automated(S, it.id) then allAuto = false end
+            if it.teaser or it.challenge or not Game.automated(S, it.id) then allAuto = false end
         end
         if allAuto and not expanded[sec.kind] then
             rows[#rows + 1] = { header = sec.title, y = y, h = 10 }
@@ -143,8 +153,12 @@ local function layoutShop()
             rows[#rows + 1] = { header = sec.title, y = y, h = 10, fold = allAuto and sec.kind or nil }
             y = y + 10
             for _, it in ipairs(list) do
-                rows[#rows + 1] = { item = it, y = y, h = CARD_H }
-                if not it.teaser and not seen[it.id] then
+                if it.challenge then
+                    rows[#rows + 1] = { challenge = it.challenge, locked = it.locked, y = y, h = CARD_H }
+                else
+                    rows[#rows + 1] = { item = it, y = y, h = CARD_H }
+                end
+                if not it.teaser and not it.challenge and not seen[it.id] then
                     seen[it.id] = true
                     local f = fxCards[it.id] or {}
                     fxCards[it.id] = f
@@ -171,10 +185,10 @@ function UI.banner(text, sub)
     flux.to(banner, reduced and 0.01 or 0.35, { y = 0 }):ease("backout")
 end
 
-local function closeModal()
+local function closeModal(cancelled)
     local m = modal
     modal = nil
-    if m and m.onClose then m.onClose() end
+    if m and m.onClose and not cancelled then m.onClose() end
     if endingWaits then endingWaits = false; UI.showEnding() end
 end
 
@@ -222,6 +236,12 @@ function UI.showEnding()
     end
     lines[#lines + 1] = "SPEND THEM IN THE DREAM SHOP. EACH ONE EVER EARNED STILL MAKES EVERY SHEEP COUNT " .. pct
         .. "% MORE: +" .. floor(after * C.prestige.bonusPerPoint * 100 + 0.5) .. "%."
+    local restless = S.challenge and Game.CH[S.challenge]
+    if restless then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "RESTLESS NIGHT SLEPT THROUGH: " .. restless.name:upper() .. ". FOREVER: "
+            .. restless.reward:upper() .. "."
+    end
     local lucid = S.lucidNight
     if lucid then
         lines[#lines + 1] = ""
@@ -230,7 +250,7 @@ function UI.showEnding()
     end
     UI.showModal({
         night = true,
-        title = lucid and "A LUCID DREAM." or "YOU FELL ASLEEP.",
+        title = lucid and "A LUCID DREAM." or (restless and "YOU SLEPT THROUGH IT." or "YOU FELL ASLEEP."),
         lines = lines,
         big = "+" .. gain .. " DREAM POINT" .. (gain == 1 and "" or "S"),
         button = lucid and "GO LUCID" or "DREAM AGAIN",
@@ -247,10 +267,7 @@ function UI.showEnding()
             Game.dreamAgain(S)
             Audio.setAsleep(false)
             Audio.cue("dream")
-            Scene.reset()
-            shown = 0
-            seen = {}
-            scroll = 0
+            UI.newNight()
             UI.save()
             if dreamAffordable() then
                 tab = "dream"
@@ -287,6 +304,53 @@ function UI.showLucid()
         end,
     })
 end
+
+-- A night starts over (a new one, or a restless one): the field and shop too.
+function UI.newNight()
+    Scene.reset()
+    Audio.setLullabies(S.owned.lullaby)
+    shown, seen, scroll = 0, {}, 0
+end
+
+-- A restless night's card: start it, give it up, or nothing once it's done.
+local function restless(c)
+    Audio.start()
+    UI.cue("click")
+    if Game.done(S, c.id) or S.asleep then return end
+    if S.challenge == c.id then
+        UI.showModal({
+            title = "GIVE UP " .. c.name:upper() .. "?",
+            lines = { "THIS NIGHT ENDS, WITH NO DREAM POINTS, AND INSTEAD...", "YOU CAN TRY AGAIN WHENEVER YOU LIKE." },
+            big = "A PLAIN NIGHT",
+            button = "GIVE UP", cancel = "KEEP GOING",
+            onClose = function()
+                Game.giveUp(S)
+                UI.newNight()
+                tab = "night"
+                UI.save()
+                UI.banner("A NEW NIGHT", "A PLAIN ONE")
+            end,
+        })
+        return
+    end
+    UI.showModal({
+        title = "RESTLESS NIGHT: " .. c.name:upper(),
+        lines = { c.rule:upper() .. ". FALL ASLEEP ANYWAY, AND FOREVER:", "",
+            "THE NIGHT YOU'RE IN ENDS: NOTHING KEPT, NO DREAM POINTS." },
+        big = c.reward:upper(),
+        button = "START", cancel = "NOT TONIGHT",
+        onClose = function()
+            if Game.startChallenge(S, c.id) then
+                UI.newNight()
+                tab = "night"
+                UI.save()
+            end
+        end,
+    })
+end
+
+-- For the shots: the restless night dialog for a challenge's id.
+function UI.askRestless(id) restless(Game.CH[id]) end
 
 -- Little squares of wool and lavender out of a price.
 local function confetti(x, y)
@@ -351,6 +415,10 @@ function UI.drain()
             UI.cue("golden")
             bump.v = 1
             flux.to(bump, 0.2, { v = 0 })
+        elseif e.type == "challenge" then
+            local c = Game.CH[e.id]
+            UI.banner("RESTLESS: " .. c.name:upper(), c.rule:upper())
+            UI.cue("stage")
         elseif e.type == "lucid" then
             UI.cue("stage")
         elseif e.type == "asleep" then
@@ -406,7 +474,8 @@ end
 
 function UI.pressed(x, y, id)
     if modal then
-        if inside(modalButton(), x, y) then Audio.start(); UI.cue("click"); closeModal() end
+        if inside(modalButton(), x, y) then Audio.start(); UI.cue("click"); closeModal()
+        elseif inside(modal.cancelRect, x, y) then Audio.start(); UI.cue("click"); closeModal(true) end
         return
     end
     if inside(R.mute, x, y) then
@@ -471,6 +540,7 @@ function UI.released(x, y, id)
             return
         end
         if hit and row.item and not row.item.teaser then buy(row.item.id, row) return end
+        if hit and row.challenge and not row.locked then restless(row.challenge) return end
     end
 end
 
@@ -482,7 +552,8 @@ end
 
 function UI.key(key)
     if modal then
-        if key == "return" or key == "space" or key == "kpenter" then UI.cue("click"); closeModal() end
+        if key == "return" or key == "space" or key == "kpenter" then UI.cue("click"); closeModal()
+        elseif modal.cancel and (key == "backspace" or key == "n") then UI.cue("click"); closeModal(true) end
         return
     end
     if key == "space" or key == "return" then tapField(nil, nil)
@@ -569,8 +640,11 @@ local function drawHud()
     y = y + 8
     centred("l", N.format(Game.totalPerSecond(S), true) .. "/S   " .. N.format(Game.tapValue(S)) .. " A TAP", cx, y, 1, "o")
     y = y + 9
-    for i, line in ipairs(G.wrap(Game.currentLine(S):upper(), r.w - 12)) do
-        if i <= 2 then centred("w", line, cx, y, 1, "o"); y = y + 7 end
+    -- Under a restless night, its rule takes the narrator's place, in gold.
+    local c = S.challenge and Game.CH[S.challenge]
+    local say = c and ("RESTLESS: " .. c.name .. ". " .. c.rule) or Game.currentLine(S)
+    for i, line in ipairs(G.wrap(say:upper(), r.w - 12)) do
+        if i <= 2 then centred(c and "y" or "w", line, cx, y, 1, "o"); y = y + 7 end
     end
     -- The first hint, bobbing until the first taps.
     if hintGone.v < 1 then
@@ -655,8 +729,14 @@ local function describeDream(it)
     elseif it.id == "warmBed" then
         if o == 0 then return d end
         return "KEEPS " .. floor(it.keep * o * 100 + 0.5) .. "% OF YOUR HELPERS EACH NIGHT. " .. o .. "/" .. it.max
+    elseif it.id == "lightSleeper" then
+        if o == 0 then return d .. ". GOLDEN SHEEP TWICE AS OFTEN" end
+        return "YOUR TAPS COUNT " .. floor(it.tapShare * o * 100 + 0.5) .. "% OF A SECOND. GOLDEN SHEEP X2. " .. o .. "/" .. it.max
+    elseif it.id == "heavySleeper" then
+        if o == 0 then return d end
+        return "HELPERS X" .. (("%.2f"):format(Game.helperMult(S)):gsub("%.?0+$", "")) .. ". NO GOLDEN SHEEP. " .. o .. "/" .. it.max
     elseif it.mult then
-        return d .. ". NOW X" .. N.format(it.mult ^ o)
+        return d .. ". NOW X" .. N.format(Game.dreamMult(S, it) ^ o)
     elseif it.add then
         return d .. ". NOW X" .. (("%.2f"):format(1 + it.add * o):gsub("%.?0+$", ""))
     end
@@ -667,14 +747,20 @@ local function describe(it)
     if it.kind == "dream" then return describeDream(it) end
     local o = S.owned[it.id]
     if it.kind == "gen" then
-        local each = N.mul(N.from(it.rate), Game.globalMult(S))
+        local each = N.mul(N.from(it.rate * Game.helperMult(S)), Game.globalMult(S))
+        -- A helper on the chain says what it builds before what it counts.
+        if o > 0 and it.builds then
+            local below = Game.GENS[it.index - 1]
+            return "BUILDS " .. N.format(Game.builds(S, it.id), true) .. " " .. below.name:upper() .. "/S. "
+                .. N.format(Game.genRate(S, it.id), true) .. "/S"
+        end
         if o > 0 then return "+" .. N.format(each, true) .. "/S EACH. " .. N.format(Game.genRate(S, it.id), true) .. "/S" end
         return it.desc:upper() .. ". +" .. N.format(each, true) .. "/S"
     elseif it.kind == "tap" then
         return it.desc:upper() .. ". NOW " .. N.format(Game.tapValue(S)) .. " A TAP"
     end
     if it.max then return it.desc:upper() .. ". " .. o .. "/" .. it.max end
-    return it.desc:upper() .. ". NOW X" .. (("%.2f"):format(1 + it.add * o):gsub("%.?0+$", ""))
+    return it.desc:upper() .. ". NOW X" .. (("%.2f"):format(1 + Game.comfortAdd(S, it) * o):gsub("%.?0+$", ""))
 end
 
 local function drawCard(row, x, y, w)
@@ -709,7 +795,7 @@ local function drawCard(row, x, y, w)
     love.graphics.pop()
     -- The price: gold when it can be paid.
     local cost = q.maxed and "DONE" or (N.format(q.cost) .. (q.dp and " DP" or ""))
-    local qty = q.maxed and "" or (q.dp and ("LV " .. Game.have(S, it.id) + 1) or ("X" .. q.n))
+    local qty = q.maxed and "" or (q.turn and "TURN OVER") or (q.dp and ("LV " .. Game.have(S, it.id) + 1) or ("X" .. q.n))
     local pw = max(G.textWidth(cost), G.textWidth(qty)) + 8
     local px = x + w - pw - 4
     G.box(px, y + 4, pw, h - 8, afford and "y" or (q.maxed and "l" or "b"))
@@ -720,10 +806,46 @@ local function drawCard(row, x, y, w)
     local tx = x + 37
     G.text(ink, it.name:upper(), tx, y + 5)
     local have = Game.have(S, it.id)
-    if have > 0 and not (it.kind == "dream" and it.max == 1) then G.text("p", "X" .. have, tx + G.textWidth(it.name) + 5, y + 5) end
+    local built = it.kind == "gen" and floor(S.made[it.id]) or 0
+    if have > 0 and not (it.kind == "dream" and it.max == 1) then
+        G.text("p", "X" .. have .. (built > 0 and ("+" .. N.format(built)) or ""), tx + G.textWidth(it.name) + 5, y + 5)
+    end
     -- Bought by the Dream shop's automation: it says so.
     if Game.automated(S, it.id) then G.text("i", "AUTO", px - 4 - G.textWidth("AUTO"), y + 5) end
     local lines = G.wrap(describe(it), px - tx - 4)
+    for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
+end
+
+-- A restless night's card: what it asks, what it gives, and where you are with it.
+local function drawRestless(row, x, y, w)
+    local c, h = row.challenge, row.h
+    if row.locked then
+        G.box(x + 1, y + 1, w - 2, h - 2, "v", "p")
+        for i = x + 1, x + w - 2, 4 do G.rect("n", i, y, 2, 1); G.rect("n", i, y + h - 1, 2, 1) end
+        G.box(x + 4, y + 4, 28, h - 8, "o", "p")
+        G.text("p", "?", x + 17, y + 12)
+        G.text("s", "???", x + 37, y + 6)
+        G.text("s", "OPENS AFTER NIGHT " .. c.opens, x + 37, y + 15)
+        return
+    end
+    local done, on = Game.done(S, c.id), S.challenge == c.id
+    G.box(x + 1, y + 1, w - 2, h - 2, done and "l" or (on and "y" or "w"))
+    G.rect(on and "h" or "b", x + 1, y + h - 2, w - 2, 1)
+    G.box(x + 4, y + 4, 28, h - 8, done and "b" or "l")
+    love.graphics.push("all")
+    love.graphics.intersectScissor(x + 4, y + 4, 28, h - 8)
+    Scene.icon(c.id, x + 18, y + h / 2)
+    love.graphics.pop()
+    local label = done and "DONE" or (on and "GIVE UP" or "START")
+    local pw = G.textWidth(label) + 8
+    local px = x + w - pw - 4
+    G.box(px, y + 4, pw, h - 8, done and "l" or (on and "l" or "y"))
+    G.text("o", label, px + 4, y + 11)
+    local tx = x + 37
+    G.text("o", c.name:upper(), tx, y + 5)
+    local say = (done and "YOURS: " .. c.reward or c.rule):upper()
+    if on then say = "NOW. " .. say end
+    local lines = G.wrap(say, px - tx - 4)
     for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
 end
 
@@ -742,6 +864,7 @@ local function drawShop()
                 G.box(r.x + 1, y + 1, r.w - 2, row.h - 2, "v", "i")
                 G.text("l", "ALL " .. row.n .. " ON AUTO", r.x + 6, y + 5)
                 G.text("y", "SHOW", r.x + r.w - 6 - G.textWidth("SHOW"), y + 5)
+            elseif row.challenge then drawRestless(row, r.x, y, r.w)
             else drawCard(row, r.x, y, r.w) end
         end
     end
@@ -829,11 +952,21 @@ local function drawModal()
     end
     local bw = G.textWidth(m.button) + 20
     local br = rect(vw / 2 - bw / 2, y + h - 22, bw, 14)
+    -- With a way out: the two buttons side by side, the quiet one first.
+    if m.cancel then
+        local cw = G.textWidth(m.cancel) + 14
+        local cx0 = floor(vw / 2 - (cw + bw + 6) / 2)
+        local cr = rect(cx0, y + h - 22, cw, 14)
+        G.box(cr.x, cr.y, cr.w, cr.h, m.night and "n" or "s", m.night and "i" or "p")
+        centred(m.night and "l" or "o", m.cancel, cr.x + cr.w / 2, cr.y + 4)
+        m.cancelRect = cr
+        br = rect(cx0 + cw + 6, y + h - 22, bw, 14)
+    end
     local pulse = (not reduced and sin(t * 3) > 0) and 1 or 0
     G.box(br.x - pulse, br.y - pulse, br.w + pulse * 2, br.h + pulse * 2, "y", "y")
     G.box(br.x + 1, br.y + 1, br.w - 2, br.h - 2, "l")
     G.rect("i", br.x + 1, br.y + br.h - 2, br.w - 2, 1)
-    centred("o", m.button, vw / 2, br.y + 4)
+    centred("o", m.button, br.x + br.w / 2, br.y + 4)
     m.buttonRect = br
 end
 
