@@ -7,9 +7,14 @@ local Game = require "game"
 local N = require "num"
 local C = require "config"
 
-local function sim(tapRate, dreamPoints)
-    local s = Game.fresh()
-    s.dreamPoints = dreamPoints or 0
+-- One night for a greedy player tapping `tapRate` a second, who catches every
+-- golden sheep and buys the best value it can see (leaving what the
+-- automation buys to the automation). With `s`, that state's night, quietly;
+-- it returns the night's length in seconds.
+local function sim(tapRate, dreamPoints, s)
+    local quiet = s ~= nil
+    s = s or Game.fresh()
+    if not quiet then s.dreamPoints, s.dreamEarned = dreamPoints or 0, dreamPoints or 0 end
     local seed = 7
     local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
     local dt, t, acc = 1 / C.tickRate, 0, 0
@@ -34,11 +39,11 @@ local function sim(tapRate, dreamPoints)
         if s.golden and s.golden.t > 2 then Game.catchGolden(s) end
         local best, bp = nil, math.huge
         for _, it in ipairs(Game.ITEMS) do
-            if Game.visible(s, it.id) then
+            if Game.visible(s, it.id) and not Game.automated(s, it.id) then
                 local q = Game.quote(s, it.id, "1")
                 local v = not q.maxed and value(it.id) or 0
                 if v > 0 then
-                    local p = q.cost / v + q.cost / math.max(1, Game.perSecond(s) + Game.tapValue(s) * tapRate)
+                    local p = q.cost / v + q.cost / math.max(1, Game.totalPerSecond(s) + Game.tapValue(s) * tapRate)
                     if p < bp then best, bp = it.id, p end
                 end
             end
@@ -54,16 +59,48 @@ local function sim(tapRate, dreamPoints)
         if not stages[s.stage] then stages[s.stage] = ("%.1fm"):format(t / 60) end
         Game.events = {}
     end
+    if quiet then return t end
     print(("taps/s %.1f  asleep at %.1f min  total %s  DP %d"):format(tapRate, t / 60, N.format(s.runTotal), Game.dreamPointsFor(s)))
     print("  firsts: " .. table.concat(firsts, " "))
     print("  stages: " .. table.concat(stages, " "))
     print(("  first 5 min: %d purchases, longest wait %.1fs"):format(buys5, gaps))
 end
 
+-- Night after night: at each new night the Dream Points go on the cheapest
+-- thing in the Dream shop, again and again, and the night is played.
+local function nights(tapRate, n)
+    local s = Game.fresh()
+    print(("night after night at %.1f taps a second:"):format(tapRate))
+    for k = 1, n do
+        while true do
+            local best, bc
+            for _, it in ipairs(Game.DREAMS) do
+                local q = Game.quote(s, it.id, "1")
+                if q.ok and (not bc or q.cost < bc) then best, bc = it.id, q.cost end
+            end
+            if not best then break end
+            Game.buy(s, best, "1")
+        end
+        Game.events = {}
+        local t = sim(tapRate, nil, s)
+        local lv = {}
+        for _, it in ipairs(Game.DREAMS) do lv[#lv + 1] = s.dream[it.id] end
+        local lucid = s.lucid and "  LUCID" or ""
+        local gained = Game.dreamAgain(s)
+        print(("  %2d  %6.1f min  +%-5d DP  x%-9s levels %s%s"):format(k, t / 60, gained, N.format(Game.globalMult(s)),
+            table.concat(lv, " "), lucid))
+    end
+end
+
+if arg[1] == "nights" then
+    nights(tonumber(arg[2]) or 1.5, tonumber(arg[3]) or 15)
+    nights(0, tonumber(arg[3]) or 15)
+    return
+end
+
 if arg[1] == "sim" then
     for _, r in ipairs({ 3, 1.5, 0.5 }) do sim(r) end
-    print("second night, with the first night's Dream Points:")
-    sim(1.5, 122)
+    nights(1.5, 12)
     return
 end
 
@@ -107,6 +144,7 @@ test("production and drowsiness", function()
     Game.step(s, 1)
     eq(s.sheep, 10)
     s.runTotal = C.drowsiness.target
+    s.runTime = C.prestige.paceRef -- a first night's length: no pace bonus
     Game.step(s, 1 / 30)
     assert(s.asleep)
     local dp = Game.dreamAgain(s)
@@ -133,6 +171,68 @@ test("save round trip", function()
     local back = Game.deserialize(Game.serialize(s))
     eq(back.owned.dog, 4); eq(back.sheep, 123); eq(back.dreamPoints, 7)
     eq(Game.deserialize({ owned = { dog = "x" }, buyMode = "weird" }).buyMode, "1")
+end)
+test("the pace bonus", function()
+    local s = Game.fresh()
+    s.runTotal, s.runTime = 1.5e9, C.prestige.paceRef
+    eq(Game.pace(s), 1)
+    s.runTime = C.prestige.paceRef / 2 ^ (1 / C.prestige.pacePower)
+    assert(math.abs(Game.pace(s) - 2) < 1e-9)
+    s.runTime = 0.01
+    eq(Game.pace(s), C.prestige.paceMax)
+end)
+test("the dream shop", function()
+    local s = Game.fresh()
+    assert(not Game.visible(s, "sleepwalk"), "hidden before the first dream")
+    s.dreamPoints, s.dreamEarned, s.dreams = 10, 10, 1
+    assert(Game.buy(s, "deepSleep", "max"))
+    eq(s.dream.deepSleep, 1); eq(s.dreamPoints, 5)
+    eq(Game.globalMult(s), 2 * (1 + 10 * C.prestige.bonusPerPoint))
+    assert(not Game.buy(s, "dreamCatcher", "1"), "too dear")
+    s.dreamPoints = 1e6
+    for _ = 1, 9 do Game.buy(s, "sleepwalk", "1") end
+    eq(s.dream.sleepwalk, 5)
+    Game.dreamAgain(s)
+    eq(s.dream.deepSleep, 1) -- kept across nights
+end)
+test("sleepwalking and the auto-buyers", function()
+    local s = Game.fresh()
+    s.dream.sleepwalk = 1
+    for _ = 1, 31 do Game.step(s, 1 / 30) end -- a second, and a step for rounding
+    eq(s.sheep, 2)
+    s.dream.nightShift = 1
+    s.sheep = 1000
+    s.autoIn = 0
+    Game.step(s, 1 / 30)
+    assert(s.owned.dog > 0, "the dog is bought")
+    eq(s.owned.pen, 0)
+    assert(s.sheep >= 1000 * (1 - 2 * C.auto.share), "a trip spends a share at a time")
+    assert(not Game.automated(s, "barn") and Game.automated(s, "meadow") and not Game.automated(s, "pen"))
+end)
+test("golden dreams", function()
+    local s = Game.fresh()
+    s.dream.goldenDreams = 1
+    s.golden = { t = C.auto.goldenAfter, lane = 0.5 }
+    Game.step(s, 1 / 30)
+    assert(not s.golden and s.sheep >= C.golden.minTaps)
+end)
+test("lucid", function()
+    local s = Game.fresh()
+    s.runTotal, s.runTime = C.drowsiness.target, 30
+    Game.step(s, 1 / 30)
+    assert(s.asleep and s.lucid)
+    local o = Game.fresh()
+    o.runTotal, o.owned.dog = C.drowsiness.target - 1, 1
+    Game.offline(o, 3600)
+    assert(o.asleep and not o.lucid, "a night slept offline doesn't count")
+end)
+test("old saves and the dream shop", function()
+    local back = Game.deserialize({ dreamPoints = 40, dream = { sleepwalk = 99, deepSleep = 2 } })
+    eq(back.dreamEarned, 40); eq(back.dream.sleepwalk, 5); eq(back.dream.deepSleep, 2); eq(back.dream.tuckedIn, 0)
+    local s = Game.fresh()
+    s.dream.nightShift, s.dreamEarned = 2, 9
+    back = Game.deserialize(Game.serialize(s))
+    eq(back.dream.nightShift, 2); eq(back.dreamEarned, 9)
 end)
 print(("%d passed, %d failed"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

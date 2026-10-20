@@ -4,7 +4,10 @@ A cozy bedtime incremental game in LÖVE 11.x. You count sheep to fall asleep:
 tap the fence and a sheep hops over. It starts with one fence at dusk and ends
 with sheep in orbit and an AI counting for you. The numbers get bigger while the
 sky gets darker, and when the Drowsiness bar fills, you fall asleep. Then you
-Dream Again, keeping Dream Points that make every sheep count for more.
+Dream Again, keeping Dream Points to spend in the Dream shop. It sells
+automation that plays the night for you, and boosts that make it shorter.
+Each night is quicker than the last, until one ends in under a minute. Then the
+dream turns lucid, the door to the game's next phase.
 
 It's built for a phone held upright (the field on top, the shop under your
 thumb) and works on a computer (the field on the left, the shop on the right).
@@ -18,7 +21,9 @@ love . --autoplay 300      # dev: a scripted player taps and buys for 300 game
 love . --shots             # dev: scripted moments at phone and desktop size, as PNGs
 love . --sounds            # dev: every sound and pad layer written as a .wav
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
-luajit tests/run.lua sim   # dev: the balance sim (a greedy player at 3, 1.5, 0.5 taps/s)
+luajit tests/run.lua sim   # dev: the balance sim (a greedy player at 3, 1.5, 0.5 taps/s,
+                           # then twelve nights in a row spending Dream Points)
+luajit tests/run.lua nights 1.5 15   # dev: N nights in a row at a tap rate, then with no taps
 luacheck .                 # dev: the lint
 ```
 
@@ -28,7 +33,7 @@ folder's contents: `zip -9 -r counting-sheep.love . -x '.git/*' 'tests/*'`.
 
 **Controls:** tap or click the field to count a sheep (Space or Enter too). Tap a
 card to buy. Drag or use the wheel to scroll the shop. 1 / 2 / 3 picks ×1 / ×10 /
-Max, M mutes, R reduces motion, F11 or Alt+Enter toggles fullscreen, and Esc quits on a computer.
+Max, D (or the DREAMS button) opens the Dream shop, M mutes, R reduces motion, F11 or Alt+Enter toggles fullscreen, and Esc quits on a computer.
 
 ## Where it comes from
 
@@ -82,7 +87,9 @@ small helpers) and **json.lua** 0.1.2 (the save file).
   stage,                          -- 1 Dusk, 2 The Field, 3 The Factory, 4 Orbit
   golden, goldenIn,               -- a golden sheep crossing { t, lane }, and when the next comes
   asleep,                         -- the night is over; waiting for Dream Again
-  dreamPoints, dreams,            -- prestige, kept across nights
+  dreamPoints, dreamEarned,       -- prestige: to spend, and ever earned (the bonus)
+  dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, dreamCatcher },
+  lastNight, lucid,               -- the last night's length; a night under a minute was slept
   taps, buyMode, muted, lastSeen,
 }
 ```
@@ -90,7 +97,8 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 The rules step 30 times a second on a fixed timestep, inside LÖVE's frame. The
 screen reads the state every frame and only changes it through `game.lua`'s
 functions (`tap`, `buy`, `catchGolden`...). The rules report what happened
-(`stage`, `asleep`, `goldenAppears`) as events, which ui.lua turns into banners
+(`stage`, `asleep`, `goldenAppears`, `lucid`, and `bought` and `golden` marked
+`auto` when the automation did it) as events, which ui.lua turns into banners
 and sounds. What only looks (sheep mid-hop, floating numbers, eyelids) lives in
 `scene.lua`'s `fx`.
 
@@ -105,15 +113,21 @@ the same happens if the game sat frozen in the background for a while.
   its own. Better Fence (×7), the Barn (×4) and the Lullaby (×6, at most 5) grow
   faster; at 1.15 a few of them would outweigh every generator.
 - **Production:** `sum(rate * owned) * (1 + 0.25*barns) * (1 + 0.5*lullabies) *
-  (1 + 0.05*dreamPoints)`. Taps get the same multiplier.
+  2^deepSleep * (1 + 0.01*dreamEarned)`. Taps get the same multiplier.
 - **Night length** is `drowsiness.target`, the sheep counted that put you to
   sleep. The bar is `(runTotal / target) ^ curve`; a quarter power turns fast
   early growth and slow late growth into a bar that fills at about even speed.
 - **Pace of new things:** the generators' `base` costs, and `revealAt` (an
   upgrade shows once the night has counted that share of its price).
 - **Stages** start at `stages[i].at` sheep. The **narrator** shows the last line
-  in `lines` whose condition holds. **Prestige** is `prestige.divisor` and
-  `bonusPerPoint`.
+  in `lines` whose condition holds.
+- **Prestige:** Dream Points = `floor(sqrt(total / 3e6) * (1 + 0.5*catchers) *
+  pace)`. The pace is `(1500 s / night) ^ 0.35`, from 1 to 8, and it's the loop that
+  compounds: a quicker night pays more points, and the points buy a quicker
+  night. The **Dream shop** is `dreamShop`, priced `floor(base * growth^owned)`
+  in points. `auto.share` is the most of your sheep one auto-buyer trip spends on
+  any one thing (without it, Night Shift spends everything on Dogs and the night
+  gets slower). `lucid.under` is the night length that opens the next phase.
 
 ### Pacing as shipped
 
@@ -126,17 +140,29 @@ checked against the real game with `--speed 10 --autoplay 300`:
 | 1.5 | 3.8 min | 13.5 min | 25 min |
 | 0.5 | 5.0 min | 16 min | 28 min |
 
+Night after night (`luajit tests/run.lua nights`: 1.5 taps a second, and each
+night's Dream Points go on the cheapest thing in the Dream shop):
+
+| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| minutes | 24.9 | 9.8 | 8.8 | 6.8 | 3.3 | 2.4 | 1.8 | **0.9** | 0.7 | 0.5 | 0.2 |
+| Dream Points | 22 | 31 | 34 | 37 | 45 | 76 | 83 | 106 | 153 | 170 | 239 |
+
+The automation is all bought by night 7, and night 8 is the first under a
+minute, so the dream turns lucid. With no taps at all, after the first night,
+it's the same within about a night.
+
 In the first five minutes something new turns up every 20 to 60 seconds (Tap
 Power, the Dog, the Meadow, Better Fence, the Barn, the Pen, the first Lullaby),
 and you never wait more than about 25 seconds for something you can afford.
 
-There are two changes from the brief, both for that pacing. First, the
-generators keep the brief's rates, but the costs past the Dog are higher
+The generators keep the brief's rates, but the costs past the Dog are higher
 (Meadow 150, Pen 2.5K, Mill 90K, Drones 2M, Sheep-OS 50M, against 120 / 1.2K /
-14K / 180K / 2.5M); with the brief's costs a night lasted 9 minutes. Second,
-prestige is as given (`floor(sqrt(total / 1e5))`, +5% each): one night earns
-about 120 Dream Points (+600%), so the second night takes about 4 minutes. For
-long nights every time, raise `prestige.divisor` to around `3e6`.
+14K / 180K / 2.5M); with the brief's costs a night lasted 9 minutes. Prestige
+used to be `sqrt(total / 1e5)` at +5% a point: 122 points after the first night
+made the second last under 4 minutes, with nothing left to do with them. Now
+points are scarcer (`3e6`, about 22 a night) and worth 1% each, and the rest of
+their value comes from what they buy.
 
 ## What's in it
 
@@ -156,6 +182,18 @@ long nights every time, raise `prestige.divisor` to around `3e6`.
     everyone in striped pajamas and nightcaps.
   - **Orbit:** sheep circle the moon, some hoppers launch straight up, drones
     patrol with counting beams, and Sheep-OS counts in the grass.
+- **The Dream shop** (the DREAMS button, after the first night), kept forever:
+  - *While you sleep:* **Sleepwalking** taps 2 a second per level (up to 10),
+    **Night Shift** buys helpers for you (two more each level, Dog up to
+    Sheep-OS), **Golden Dreams** catches every golden sheep, **Sleep Talking**
+    buys Tap Power and Better Fence, and **Tucked In** buys Barns and Lullabies.
+    A card the automation buys says AUTO.
+  - *Deeper sleep:* **Deep Sleep** doubles everything per level (×4 dearer
+    each), and **Dream Catcher** adds +50% Dream Points.
+  - A gold star on the button means there's something you can buy. After Dream
+    Again, the shop opens on it.
+- **Lucid:** the first night under a minute ends as *A lucid dream*. The flag
+  (`lucid`) is saved; what it opens is the next phase, not built yet.
 - **Night falling:** the sky dithers from dusk down to navy, stars come out and
   twinkle, the moon rises, and the queue dozes (Zzz). Near the end the screen
   blinks and the eyelids droop. At 100% they close, and the ending is a night
@@ -180,7 +218,7 @@ long nights every time, raise `prestige.divisor` to around `3e6`.
 
 - Achievements
 - A stats screen
-- More prestige layers, or a shop for Dream Points
+- A second prestige layer (lucid dreaming is the gate to one, the content isn't built)
 - Settings beyond mute and motion (volume, notation, a reset button)
 - Per-generator upgrades, combos, click frenzies
 - Cloud saves, import and export

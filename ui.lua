@@ -43,6 +43,10 @@ local bits = {} -- confetti in screen pixels
 
 local press = nil -- the pointer down: { x, y, id, inShop, moved, y0, scroll0 }
 
+-- Which shop the panel shows: "night" (sheep) or "dream" (Dream Points).
+local tab = "night"
+local lucidNow = false -- this night turned the dream lucid: the ending says so
+
 UI.cue = function(name, data) Audio.cue(name, data) end
 
 function UI.setState(s)
@@ -50,6 +54,7 @@ function UI.setState(s)
     UI.setReduced(S.reducedMotion)
     shown = N.toNumber(S.sheep)
     modal, endingWaits, UI.endingIn, banner.text, scroll = nil, false, nil, nil, 0
+    tab, lucidNow = "night", false
     seen = {}
     for _, it in ipairs(Game.ITEMS) do if Game.visible(S, it.id) then seen[it.id] = true end end
 end
@@ -95,19 +100,33 @@ function UI.sceneRect() return R.scene end
 
 local CARD_H = 30
 
+-- The Dream shop shows once there are Dream Points to spend, or ever were.
+local function dreamsOpen() return Game.visible(S, Game.DREAMS[1].id) end
+local function dreamAffordable()
+    for _, it in ipairs(Game.DREAMS) do if Game.quote(S, it.id, "1").ok then return true end end
+    return false
+end
+
 local function layoutShop()
     rows = {}
     local y = 0
+    if tab == "dream" and not dreamsOpen() then tab = "night" end
     local sections = {
         { kind = "tap", title = "TAPPING" },
         { kind = "gen", title = "HELPERS" },
         { kind = "mult", title = "COMFORTS" },
     }
+    if tab == "dream" then
+        sections = {
+            { group = "auto", title = "WHILE YOU SLEEP" },
+            { group = "boost", title = "DEEPER SLEEP" },
+        }
+    end
     local tease = Game.teaser(S)
     for _, sec in ipairs(sections) do
         local list = {}
-        for _, it in ipairs(Game.ITEMS) do
-            if it.kind == sec.kind and Game.visible(S, it.id) then list[#list + 1] = it end
+        for _, it in ipairs(sec.group and Game.DREAMS or Game.ITEMS) do
+            if (it.kind == sec.kind or it.group == sec.group) and Game.visible(S, it.id) then list[#list + 1] = it end
         end
         if sec.kind == "gen" and tease then list[#list + 1] = { id = tease, teaser = true } end
         if #list > 0 then
@@ -180,17 +199,26 @@ function UI.showEnding()
     if not S.asleep then return end
     if modal then endingWaits = true return end
     local gain = Game.dreamPointsFor(S)
-    local after = S.dreamPoints + gain
+    local after = S.dreamEarned + gain
     local pct = floor(C.prestige.bonusPerPoint * 100 + 0.5)
+    local lines = {
+        "YOU COUNTED " .. N.format(S.runTotal) .. " SHEEP" .. (S.runTime > 1 and (" IN " .. duration(S.runTime)) or "") .. ".",
+        "",
+    }
+    local pace = Game.pace(S)
+    if pace >= 1.05 then
+        lines[#lines + 1] = ("A QUICK NIGHT: X%.1f DREAM POINTS."):format(pace):gsub("%.0 ", " ")
+    end
+    lines[#lines + 1] = "SPEND THEM IN THE DREAM SHOP. EACH ONE EVER EARNED STILL MAKES EVERY SHEEP COUNT " .. pct
+        .. "% MORE: +" .. floor(after * C.prestige.bonusPerPoint * 100 + 0.5) .. "%."
+    if lucidNow then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "YOU FELL ASLEEP IN UNDER A MINUTE. THE DREAM TURNS LUCID: SOMETHING NEW IS WAITING..."
+    end
     UI.showModal({
         night = true,
-        title = "YOU FELL ASLEEP.",
-        lines = {
-            "YOU COUNTED " .. N.format(S.runTotal) .. " SHEEP" .. (S.runTime > 1 and (" IN " .. duration(S.runTime)) or "") .. ".",
-            "",
-            "EACH DREAM POINT MAKES EVERY SHEEP COUNT " .. pct .. "% MORE, FOREVER. WITH " .. after .. ": +"
-                .. floor(after * C.prestige.bonusPerPoint * 100 + 0.5) .. "%.",
-        },
+        title = lucidNow and "A LUCID DREAM." or "YOU FELL ASLEEP.",
+        lines = lines,
         big = "+" .. gain .. " DREAM POINT" .. (gain == 1 and "" or "S"),
         button = "DREAM AGAIN",
         onClose = function()
@@ -201,8 +229,14 @@ function UI.showEnding()
             shown = 0
             seen = {}
             scroll = 0
+            lucidNow = false
             UI.save()
-            UI.banner("A NEW NIGHT", "THE SHEEP ARE WAITING")
+            if dreamAffordable() then
+                tab = "dream"
+                UI.banner("A NEW NIGHT", "SPEND YOUR DREAM POINTS")
+            else
+                UI.banner("A NEW NIGHT", "THE SHEEP ARE WAITING")
+            end
         end,
     })
 end
@@ -230,7 +264,8 @@ local function buy(id, row)
         if not reduced then f.shake = 1; flux.to(f, 0.3, { shake = 0 }) end
         return
     end
-    UI.cue("buy", { tier = it.kind == "gen" and it.index or (it.kind == "mult" and 3 or 1), first = q.n > 0 and S.owned[id] == q.n })
+    local tier = it.kind == "gen" and it.index or ((it.kind == "mult" or it.kind == "dream") and 3 or 1)
+    UI.cue("buy", { tier = tier, first = q.n > 0 and Game.have(S, id) == q.n })
     Scene.bought(id)
     if not reduced then f.pop = 1; flux.to(f, 0.32, { pop = 0 }):ease("quadout") end
     if row then
@@ -238,6 +273,7 @@ local function buy(id, row)
         confetti(x, R.shop.y + row.y - floor(scroll) + 12)
     end
     if S.owned[id] == q.n and it.kind == "gen" then UI.banner("NEW HELPER: " .. it.name:upper(), it.desc:upper()) end
+    if it.kind == "dream" then UI.banner(it.name:upper(), it.desc:upper()) end
     if id == "lullaby" then Audio.setLullabies(S.owned.lullaby) end
 end
 
@@ -252,6 +288,24 @@ function UI.drain()
             UI.cue("stage")
         elseif e.type == "goldenAppears" then
             UI.cue("goldenAppears")
+        elseif e.type == "bought" and e.auto then
+            -- The automation shops quietly; only something new gets a word.
+            local it = Game.BY_ID[e.id]
+            if e.first then
+                Scene.bought(e.id)
+                if it.kind == "gen" then
+                    UI.banner("NEW HELPER: " .. it.name:upper(), it.desc:upper())
+                    UI.cue("buy", { tier = it.index, first = true })
+                end
+            end
+            if e.id == "lullaby" then Audio.setLullabies(S.owned.lullaby) end
+        elseif e.type == "golden" and e.auto then
+            Scene.goldenCaught(e.value, S, e.at)
+            UI.cue("golden")
+            bump.v = 1
+            flux.to(bump, 0.2, { v = 0 })
+        elseif e.type == "lucid" then
+            lucidNow = true
         elseif e.type == "asleep" then
             UI.cue("asleep")
             Audio.setAsleep(true)
@@ -326,8 +380,14 @@ function UI.pressed(x, y, id)
         return
     end
     if inside(R.mode, x, y) then
-        local k = floor((x - R.mode.x) / (R.mode.w / 3)) + 1
-        S.buyMode = ({ "1", "10", "max" })[lume.clamp(k, 1, 3)]
+        local nb = dreamsOpen() and 4 or 3
+        local k = lume.clamp(floor((x - R.mode.x) / (R.mode.w / nb)) + 1, 1, nb)
+        if k == 4 then
+            tab = tab == "dream" and "night" or "dream"
+        else
+            S.buyMode, tab = ({ "1", "10", "max" })[k], "night"
+        end
+        scroll = 0
         Audio.start()
         UI.cue("click")
         return
@@ -376,9 +436,10 @@ function UI.key(key)
     if key == "space" or key == "return" then tapField(nil, nil)
     elseif key == "m" then UI.pressed(R.mute.x + 1, R.mute.y + 1, "key")
     elseif key == "r" then UI.pressed(R.motion.x + 1, R.motion.y + 1, "key")
-    elseif key == "1" then S.buyMode = "1"
-    elseif key == "2" then S.buyMode = "10"
-    elseif key == "3" then S.buyMode = "max"
+    elseif key == "1" then S.buyMode, tab = "1", "night"
+    elseif key == "2" then S.buyMode, tab = "10", "night"
+    elseif key == "3" then S.buyMode, tab = "max", "night"
+    elseif key == "d" and dreamsOpen() then tab, scroll = tab == "dream" and "night" or "dream", 0
     elseif key == "down" or key == "pagedown" then UI.wheel(-2)
     elseif key == "up" or key == "pageup" then UI.wheel(2) end
 end
@@ -423,8 +484,8 @@ end
 local function drawTop()
     local r = R.top
     centred("l", "COUNTING SHEEP", r.x + r.w / 2, r.y + 4)
-    if S.dreamPoints > 0 then
-        local s = "DP " .. S.dreamPoints .. " +" .. floor(S.dreamPoints * C.prestige.bonusPerPoint * 100 + 0.5) .. "%"
+    if S.dreamEarned > 0 then
+        local s = "DP " .. S.dreamPoints .. " +" .. floor(S.dreamEarned * C.prestige.bonusPerPoint * 100 + 0.5) .. "%"
         local w = G.textWidth(s) + 6
         G.box(R.dp.x + 1, R.dp.y + 1, w, 11, "v", "i")
         G.text("y", s, R.dp.x + 4, R.dp.y + 4)
@@ -454,7 +515,7 @@ local function drawHud()
     y = y + 5 * z + 4
     centred("w", "SHEEP", cx, y, 1, "o")
     y = y + 8
-    centred("l", N.format(Game.perSecond(S), true) .. "/S   " .. N.format(Game.tapValue(S)) .. " A TAP", cx, y, 1, "o")
+    centred("l", N.format(Game.totalPerSecond(S), true) .. "/S   " .. N.format(Game.tapValue(S)) .. " A TAP", cx, y, 1, "o")
     y = y + 9
     for i, line in ipairs(G.wrap(Game.currentLine(S):upper(), r.w - 12)) do
         if i <= 2 then centred("w", line, cx, y, 1, "o"); y = y + 7 end
@@ -507,17 +568,48 @@ end
 
 local function drawMode()
     local r = R.mode
-    local w = floor((r.w - 4) / 3)
-    for i, m in ipairs({ { "1", "X1" }, { "10", "X10" }, { "max", "MAX" } }) do
+    local buttons = { { "1", "X1" }, { "10", "X10" }, { "max", "MAX" } }
+    if dreamsOpen() then buttons[4] = { "dream", "DREAMS" } end
+    local nb = #buttons
+    local w = floor((r.w - (nb - 1) * 2) / nb)
+    for i, m in ipairs(buttons) do
         local x = r.x + (i - 1) * (w + 2)
-        local on = S.buyMode == m[1]
-        G.box(x + 1, r.y + 1, w - 2, r.h - 2, on and "l" or "v", on and "o" or "p")
-        if on then G.rect("i", x + 1, r.y + r.h - 2, w - 2, 1) end
-        centred(on and "o" or "l", m[2], x + w / 2, r.y + 4)
+        local on = (tab == "dream") == (m[1] == "dream") and (m[1] == "dream" or S.buyMode == m[1])
+        if m[1] == "dream" then
+            G.box(x + 1, r.y + 1, w - 2, r.h - 2, on and "y" or "v", on and "o" or "i")
+            if on then G.rect("h", x + 1, r.y + r.h - 2, w - 2, 1) end
+            centred(on and "o" or "y", m[2], x + w / 2, r.y + 4)
+            -- Something to buy with Dream Points: a gold star in the corner.
+            if not on and dreamAffordable() and (reduced or sin(t * 3.4) > -0.3) then
+                G.art({ ".y.", "yyy", ".y." }, x + w - 6, r.y + 2)
+            end
+        else
+            G.box(x + 1, r.y + 1, w - 2, r.h - 2, on and "l" or "v", on and "o" or "p")
+            if on then G.rect("i", x + 1, r.y + r.h - 2, w - 2, 1) end
+            centred(on and "o" or "l", m[2], x + w / 2, r.y + 4)
+        end
     end
 end
 
+local function describeDream(it)
+    local o = S.dream[it.id]
+    local d = it.desc:upper()
+    if it.id == "sleepwalk" then
+        return o > 0 and ("TAPS " .. Game.autoTaps(S) .. " A SECOND FOR YOU. " .. o .. "/" .. it.max) or d
+    elseif it.id == "nightShift" then
+        if o == 0 then return d .. ", FROM THE DOG UP" end
+        local top = Game.GENS[math.min(#Game.GENS, it.tiers * o)]
+        return "BUYS HELPERS UP TO THE " .. top.name:upper() .. ". " .. o .. "/" .. it.max
+    elseif it.mult then
+        return d .. ". NOW X" .. N.format(it.mult ^ o)
+    elseif it.add then
+        return d .. ". NOW X" .. (("%.2f"):format(1 + it.add * o):gsub("%.?0+$", ""))
+    end
+    return d
+end
+
 local function describe(it)
+    if it.kind == "dream" then return describeDream(it) end
     local o = S.owned[it.id]
     if it.kind == "gen" then
         local each = N.mul(N.from(it.rate), Game.globalMult(S))
@@ -561,8 +653,8 @@ local function drawCard(row, x, y, w)
     Scene.icon(it.id, x + 18, y + h / 2)
     love.graphics.pop()
     -- The price: gold when it can be paid.
-    local cost = q.maxed and "DONE" or N.format(q.cost)
-    local qty = q.maxed and "" or ("X" .. q.n)
+    local cost = q.maxed and "DONE" or (N.format(q.cost) .. (q.dp and " DP" or ""))
+    local qty = q.maxed and "" or (q.dp and ("LV " .. Game.have(S, it.id) + 1) or ("X" .. q.n))
     local pw = max(G.textWidth(cost), G.textWidth(qty)) + 8
     local px = x + w - pw - 4
     G.box(px, y + 4, pw, h - 8, afford and "y" or (q.maxed and "l" or "b"))
@@ -572,7 +664,10 @@ local function drawCard(row, x, y, w)
     local ink = afford and "o" or "o"
     local tx = x + 37
     G.text(ink, it.name:upper(), tx, y + 5)
-    if S.owned[it.id] > 0 then G.text("p", "X" .. S.owned[it.id], tx + G.textWidth(it.name) + 5, y + 5) end
+    local have = Game.have(S, it.id)
+    if have > 0 and not (it.kind == "dream" and it.max == 1) then G.text("p", "X" .. have, tx + G.textWidth(it.name) + 5, y + 5) end
+    -- Bought by the Dream shop's automation: it says so.
+    if Game.automated(S, it.id) then G.text("i", "AUTO", px - 4 - G.textWidth("AUTO"), y + 5) end
     local lines = G.wrap(describe(it), px - tx - 4)
     for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
 end

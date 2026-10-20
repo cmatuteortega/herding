@@ -69,9 +69,45 @@ return {
     },
 
     prestige = {
-        divisor = 1e5, -- Dream Points = floor(sqrt(total / divisor))
-        bonusPerPoint = 0.05, -- +5% production per Dream Point, forever
+        -- Dream Points = floor(sqrt(total / divisor) * (1 + catchers/2) * pace)
+        divisor = 3e6,
+        -- The pace bonus, the loop that compounds: a night shorter than
+        -- `paceRef` seconds pays (paceRef / night) ^ pacePower times the
+        -- points, at most paceMax. Quicker nights buy quicker nights.
+        paceRef = 1500,
+        pacePower = 0.35,
+        paceMax = 8,
+        -- Production per Dream Point ever earned, forever. Spending them in the
+        -- Dream shop doesn't take this away.
+        bonusPerPoint = 0.01,
     },
+
+    -- The Dream shop: bought with Dream Points, kept across nights. Cost is
+    -- floor(base * growth^owned). The first group plays the night for you,
+    -- the second makes it shorter; together each night is quicker than the
+    -- last, until it all but plays itself.
+    dreamShop = {
+        { id = "sleepwalk", group = "auto", name = "Sleepwalking", desc = "Taps 2 a second for you", base = 2, growth = 2, max = 5, taps = 2 },
+        { id = "nightShift", group = "auto", name = "Night Shift", desc = "Buys helpers for you", base = 4, growth = 4, max = 3, tiers = 2 },
+        { id = "goldenDreams", group = "auto", name = "Golden Dreams", desc = "Golden sheep come to you", base = 8, max = 1 },
+        { id = "sleepTalk", group = "auto", name = "Sleep Talking", desc = "Buys tap upgrades for you", base = 10, max = 1 },
+        { id = "tuckedIn", group = "auto", name = "Tucked In", desc = "Buys Barns and Lullabies", base = 16, max = 1 },
+        { id = "deepSleep", group = "boost", name = "Deep Sleep", desc = "Doubles every sheep counted", base = 5, growth = 4, mult = 2 },
+        { id = "dreamCatcher", group = "boost", name = "Dream Catcher", desc = "+50% Dream Points", base = 20, growth = 4, add = 0.5 },
+    },
+
+    -- What the automation does, each step.
+    auto = {
+        buyEvery = 0.5, -- seconds between the auto-buyers' shopping trips
+        -- The most of the sheep held that one trip spends on any one thing, so
+        -- the cheap helpers don't eat what the next big thing needs.
+        share = 0.25,
+        goldenAfter = 1.2, -- seconds a golden sheep crosses before it comes to you
+    },
+
+    -- When a night is shorter than this, the dream turns lucid: the gate to
+    -- what comes after counting.
+    lucid = { under = 60 },
 
     offline = {
         maxHours = 8,

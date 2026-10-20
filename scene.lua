@@ -249,8 +249,9 @@ function Scene.update(dt, s)
     fx.shake = max(0, fx.shake - dt)
     fx.flash = max(0, fx.flash - dt * 3)
 
-    -- The helpers send sheep over too, at a calm pace that grows with them.
-    local rate = N.toNumber(Game.perSecond(s))
+    -- The helpers (and Sleepwalking) send sheep over too, at a calm pace that
+    -- grows with them.
+    local rate = N.toNumber(Game.totalPerSecond(s))
     if rate > 0 and not s.asleep then
         fx.autoAcc = fx.autoAcc + dt * min(C.visual.autoHopsPerSecond, 0.35 + math.log10(1 + rate) * 0.3)
         if fx.autoAcc >= 1 then fx.autoAcc = fx.autoAcc - 1; hop(-12, s.stage, true) end
@@ -653,6 +654,13 @@ local ART = {
         "..y.......y......", "......y..........",
     },
     heart = { ".l.l.", "lllll", ".lll.", "..l.." },
+    z = { "llll", "..l.", ".l..", "llll" },
+    catcher = {
+        "....ooooooo....", "..oollllllloo..", ".olo.l.l.l.olo.", ".ol.l.l.l.l.lo.", "ol...l.l.l...lo",
+        "ollllllyllllllo", "ol...l.l.l...lo", ".ol.l.l.l.l.lo.", ".olo.l.l.l.olo.", "..oollllllloo..",
+        "....ooooooo....", "...o...o...o...", "..owo.owo.owo..", "..owo.owo.owo..", "..obo.obo.obo..",
+        "...o...o...o...",
+    },
 }
 Scene.ART = ART
 
@@ -674,6 +682,22 @@ function Scene.icon(id, x, y)
     elseif id == "os" then G.art(ART.os, x + 5, y + 4)
     elseif id == "barn" then G.art(ART.barn, x + 6, y + 4)
     elseif id == "lullaby" then G.art(ART.lullaby, x + 6, y + 4)
+    -- The Dream shop.
+    elseif id == "sleepwalk" then
+        blit(Models.sheep(0.35, 0, 1, "pj"), x + 13, y + 19)
+        G.art(ART.z, x + 21, y + 2)
+    elseif id == "nightShift" then
+        blit(Models.dog(0.4, 1), x + 14, y + 18)
+        G.art({ "..yy", ".y..", ".y..", "..yy" }, x + 3, y + 2)
+    elseif id == "goldenDreams" then blit(Models.sheep(0.35, 0, 0, "gold"), x + 13, y + 19)
+    elseif id == "sleepTalk" then
+        G.art(ART.hand, x + 7, y + 4)
+        G.art(ART.z, x + 22, y + 2)
+    elseif id == "tuckedIn" then
+        G.art(ART.barn, x + 6, y + 4)
+        G.art(ART.z, x + 22, y + 1)
+    elseif id == "deepSleep" then blit(Models.moon(8), x + 14, y + 11)
+    elseif id == "dreamCatcher" then G.art(ART.catcher, x + 7, y + 3)
     end
 end
 
