@@ -89,7 +89,8 @@ small helpers) and **json.lua** 0.1.2 (the save file).
   asleep,                         -- the night is over; waiting for Dream Again
   dreamPoints, dreamEarned,       -- prestige: to spend, and ever earned (the bonus)
   dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, warmBed, dreamCatcher },
-  lastNight, lucid,               -- the last night's length; a night under a second was slept
+  lastNight, lucidNight,          -- the last night's length; this one was under a second
+  phase,                          -- "nights", or "lucid" (the next phase's placeholder)
   taps, buyMode, muted, lastSeen,
 }
 ```
@@ -190,16 +191,19 @@ their value comes from what they buy.
     **Night Shift** buys helpers for you (two more each level, Dog up to
     Sheep-OS), **Golden Dreams** catches every golden sheep, **Sleep Talking**
     buys Tap Power and Better Fence, and **Tucked In** buys Barns and Lullabies.
-    A card the automation buys says AUTO.
+    A card the automation buys says AUTO, and a section it buys all of
+    folds into one row (SHOW opens it, HIDE folds it back).
   - *Deeper sleep:* **Deep Sleep** doubles everything per level (×4 dearer
     each), **Warm Bed** starts each night with 20% of the helpers you fell
     asleep with per level (all of them at level 5; Barns, Lullabies and tap
     upgrades still reset), and **Dream Catcher** adds +50% Dream Points.
   - A gold star on the button means there's something you can buy. After Dream
     Again, the shop opens on it.
-- **Lucid:** the first night that fills the bar in under a second ends as *A
-  lucid dream*. The flag
-  (`lucid`) is saved; what it opens is the next phase, not built yet.
+- **Lucid:** every night that fills the bar in under a second ends as *A lucid
+  dream*, with GO LUCID instead of DREAM AGAIN. That banks the night's Dream
+  Points and enters the lucid phase (`phase = "lucid"`, saved, and the screen
+  it comes back to). For now it's a placeholder screen, PHASE 2, with a button
+  back to counting; nothing counts while you're in it.
 - **Night falling:** the sky dithers from dusk down to navy, stars come out and
   twinkle, the moon rises, and the queue dozes (Zzz). Near the end the screen
   blinks and the eyelids droop. At 100% they close, and the ending is a night

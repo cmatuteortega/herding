@@ -85,7 +85,7 @@ local function nights(tapRate, n)
         local t = sim(tapRate, nil, s)
         local lv = {}
         for _, it in ipairs(Game.DREAMS) do lv[#lv + 1] = s.dream[it.id] end
-        local lucid = s.lucid and "  LUCID" or ""
+        local lucid = s.lucidNight and "  LUCID" or ""
         local gained = Game.dreamAgain(s)
         print(("  %2d  %7.1f s  +%-5d DP  x%-9s levels %s%s"):format(k, t, gained, N.format(Game.globalMult(s)),
             table.concat(lv, " "), lucid))
@@ -231,11 +231,22 @@ test("lucid", function()
     local s = Game.fresh()
     s.runTotal, s.runTime = C.drowsiness.target, C.lucid.under / 2
     Game.step(s, 1 / 30)
-    assert(s.asleep and s.lucid)
+    assert(s.asleep and s.lucidNight)
+    local dp = Game.goLucid(s)
+    assert(dp > 0 and s.phase == "lucid" and not s.lucidNight and s.dreams == 1)
+    Game.step(s, 1)
+    eq(s.runTime, 0) -- nothing counts in the lucid phase
+    s = Game.deserialize(Game.serialize(s))
+    eq(s.phase, "lucid")
+    Game.backToNights(s)
+    s.runTotal, s.runTime = C.drowsiness.target, C.lucid.under / 2
+    Game.step(s, 1 / 30)
+    assert(s.lucidNight, "every short night goes lucid again until you go")
     local o = Game.fresh()
     o.runTotal, o.owned.dog = C.drowsiness.target - 1, 1
     Game.offline(o, 3600)
-    assert(o.asleep and not o.lucid, "a night slept offline doesn't count")
+    assert(o.asleep and not o.lucidNight, "a night slept offline doesn't count")
+    eq(Game.deserialize({ lucid = true, phase = "weird" }).phase, "nights")
 end)
 test("old saves and the dream shop", function()
     local back = Game.deserialize({ dreamPoints = 40, dream = { sleepwalk = 99, deepSleep = 2 } })

@@ -99,7 +99,10 @@ function love.load(args)
     s = UI.state()
     Audio.setMuted(s.muted)
     Audio.setLullabies(s.owned.lullaby)
-    if s.asleep then
+    if s.phase == "lucid" then
+        Audio.setAsleep(true)
+        UI.showLucid()
+    elseif s.asleep then
         Scene.fx.lids.close = 1
         Audio.setAsleep(true)
         UI.showEnding()

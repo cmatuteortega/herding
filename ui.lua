@@ -45,7 +45,7 @@ local press = nil -- the pointer down: { x, y, id, inShop, moved, y0, scroll0 }
 
 -- Which shop the panel shows: "night" (sheep) or "dream" (Dream Points).
 local tab = "night"
-local lucidNow = false -- this night turned the dream lucid: the ending says so
+local expanded = {} -- night-shop sections opened though all on auto, by kind
 
 UI.cue = function(name, data) Audio.cue(name, data) end
 
@@ -54,7 +54,7 @@ function UI.setState(s)
     UI.setReduced(S.reducedMotion)
     shown = N.toNumber(S.sheep)
     modal, endingWaits, UI.endingIn, banner.text, scroll = nil, false, nil, nil, 0
-    tab, lucidNow = "night", false
+    tab, expanded = "night", {}
     seen = {}
     for _, it in ipairs(Game.ITEMS) do if Game.visible(S, it.id) then seen[it.id] = true end end
 end
@@ -126,11 +126,21 @@ local function layoutShop()
     for _, sec in ipairs(sections) do
         local list = {}
         for _, it in ipairs(sec.group and Game.DREAMS or Game.ITEMS) do
-            if (it.kind == sec.kind or it.group == sec.group) and Game.visible(S, it.id) then list[#list + 1] = it end
+            local mine = sec.group and it.group == sec.group or (not sec.group and it.kind == sec.kind)
+            if mine and Game.visible(S, it.id) then list[#list + 1] = it end
         end
         if sec.kind == "gen" and tease then list[#list + 1] = { id = tease, teaser = true } end
-        if #list > 0 then
-            rows[#rows + 1] = { header = sec.title, y = y }
+        -- A section the automation buys all of folds into one row.
+        local allAuto = sec.kind and #list > 0
+        for _, it in ipairs(list) do
+            if it.teaser or not Game.automated(S, it.id) then allAuto = false end
+        end
+        if allAuto and not expanded[sec.kind] then
+            rows[#rows + 1] = { header = sec.title, y = y, h = 10 }
+            rows[#rows + 1] = { fold = sec.kind, n = #list, y = y + 10, h = 14 }
+            y = y + 28
+        elseif #list > 0 then
+            rows[#rows + 1] = { header = sec.title, y = y, h = 10, fold = allAuto and sec.kind or nil }
             y = y + 10
             for _, it in ipairs(list) do
                 rows[#rows + 1] = { item = it, y = y, h = CARD_H }
@@ -212,18 +222,28 @@ function UI.showEnding()
     end
     lines[#lines + 1] = "SPEND THEM IN THE DREAM SHOP. EACH ONE EVER EARNED STILL MAKES EVERY SHEEP COUNT " .. pct
         .. "% MORE: +" .. floor(after * C.prestige.bonusPerPoint * 100 + 0.5) .. "%."
-    if lucidNow then
+    local lucid = S.lucidNight
+    if lucid then
         lines[#lines + 1] = ""
         lines[#lines + 1] = "YOU FELL ASLEEP IN UNDER " .. (C.lucid.under == 1 and "A SECOND" or duration(C.lucid.under))
-            .. ". THE DREAM TURNS LUCID: SOMETHING NEW IS WAITING..."
+            .. ". THE DREAM TURNS LUCID: YOU KNOW YOU ARE DREAMING."
     end
     UI.showModal({
         night = true,
-        title = lucidNow and "A LUCID DREAM." or "YOU FELL ASLEEP.",
+        title = lucid and "A LUCID DREAM." or "YOU FELL ASLEEP.",
         lines = lines,
         big = "+" .. gain .. " DREAM POINT" .. (gain == 1 and "" or "S"),
-        button = "DREAM AGAIN",
+        button = lucid and "GO LUCID" or "DREAM AGAIN",
         onClose = function()
+            if lucid then
+                Game.goLucid(S)
+                Audio.cue("dream")
+                Scene.reset()
+                shown, seen, scroll = 0, {}, 0
+                UI.save()
+                UI.showLucid()
+                return
+            end
             Game.dreamAgain(S)
             Audio.setAsleep(false)
             Audio.cue("dream")
@@ -231,7 +251,6 @@ function UI.showEnding()
             shown = 0
             seen = {}
             scroll = 0
-            lucidNow = false
             UI.save()
             if dreamAffordable() then
                 tab = "dream"
@@ -239,6 +258,32 @@ function UI.showEnding()
             else
                 UI.banner("A NEW NIGHT", "THE SHEEP ARE WAITING")
             end
+        end,
+    })
+end
+
+-- The lucid phase: a placeholder until the next phase is built. It stays
+-- (and comes back on load) until you go back to counting.
+function UI.showLucid()
+    if S.phase ~= "lucid" then return end
+    Audio.setAsleep(true)
+    UI.showModal({
+        night = true,
+        title = "LUCID DREAMING",
+        lines = {
+            "YOU ARE DREAMING, AND YOU KNOW IT.",
+            "",
+            "THE NEXT PHASE OF THE GAME BEGINS HERE. IT ISN'T BUILT YET: THIS IS A PLACEHOLDER.",
+            "",
+            "YOUR " .. S.dreamPoints .. " DREAM POINTS AND THE DREAM SHOP ARE KEPT.",
+        },
+        big = "PHASE 2",
+        button = "BACK TO COUNTING",
+        onClose = function()
+            Game.backToNights(S)
+            Audio.setAsleep(false)
+            UI.save()
+            UI.banner("A NEW NIGHT", "THE SHEEP ARE WAITING")
         end,
     })
 end
@@ -307,7 +352,7 @@ function UI.drain()
             bump.v = 1
             flux.to(bump, 0.2, { v = 0 })
         elseif e.type == "lucid" then
-            lucidNow = true
+            UI.cue("stage")
         elseif e.type == "asleep" then
             UI.cue("asleep")
             Audio.setAsleep(true)
@@ -417,10 +462,15 @@ function UI.released(x, y, id)
     press = nil
     if p.moved then return end
     for _, row in ipairs(rows) do
-        if row.item and not row.item.teaser then
-            local cy = R.shop.y + row.y - floor(scroll)
-            if y >= cy and y < cy + row.h and inside(R.shop, x, y) then buy(row.item.id, row) return end
+        local cy = R.shop.y + row.y - floor(scroll)
+        local hit = y >= cy and y < cy + row.h and inside(R.shop, x, y)
+        if hit and row.fold then
+            expanded[row.fold] = not expanded[row.fold]
+            Audio.start()
+            UI.cue("click")
+            return
         end
+        if hit and row.item and not row.item.teaser then buy(row.item.id, row) return end
     end
 end
 
@@ -685,7 +735,13 @@ local function drawShop()
     for _, row in ipairs(rows) do
         local y = oy + row.y
         if y + (row.h or 10) >= r.y and y < r.y + r.h then
-            if row.header then G.text("i", row.header, r.x + 2, y + 2)
+            if row.header then
+                G.text("i", row.header, r.x + 2, y + 2)
+                if row.fold then G.text("l", "HIDE", r.x + r.w - 2 - G.textWidth("HIDE"), y + 2) end
+            elseif row.fold then
+                G.box(r.x + 1, y + 1, r.w - 2, row.h - 2, "v", "i")
+                G.text("l", "ALL " .. row.n .. " ON AUTO", r.x + 6, y + 5)
+                G.text("y", "SHOW", r.x + r.w - 6 - G.textWidth("SHOW"), y + 5)
             else drawCard(row, r.x, y, r.w) end
         end
     end

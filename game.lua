@@ -59,6 +59,7 @@ local function freshRun(s)
     s.asleep = false
     s.autoIn = 0 -- seconds to the auto-buyers' next trip
     s.tapAcc = 0 -- Sleepwalking's taps, a fraction at a time
+    s.lucidNight = false -- this night was short enough to go lucid
     return s
 end
 
@@ -71,7 +72,9 @@ function Game.fresh()
         dreams = 0,
         dream = freshDream(), -- the Dream shop, owned
         lastNight = 0, -- how long the last night lasted, in seconds
-        lucid = false, -- a night shorter than C.lucid.under: what comes next is open
+        -- "nights" (counting sheep), or "lucid": past the first night
+        -- shorter than C.lucid.under, the next phase (a placeholder for now).
+        phase = "nights",
         allTime = N.zero(),
         taps = 0,
         buyMode = "1",
@@ -276,8 +279,8 @@ local function settle(s, night)
         s.golden = nil
         s.lastNight = s.runTime
         emit({ type = "asleep" })
-        if night and not s.lucid and s.runTime < C.lucid.under then
-            s.lucid = true
+        if night and s.phase == "nights" and s.runTime < C.lucid.under then
+            s.lucidNight = true
             emit({ type = "lucid" })
         end
     end
@@ -285,7 +288,7 @@ end
 
 -- One fixed step of `dt` seconds. `rand` gives 0..1 (the tests pass seeded dice).
 function Game.step(s, dt, rand)
-    if s.asleep then return end
+    if s.asleep or s.phase ~= "nights" then return end
     rand = rand or math.random
     s.runTime = s.runTime + dt
     count(s, N.mul(Game.perSecond(s), N.from(dt)))
@@ -318,7 +321,7 @@ end
 
 -- Away for `seconds`: up to the cap of production, counted at once.
 function Game.offline(s, seconds)
-    if s.asleep or seconds <= 0 then return nil end
+    if s.asleep or s.phase ~= "nights" or seconds <= 0 then return nil end
     local cap = C.offline.maxHours * 3600
     local secs = min(seconds, cap)
     local gain = N.mul(Game.perSecond(s), N.from(secs))
@@ -353,6 +356,18 @@ function Game.dreamAgain(s)
     freshRun(s)
     for id, n in pairs(keep) do s.owned[id] = n end
     return gained
+end
+
+-- After a lucid night: its Dream Points banked, and on to the next phase.
+function Game.goLucid(s)
+    local gained = Game.dreamAgain(s)
+    s.phase = "lucid"
+    return gained
+end
+
+-- Back from the lucid placeholder to counting, the Dream shop and all.
+function Game.backToNights(s)
+    s.phase = "nights"
 end
 
 function Game.currentLine(s)
@@ -397,6 +412,7 @@ function Game.deserialize(o)
     s.dreamEarned = max(s.dreamEarned, s.dreamPoints)
     s.sheep, s.runTotal, s.allTime = N.deserialize(o.sheep), N.deserialize(o.runTotal), N.deserialize(o.allTime)
     if s.buyMode ~= "1" and s.buyMode ~= "10" and s.buyMode ~= "max" then s.buyMode = "1" end
+    if s.phase ~= "lucid" then s.phase = "nights" end
     s.stage = max(s.stage, Game.stageOf(s))
     return s
 end

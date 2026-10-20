@@ -44,6 +44,9 @@ local MOMENTS = {
         return preset(1.4999e9, { dog = 40, os = 6, lullaby = 5, drones = 10, mill = 10 },
             { runTime = 0.8, dreams = 21, dreamEarned = 9000, dream = { sleepwalk = 5, deepSleep = 5 } })
     end, 0, "sleep" },
+    { "10-lucid-phase", function()
+        return preset(0, {}, { phase = "lucid", dreams = 22, dreamPoints = 340, dreamEarned = 9800, dream = { sleepwalk = 5, deepSleep = 5 } })
+    end, 0, "lucid" },
 }
 
 function Shots.run(UI, fit)
@@ -59,6 +62,7 @@ function Shots.run(UI, fit)
             Scene.reset()
             Game.events = {}
             if m[4] == "away" then UI.away(os.difftime(os.time(), s.lastSeen)) end
+            if m[4] == "lucid" then UI.showLucid() end
             local r = UI.sceneRect()
             local frames = m[4] == "sleep" and 400 or 70
             for i = 1, frames do
