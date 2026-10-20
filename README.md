@@ -6,8 +6,8 @@ with sheep in orbit and an AI counting for you. The numbers get bigger while the
 sky gets darker, and when the Drowsiness bar fills, you fall asleep. Then you
 Dream Again, keeping Dream Points to spend in the Dream shop. It sells
 automation that plays the night for you, and boosts that make it shorter.
-Each night is quicker than the last, until one ends in under a minute. Then the
-dream turns lucid, the door to the game's next phase.
+Each night is quicker than the last, until the bar fills in under a second.
+Then the dream turns lucid, the door to the game's next phase.
 
 It's built for a phone held upright (the field on top, the shop under your
 thumb) and works on a computer (the field on the left, the shop on the right).
@@ -89,7 +89,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
   asleep,                         -- the night is over; waiting for Dream Again
   dreamPoints, dreamEarned,       -- prestige: to spend, and ever earned (the bonus)
   dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, dreamCatcher },
-  lastNight, lucid,               -- the last night's length; a night under a minute was slept
+  lastNight, lucid,               -- the last night's length; a night under a second was slept
   taps, buyMode, muted, lastSeen,
 }
 ```
@@ -122,7 +122,7 @@ the same happens if the game sat frozen in the background for a while.
 - **Stages** start at `stages[i].at` sheep. The **narrator** shows the last line
   in `lines` whose condition holds.
 - **Prestige:** Dream Points = `floor(sqrt(total / 3e6) * (1 + 0.5*catchers) *
-  pace)`. The pace is `(1500 s / night) ^ 0.35`, from 1 to 8, and it's the loop that
+  pace)`. The pace is `(1500 s / night) ^ 0.35`, from 1 to 20, and it's the loop that
   compounds: a quicker night pays more points, and the points buy a quicker
   night. The **Dream shop** is `dreamShop`, priced `floor(base * growth^owned)`
   in points. `auto.share` is the most of your sheep one auto-buyer trip spends on
@@ -143,14 +143,16 @@ checked against the real game with `--speed 10 --autoplay 300`:
 Night after night (`luajit tests/run.lua nights`: 1.5 taps a second, and each
 night's Dream Points go on the cheapest thing in the Dream shop):
 
-| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| minutes | 24.9 | 9.8 | 8.8 | 6.8 | 3.3 | 2.4 | 1.8 | **0.9** | 0.7 | 0.5 | 0.2 |
-| Dream Points | 22 | 31 | 34 | 37 | 45 | 76 | 83 | 106 | 153 | 170 | 239 |
+| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 15 | 17 | 19 | 21 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| seconds | 1494 | 599 | 522 | 406 | 207 | 150 | 140 | 64 | 51 | 39 | 15 | 9.4 | 6.0 | 2.1 | 1.5 | **1.0** |
+| Dream Points | 22 | 30 | 32 | 37 | 44 | 75 | 76 | 101 | 146 | 160 | 225 | 331 | 389 | 575 | 799 | 872 |
 
-The automation is all bought by night 7, and night 8 is the first under a
-minute, so the dream turns lucid. With no taps at all, after the first night,
-it's the same within about a night.
+The automation is all bought by night 7. Night 21 is the first to fill the bar
+in under a second, so the dream turns lucid: about an hour of play in all,
+most of it the first few nights. With no taps at all after the first night,
+it's night 23. The auto-buyers shop every 0.05 seconds, or a night near the end
+would be over before their second trip.
 
 In the first five minutes something new turns up every 20 to 60 seconds (Tap
 Power, the Dog, the Meadow, Better Fence, the Barn, the Pen, the first Lullaby),
@@ -192,7 +194,8 @@ their value comes from what they buy.
     each), and **Dream Catcher** adds +50% Dream Points.
   - A gold star on the button means there's something you can buy. After Dream
     Again, the shop opens on it.
-- **Lucid:** the first night under a minute ends as *A lucid dream*. The flag
+- **Lucid:** the first night that fills the bar in under a second ends as *A
+  lucid dream*. The flag
   (`lucid`) is saved; what it opens is the next phase, not built yet.
 - **Night falling:** the sky dithers from dusk down to navy, stars come out and
   twinkle, the moon rises, and the queue dozes (Zzz). Near the end the screen

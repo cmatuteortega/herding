@@ -175,6 +175,7 @@ function UI.showModal(m)
 end
 
 local function duration(secs)
+    if secs < 10 then return (("%.1fS"):format(floor(secs * 10) / 10):gsub("%.0S", "S")) end
     secs = floor(secs)
     local h, m, s = floor(secs / 3600), floor(secs % 3600 / 60), secs % 60
     if h > 0 then return ("%dH %dM"):format(h, m) end
@@ -202,7 +203,7 @@ function UI.showEnding()
     local after = S.dreamEarned + gain
     local pct = floor(C.prestige.bonusPerPoint * 100 + 0.5)
     local lines = {
-        "YOU COUNTED " .. N.format(S.runTotal) .. " SHEEP" .. (S.runTime > 1 and (" IN " .. duration(S.runTime)) or "") .. ".",
+        "YOU COUNTED " .. N.format(S.runTotal) .. " SHEEP" .. (S.runTime > 0 and (" IN " .. duration(S.runTime)) or "") .. ".",
         "",
     }
     local pace = Game.pace(S)
@@ -213,7 +214,8 @@ function UI.showEnding()
         .. "% MORE: +" .. floor(after * C.prestige.bonusPerPoint * 100 + 0.5) .. "%."
     if lucidNow then
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "YOU FELL ASLEEP IN UNDER A MINUTE. THE DREAM TURNS LUCID: SOMETHING NEW IS WAITING..."
+        lines[#lines + 1] = "YOU FELL ASLEEP IN UNDER " .. (C.lucid.under == 1 and "A SECOND" or duration(C.lucid.under))
+            .. ". THE DREAM TURNS LUCID: SOMETHING NEW IS WAITING..."
     end
     UI.showModal({
         night = true,

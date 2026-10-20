@@ -42,7 +42,7 @@ local MOMENTS = {
     end, 0 },
     { "9-lucid", function()
         return preset(1.4999e9, { dog = 40, os = 6, lullaby = 5, drones = 10, mill = 10 },
-            { runTime = 50, dreams = 8, dreamEarned = 600, dream = { sleepwalk = 5, deepSleep = 3 } })
+            { runTime = 0.8, dreams = 21, dreamEarned = 9000, dream = { sleepwalk = 5, deepSleep = 5 } })
     end, 0, "sleep" },
 }
 

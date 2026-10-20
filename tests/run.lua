@@ -87,7 +87,7 @@ local function nights(tapRate, n)
         for _, it in ipairs(Game.DREAMS) do lv[#lv + 1] = s.dream[it.id] end
         local lucid = s.lucid and "  LUCID" or ""
         local gained = Game.dreamAgain(s)
-        print(("  %2d  %6.1f min  +%-5d DP  x%-9s levels %s%s"):format(k, t / 60, gained, N.format(Game.globalMult(s)),
+        print(("  %2d  %7.1f s  +%-5d DP  x%-9s levels %s%s"):format(k, t, gained, N.format(Game.globalMult(s)),
             table.concat(lv, " "), lucid))
     end
 end
@@ -178,8 +178,8 @@ test("the pace bonus", function()
     eq(Game.pace(s), 1)
     s.runTime = C.prestige.paceRef / 2 ^ (1 / C.prestige.pacePower)
     assert(math.abs(Game.pace(s) - 2) < 1e-9)
-    s.runTime = 0.01
-    eq(Game.pace(s), C.prestige.paceMax)
+    s.runTime = 0.01 -- counted as a second
+    eq(Game.pace(s), math.min(C.prestige.paceMax, C.prestige.paceRef ^ C.prestige.pacePower))
 end)
 test("the dream shop", function()
     local s = Game.fresh()
@@ -218,7 +218,7 @@ test("golden dreams", function()
 end)
 test("lucid", function()
     local s = Game.fresh()
-    s.runTotal, s.runTime = C.drowsiness.target, 30
+    s.runTotal, s.runTime = C.drowsiness.target, C.lucid.under / 2
     Game.step(s, 1 / 30)
     assert(s.asleep and s.lucid)
     local o = Game.fresh()

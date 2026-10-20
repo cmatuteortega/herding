@@ -76,7 +76,7 @@ return {
         -- points, at most paceMax. Quicker nights buy quicker nights.
         paceRef = 1500,
         pacePower = 0.35,
-        paceMax = 8,
+        paceMax = 20,
         -- Production per Dream Point ever earned, forever. Spending them in the
         -- Dream shop doesn't take this away.
         bonusPerPoint = 0.01,
@@ -98,16 +98,18 @@ return {
 
     -- What the automation does, each step.
     auto = {
-        buyEvery = 0.5, -- seconds between the auto-buyers' shopping trips
+        -- Seconds between the auto-buyers' shopping trips: quick, or a night
+        -- near the end would be over before the first trip came back.
+        buyEvery = 0.05,
         -- The most of the sheep held that one trip spends on any one thing, so
         -- the cheap helpers don't eat what the next big thing needs.
         share = 0.25,
         goldenAfter = 1.2, -- seconds a golden sheep crosses before it comes to you
     },
 
-    -- When a night is shorter than this, the dream turns lucid: the gate to
-    -- what comes after counting.
-    lucid = { under = 60 },
+    -- When a night is shorter than this many seconds, the dream turns lucid:
+    -- the gate to what comes after counting.
+    lucid = { under = 1 },
 
     offline = {
         maxHours = 8,
