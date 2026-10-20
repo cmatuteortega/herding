@@ -204,6 +204,15 @@ function LUI.drain()
             if e.id == "points" then LUI.banner("+" .. N.format(e.value) .. " DREAM POINTS", "A GOLDEN DREAM")
             elseif e.id == "frenzy" then LUI.banner("EVERYTHING X" .. G0.frenzy.mult, "FOR " .. G0.frenzy.seconds .. " SECONDS")
             else LUI.banner("TIME X" .. G0.warp.mult, "FOR " .. G0.warp.seconds .. " SECONDS") end
+        elseif e.type == "challengeStart" then
+            local c = Lucid.CH[e.id]
+            LUI.banner("DREAM: " .. c.name:upper(), c.rule:upper())
+            cue("stage")
+        elseif e.type == "challengeDone" then
+            local c = Lucid.CH[e.id]
+            LUI.banner("MASTERED: " .. c.name:upper(), c.reward:upper())
+            cue("safe")
+            LScene.flash()
         elseif e.type == "nightmare" then
             LUI.banner("A NIGHTMARE!", "DRAG THE DOG: HERD THEM INTO THE FOLD")
             cue("nightmare")
@@ -249,6 +258,19 @@ local function layout()
                 break
             end
         end
+        -- Dream challenges: once the Mirror Lake stands; before, a word on it.
+        y = y + 2
+        rows[#rows + 1] = { header = "MIRROR LAKE: A DREAM UNDER A RULE", y = y, h = 10 }
+        y = y + 10
+        if Lucid.mirror(L) then
+            for _, c in ipairs(Lucid.CHALLENGES) do
+                rows[#rows + 1] = { challenge = c, y = y, h = CARD_H }
+                y = y + CARD_H + 4
+            end
+        else
+            rows[#rows + 1] = { lake = true, y = y, h = CARD_H }
+            y = y + CARD_H + 4
+        end
     else
         local cs = gridGeom()
         rows[#rows + 1] = { grid = true, y = y, h = cs * GH + 2 }
@@ -256,7 +278,7 @@ local function layout()
         rows[#rows + 1] = { info = true, y = y, h = 24 }
         y = y + 28
         local districts = {
-            { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PARKS" }, { "lucid", "LUCIDITY: NOT YET" },
+            { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PARKS" }, { "lucid", "LUCIDITY" },
         }
         for _, d in ipairs(districts) do
             rows[#rows + 1] = { header = d[2], y = y, h = 10 }
@@ -341,7 +363,41 @@ local function tapTown(c)
     cue("click")
 end
 
+-- A dream challenge's card: start it (after a word), give it up, or nothing.
+local function tapChallenge(c)
+    if Lucid.met(L, c.id) then cue("click") return end
+    if L.challenge == c.id then
+        showModal({
+            title = "GIVE UP " .. c.name:upper() .. "?",
+            lines = { "THE RULE LIFTS AND THE DREAM GOES ON FROM HERE. YOU CAN TRY AGAIN WHENEVER YOU LIKE." },
+            big = "WAKE FROM IT",
+            buttons = { { label = "GIVE UP", fn = function() Lucid.giveUp(L); LUI.save() end }, { label = "KEEP DREAMING" } },
+        })
+        return
+    end
+    showModal({
+        title = "DREAM CHALLENGE: " .. c.name:upper(),
+        lines = { c.rule:upper() .. ". GOAL: " .. LUI.goal(c) .. ". MEET IT AND, FOREVER:", "",
+            "THE FLOCK WAKES: DIMENSIONS AND DREAM SHEEP START OVER. THE TOWN AND YOUR POINTS STAY, BUT WHILE IT LASTS THEY DON'T LIFT THE DIMENSIONS." },
+        big = c.reward:upper(),
+        buttons = {
+            { label = L.challenge and "SWITCH TO IT" or "START", fn = function()
+                if Lucid.startChallenge(L, c.id) then LScene.reset(); LUI.save() end
+            end },
+            { label = "NOT NOW" },
+        },
+    })
+end
+
+-- What a challenge asks, in words.
+function LUI.goal(c)
+    if c.goal == "herd" then return "BRING " .. c.herd .. " FLOCKS HOME" end
+    if c.goal == "sheep" then return "COUNT " .. N.format(c.sheep) .. " DREAM SHEEP" end
+    return "REACH " .. c.runs .. " RUNS/S"
+end
+
 local function tapRow(row, x, y)
+    if row.challenge then tapChallenge(row.challenge) return end
     if row.dim and not row.teaser then
         local k = row.dim
         -- The AUTO pill toggles the auto-buyer; the rest of the card buys.
@@ -526,6 +582,10 @@ local function drawHud()
         y = y + 8
         local left = max(0, floor(L.nightmare.seconds - L.nightmare.t))
         centred("l", ("IN THE FOLD %d/%d   LOST %d   %dS"):format(inPen, n, lost, left), cx, y, 1, "o")
+        if L.challenge == "season" then
+            y = y + 8
+            centred("y", ("NIGHTMARE SEASON: %d/%d FLOCKS HOME"):format(L.herded, Lucid.CH.season.herd), cx, y, 1, "o")
+        end
     else
         local z = (portrait and r.w >= 200) and 3 or 2
         centred("w", N.format(L.sheep), cx, y, z, "o")
@@ -533,6 +593,16 @@ local function drawHud()
         centred("c", "DREAM SHEEP", cx, y, 1, "o")
         y = y + 8
         centred("l", N.format(Lucid.sheepRate(L), true) .. "/S   +" .. N.format(Lucid.dpPerSecond(L), true) .. " DP/S", cx, y, 1, "o")
+        -- Under a dream challenge: its rule and how far, in gold.
+        local c = L.challenge and Lucid.CH[L.challenge]
+        if c then
+            y = y + 9
+            centred("y", (c.name .. ": " .. c.rule):upper(), cx, y, 1, "o")
+            y = y + 8
+            local have, goal = Lucid.progress(L)
+            local done = c.goal == "sheep" and ("1E" .. have .. " OF " .. N.format(c.sheep)) or (N.format(have, true) .. "/" .. goal)
+            centred("y", LUI.goal(c) .. ": " .. done, cx, y, 1, "o")
+        end
         -- What the golden sheep gave, while it lasts.
         local chips = {}
         for id, left in pairs(L.effects) do
@@ -741,6 +811,33 @@ local function drawBuilding(row, x, y, w)
     G.text("p", "ALL BUILT. " .. b.desc:upper(), x + 37, y + 14)
 end
 
+local function drawChallenge(row, x, y, w)
+    local c, h = row.challenge, row.h
+    local met, on = Lucid.met(L, c.id), L.challenge == c.id
+    G.box(x + 1, y + 1, w - 2, h - 2, met and "l" or (on and "y" or "c"))
+    G.rect(on and "h" or "i", x + 1, y + h - 2, w - 2, 1)
+    G.box(x + 4, y + 4, 28, h - 8, met and "i" or "u")
+    LScene.building("mirror", x + 18, y + h / 2)
+    local label = met and "DONE" or (on and "GIVE UP" or "START")
+    local pw = G.textWidth(label) + 8
+    local px = x + w - pw - 4
+    G.box(px, y + 4, pw, h - 8, met and "l" or (on and "l" or "y"))
+    G.text("o", label, px + 4, y + 11)
+    local tx = x + 37
+    G.text("u", c.name:upper(), tx, y + 5)
+    local say = met and ("YOURS: " .. c.reward:upper()) or (c.rule:upper() .. ". " .. LUI.goal(c))
+    local lines = G.wrap(say, px - tx - 4)
+    for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
+end
+
+local function drawLake(x, y, w)
+    G.box(x + 1, y + 1, w - 2, CARD_H - 2, "u", "p")
+    G.box(x + 4, y + 4, 28, CARD_H - 8, "n", "p")
+    LScene.building("mirror", x + 18, y + CARD_H / 2, true)
+    local lines = G.wrap("BUILD THE MIRROR LAKE IN TOWN: FOUR DREAMS UNDER A RULE, EACH WITH A REWARD FOR GOOD.", w - 44)
+    for i = 1, min(3, #lines) do G.text("s", lines[i], x + 37, y + 5 + (i - 1) * 7) end
+end
+
 local function drawPanel()
     local r = R.panel
     love.graphics.push("all")
@@ -754,7 +851,9 @@ local function drawPanel()
             elseif row.dim then drawDim(row, r.x, y, r.w)
             elseif row.grid then drawGrid(r.x, y)
             elseif row.info then drawInfo(r.x, y, r.w)
-            elseif row.building then drawBuilding(row, r.x, y, r.w) end
+            elseif row.building then drawBuilding(row, r.x, y, r.w)
+            elseif row.challenge then drawChallenge(row, r.x, y, r.w)
+            elseif row.lake then drawLake(r.x, y, r.w) end
         end
     end
     love.graphics.pop()
@@ -776,11 +875,14 @@ local function drawModal()
     end
     local w = min(vw - 16, 230)
     local inner = w - 16
-    local lines = {}
-    for _, l in ipairs(m.lines) do
+    -- The big line goes after the first paragraph (what it's about), however
+    -- many lines that wraps to.
+    local lines, first = {}, 0
+    for i, l in ipairs(m.lines) do
         if l == "" then lines[#lines + 1] = "" else
             for _, s in ipairs(G.wrap(l, inner)) do lines[#lines + 1] = s end
         end
+        if i == 1 then first = #lines end
     end
     local tz = G.textWidth(m.title, 2) <= inner and 2 or 1
     local bz = G.textWidth(m.big, 2) <= inner and 2 or 1
@@ -794,7 +896,7 @@ local function drawModal()
     cy = cy + 5 * tz + 8
     for i, s in ipairs(lines) do
         centred("l", s, vw / 2, cy); cy = cy + 7
-        if i == 1 then
+        if i == first then
             cy = cy + 4
             centred("y", m.big, vw / 2, cy, bz)
             cy = cy + 5 * bz + 6
@@ -864,6 +966,9 @@ end
 
 -- Set by ui.lua, which owns the motion setting for both phases.
 LUI.setReducedAll = function(v) LUI.setReduced(v) end
+
+-- For the shots: a dream challenge's card tapped.
+function LUI.askChallenge(id) tapChallenge(Lucid.CH[id]) end
 
 -- For the shots: open a tab, pick a cell.
 function LUI.show(which, cell) tab = which or tab; sel = cell end

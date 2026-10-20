@@ -31,6 +31,11 @@ for i, b in ipairs(D.buildings) do
 end
 Lucid.BUILD, Lucid.BY = BUILD, BY
 
+-- Dream challenges, by id too.
+local CH = {}
+for _, c in ipairs(D.challenges) do CH[c.id] = c end
+Lucid.CHALLENGES, Lucid.CH = D.challenges, CH
+
 -- What happened, for the screen and the sound: { type = ..., ... }.
 Lucid.events = {}
 local function emit(e) Lucid.events[#Lucid.events + 1] = e end
@@ -61,6 +66,10 @@ function Lucid.fresh(s1)
         nightmare = nil, nightmareIn = D.nightmare.firstDelay,
         flow = false, -- runs too quick to see: the flow
         intro = true, -- the entrance still to show
+        challenge = nil, -- the dream challenge under way
+        done = {}, -- dream challenges met: id = true
+        herded = 0, -- flocks brought home under Nightmare Season
+        counted = N.zero(), -- dream sheep counted under the challenge
     }
     for k = 1, #D.dims do
         L.dims[k] = { amount = N.from(D.startDims[k] or 0), bought = D.startDims[k] or 0 }
@@ -72,6 +81,13 @@ function Lucid.fresh(s1)
     for _, b in ipairs(BUILD) do L.built[b.id] = 0 end
     return L
 end
+
+-- The dream challenge under way's rule, and the ones met.
+local function under(L, key)
+    local c = L.challenge and CH[L.challenge]
+    return c and c[key]
+end
+function Lucid.met(L, id) return L.done[id] == true end
 
 --- the town ------------------------------------------------------------------------
 
@@ -85,10 +101,12 @@ function Lucid.strength(L, c)
     local v = 1
     for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
         local nx, ny = x + d[1], y + d[2]
-        if nx >= 1 and nx <= GW and ny >= 1 and ny <= GH then
+        if nx >= 1 and nx <= GW and ny >= 1 and ny <= GH and not under(L, "noNeighbours") then
             local o = L.grid[cell(nx, ny)]
             if o == "plaza" then v = v + D.adjacency.plaza end
-            if o and o ~= "plaza" and BY[o].district == b.district then v = v + D.adjacency.sameDistrict end
+            if o and o ~= "plaza" and BY[o].district == b.district then
+                v = v + D.adjacency.sameDistrict * (Lucid.met(L, "emptySquares") and CH.emptySquares.rewardSame or 1)
+            end
         end
     end
     return v * (L.level[c] or 1)
@@ -182,9 +200,12 @@ end
 local function effect(L, id) return L.effects[id] and L.effects[id] > 0 end
 
 -- Every dimension's multiplier: Dream Mills, the Dream Points earned, a frenzy.
+-- Under a dream challenge the dream forgets the points: only the town counts.
 function Lucid.dimMult(L)
-    local m = 1 + BY.mill.dimAdd * Lucid.sum(L, "mill")
-    m = N.mul(N.from(m), N.add(N.one(), N.mul(N.sqrt(L.dpEarned), N.from(D.multPerRootDP))))
+    local m = N.from(1 + BY.mill.dimAdd * Lucid.sum(L, "mill"))
+    if not L.challenge then
+        m = N.mul(m, N.add(N.one(), N.mul(N.sqrt(L.dpEarned), N.from(D.multPerRootDP))))
+    end
     if effect(L, "frenzy") then m = N.mul(m, N.from(D.golden.frenzy.mult)) end
     return m
 end
@@ -192,7 +213,8 @@ end
 -- What one of dimension k makes a second (of the one before it, or sheep).
 function Lucid.dimRate(L, k)
     local d = L.dims[k]
-    return N.mul(Lucid.dimMult(L), N.from(D.dims[k].rate * D.bonus ^ floor(d.bought / D.bonusEvery)))
+    local bonus = Lucid.met(L, "onlyOne") and CH.onlyOne.rewardBonus or D.bonus
+    return N.mul(Lucid.dimMult(L), N.from(D.dims[k].rate * bonus ^ floor(d.bought / D.bonusEvery)))
 end
 
 function Lucid.sheepRate(L)
@@ -206,7 +228,8 @@ end
 
 -- The most runs a second, after Clock Towers.
 function Lucid.cap(L)
-    return D.runCap * (1 + Lucid.sum(L, "clock")) ^ BY.clock.capPower
+    local power = BY.clock.capPower + (Lucid.met(L, "stoppedClocks") and CH.stoppedClocks.rewardCapPower or 0)
+    return D.runCap * (1 + Lucid.sum(L, "clock") * (under(L, "clockMult") or 1)) ^ power
 end
 
 -- Runs a second: what the sheep pay for, no more than the cap, half while a
@@ -240,6 +263,8 @@ function Lucid.buyDim(L, k, n, share, auto)
     local d, dim = D.dims[k], L.dims[k]
     local budget = share and N.mul(L.sheep, N.from(share)) or L.sheep
     local can = N.geoMax(d.base, d.growth, dim.bought, budget)
+    local most = under(L, "dimMax")
+    if most then can = min(can, max(0, most - dim.bought)) end
     n = n == "max" and can or min(n, can)
     if n <= 0 then return 0 end
     L.sheep = N.sub(L.sheep, Lucid.dimCost(L, k, n))
@@ -297,7 +322,9 @@ end
 
 --- nightmares --------------------------------------------------------------------------
 
-function Lucid.penScale(L) return 1 + BY.fold.penAdd * Lucid.sum(L, "fold") end
+function Lucid.penScale(L)
+    return 1 + BY.fold.penAdd * Lucid.sum(L, "fold") + (Lucid.met(L, "season") and CH.season.rewardPen or 0)
+end
 
 -- Where the dog goes (field units), or nil when let go.
 function Lucid.point(L, x, y)
@@ -311,13 +338,62 @@ local function endNightmare(L)
     if nm.won then
         local M = D.nightmare
         v = N.mul(N.max(N.mul(Lucid.dpPerSecond(L), N.from(M.rewardSeconds)), N.from(M.least)),
-            N.from(share * (1 + BY.fold.rewardAdd * Lucid.sum(L, "fold"))))
+            N.from(share * (1 + BY.fold.rewardAdd * Lucid.sum(L, "fold"))
+                * (Lucid.met(L, "season") and CH.season.rewardPay or 1)))
         L.dp, L.dpEarned = N.add(L.dp, v), N.add(L.dpEarned, v)
+        if L.challenge == "season" then L.herded = L.herded + 1 end
     end
     L.nightmare = nil
     local M = D.nightmare
-    L.nightmareIn = M.minDelay + (M.maxDelay - M.minDelay) * 0.5
+    L.nightmareIn = under(L, "nightmareEvery") or (M.minDelay + (M.maxDelay - M.minDelay) * 0.5)
     emit({ type = "nightmareOver", won = nm.won, saved = share, value = v })
+end
+
+--- dream challenges ----------------------------------------------------------------------
+
+function Lucid.mirror(L) return L.built.mirror > 0 end
+
+-- How far the challenge under way has got: done, goal (both plain numbers).
+function Lucid.progress(L)
+    local c = L.challenge and CH[L.challenge]
+    if not c then return nil end
+    if c.goal == "herd" then return L.herded, c.herd end
+    if c.goal == "sheep" then
+        -- In decades, so the bar fills evenly: 10^n of 10^goal.
+        return min(math.floor(N.log10(N.max(L.counted, N.one()))), math.floor(math.log10(c.sheep))), math.floor(math.log10(c.sheep))
+    end
+    return min(Lucid.runsPerSecond(L), c.runs), c.runs
+end
+
+-- Start one: the flock wakes (dimensions and dream sheep back to the start,
+-- the gifts and the golden sheep gone), the town and the points stay.
+function Lucid.startChallenge(L, id)
+    if not Lucid.mirror(L) or not CH[id] or Lucid.met(L, id) or L.challenge == id then return false end
+    L.sheep, L.runAcc, L.flow = N.zero(), 0, false
+    for k, d in ipairs(L.dims) do
+        d.amount, d.bought = N.from(D.startDims[k] or 0), D.startDims[k] or 0
+    end
+    L.effects, L.golden, L.choosing, L.nightmare = {}, nil, false, nil
+    L.challenge, L.herded, L.counted = id, 0, N.zero()
+    L.nightmareIn = CH[id].nightmareEvery or L.nightmareIn
+    emit({ type = "challengeStart", id = id })
+    return true
+end
+
+-- Give up: the rule lifts, and the dream goes on from where it is.
+function Lucid.giveUp(L)
+    if not L.challenge then return false end
+    L.challenge, L.herded = nil, 0
+    return true
+end
+
+local function checkChallenge(L)
+    local have, goal = Lucid.progress(L)
+    if have and have >= goal then
+        local id = L.challenge
+        L.done[id], L.challenge, L.herded = true, nil, 0
+        emit({ type = "challengeDone", id = id })
+    end
 end
 
 --- each step --------------------------------------------------------------------------
@@ -331,6 +407,7 @@ local function produce(L, dt)
     end
     local sheep = N.mul(Lucid.sheepRate(L), N.from(dt))
     L.sheep, L.sheepTotal = N.add(L.sheep, sheep), N.add(L.sheepTotal, sheep)
+    if L.challenge then L.counted = N.add(L.counted, sheep) end
     -- Runs, in a batch: the whole ones in this step's share are paid for.
     local r = Lucid.runsPerSecond(L)
     local acc = L.runAcc + r * dt
@@ -391,6 +468,7 @@ function Lucid.step(L, dt, rand)
             emit({ type = "nightmare" })
         end
     end
+    if L.challenge then checkChallenge(L) end
 end
 
 --- away ---------------------------------------------------------------------------------
@@ -490,7 +568,7 @@ end
 
 --- saves ---------------------------------------------------------------------------------
 
-local NUMS = { "sheep", "sheepTotal", "dp", "dpEarned", "runs" }
+local NUMS = { "sheep", "sheepTotal", "dp", "dpEarned", "runs", "counted" }
 
 function Lucid.serialize(L)
     local o = {}
@@ -513,7 +591,7 @@ function Lucid.deserialize(o, s1)
     local L = Lucid.fresh(s1)
     if type(o) ~= "table" then return L end
     for _, k in ipairs(NUMS) do if o[k] ~= nil then L[k] = N.deserialize(o[k]) end end
-    for _, k in ipairs({ "runAcc", "legacy", "plots", "time", "goldenIn", "nightmareIn" }) do
+    for _, k in ipairs({ "runAcc", "legacy", "plots", "time", "goldenIn", "nightmareIn", "herded" }) do
         if type(o[k]) == "number" then L[k] = o[k] end
     end
     for _, k in ipairs({ "flow", "intro" }) do if type(o[k]) == "boolean" then L[k] = o[k] end end
@@ -544,6 +622,10 @@ function Lucid.deserialize(o, s1)
     for c, id in pairs(L.grid) do L.built[id] = L.built[id] + L.level[c] end
     if type(o.autoOff) == "table" then
         for k in pairs(o.autoOff) do local n = tonumber(k) if n then L.autoOff[n] = true end end
+    end
+    if type(o.challenge) == "string" and CH[o.challenge] then L.challenge = o.challenge end
+    if type(o.done) == "table" then
+        for id in pairs(CH) do if o.done[id] == true then L.done[id] = true end end
     end
     if type(o.effects) == "table" then
         for id, left in pairs(o.effects) do

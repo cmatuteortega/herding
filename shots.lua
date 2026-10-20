@@ -106,6 +106,22 @@ local MOMENTS = {
         s.lucid.nightmareIn = 0.01
         return s
     end, 0, "nightmare" },
+    { "19-dream-challenge", function()
+        local s = lucidAt(8, true)
+        local L = s.lucid
+        L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
+        L.done.stoppedClocks = true
+        L.dp, L.sheep = 1e9, 1e40
+        Lucid.startChallenge(L, "onlyOne")
+        L.counted = 3e9
+        return s
+    end, 0, "lucid-low" },
+    { "20-challenge-ask", function()
+        local s = lucidAt(8, true)
+        local L = s.lucid
+        L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
+        return s
+    end, 0, "challenge-ask" },
     { "18-golden-choice", function()
         local s = lucidAt(5, false)
         s.lucid.choosing = true
@@ -129,6 +145,7 @@ function Shots.run(UI, fit)
             if m[4] == "enter" then LUI.setState(s); LUI.enter() end
             if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end
+            if m[4] == "challenge-ask" then LUI.askChallenge("season") end
             local r = UI.sceneRect()
             local frames = (m[4] == "sleep" or m[4] == "nightmare") and 400 or (m[4] == "enter" and 170 or 70)
             for i = 1, frames do
@@ -144,7 +161,7 @@ function Shots.run(UI, fit)
                 end
                 if m[3] > 0 and i % 7 == 0 and i <= m[3] * 7 then UI.pressed(r.x + r.w / 2, r.y + r.h * 0.8, "shot") end
                 if i == 2 and (m[4] == "dreams" or m[4] == "dreams-low") then UI.key("d") end
-                if i == 4 and m[4] == "dreams-low" then UI.wheel(-40) end
+                if i == 4 and (m[4] == "dreams-low" or m[4] == "lucid-low") then UI.wheel(-40) end
                 if i == 2 and m[4] == "ask" then UI.askRestless("wideAwake") end
                 if i == 50 and m[4] == nil then
                     -- A purchase, for the pop: the first card that can be paid for.

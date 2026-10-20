@@ -215,8 +215,27 @@ return {
             { id = "fold", district = "park", name = "Sheepfold", desc = "Nightmares: a wider pen, +50% reward", dp = 2000, sheep = 3e4, growth = 3, max = 3, penAdd = 0.2, rewardAdd = 0.5 },
             -- Lucidity: seen, not built yet (the next layer).
             { id = "lighthouse", district = "lucid", name = "Lucid Lighthouse", desc = "Coming: lucidity", locked = true },
-            { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Coming: dream challenges", locked = true },
+            { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Dream challenges: a dream under a rule", dp = 4e5, sheep = 1e30, max = 1 },
             { id = "gate", district = "lucid", name = "Gate of Horn", desc = "Coming: the way out", locked = true },
+        },
+
+        -- Dream challenges, once the Mirror Lake is built: a dream under a
+        -- rule. Starting one wakes the flock (dimensions and dream sheep back
+        -- to the start; the town and the points stay), and while it lasts the
+        -- dream forgets your points: they don't lift the dimensions. Meet its goal under the
+        -- rule and its reward is yours for good. Giving up just lifts the rule.
+        -- Goals: `runs` (that many runs a second under the rule), `sheep`
+        -- (that many dream sheep counted under it) or `herd` (that many
+        -- flocks brought home).
+        challenges = {
+            { id = "stoppedClocks", name = "Stopped Clocks", rule = "Clock Towers work at half strength", goal = "runs", runs = 40,
+                reward = "Clock Towers raise the cap faster", clockMult = 0.5, rewardCapPower = 0.15 },
+            { id = "onlyOne", name = "Only One", rule = "One of each dimension, no more", goal = "sheep", sheep = 1e15,
+                reward = "Every ten of a dimension: x2.5, not x2", dimMax = 1, rewardBonus = 2.5 },
+            { id = "season", name = "Nightmare Season", rule = "Nightmares come one after another", goal = "herd", herd = 3,
+                reward = "A wider fold, and nightmares pay double", nightmareEvery = 8, rewardPen = 0.5, rewardPay = 2 },
+            { id = "emptySquares", name = "Empty Squares", rule = "No building helps its neighbours", goal = "runs", runs = 80,
+                reward = "Neighbours of a district count double", noNeighbours = true, rewardSame = 2 },
         },
 
         -- The lucid golden sheep: catch it and choose one of three.

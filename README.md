@@ -20,7 +20,8 @@ a grid, a city builder where a building does more beside its own district and
 beside a Plaza, and where land and levels are what you save up for. A golden
 sheep offers one of three gifts, and now and then a nightmare scatters a flock
 for you to herd into the fold with the dog: herding, the prototype this
-repository began as.
+repository began as. Once the town has a Mirror Lake, four dream challenges
+open: a dream under a rule, with a reward for good.
 
 It's built for a phone held upright (the field on top, the shop under your
 thumb) and works on a computer (the field on the left, the shop on the right).
@@ -136,6 +137,7 @@ lucid = {
   autoOff,                        -- auto-buyers paused, by dimension
   golden, goldenIn, choosing, effects, -- the golden sheep, its gift on offer, gifts running
   nightmare, nightmareIn,         -- herding, while it's on (not saved: it passes)
+  challenge, done, herded, counted, -- the dream challenge under way, the ones met, its progress
   flow, intro, time,
 }
 ```
@@ -227,6 +229,23 @@ the same happens if the game sat frozen in the background for a while.
   `gt`, `lte`, `min`, `floor`, `log10` and geometric prices in Num, so a
   big-number library can take its place. A greedy player's dream sheep are at
   1E58 after three hours, so plain numbers hold for now.
+
+- **Dream challenges** (`challenges`): built Mirror Lake first (400K DP and
+  1E30 sheep, about twelve minutes in). Starting one sets the dimensions and
+  dream sheep back to the start and, while it lasts, the points earned don't
+  lift the dimensions (only the town does), or the old multiplier would carry
+  any rule. The town and the points stay. Goals are `runs` (runs a second
+  under the rule), `sheep` (dream sheep counted under it) or `herd` (flocks
+  brought home). Giving up just lifts the rule.
+
+| challenge | rule | goal | reward | the sim |
+| --- | --- | --- | --- | --- |
+| Stopped Clocks | Clock Towers at half strength | 40 runs/s | the cap's power 1.7 → 1.85 | 2.4 min |
+| Only One | one of each dimension | 1E15 dream sheep | ×2.5 every ten, not ×2 | 3.2 min |
+| Nightmare Season | a nightmare every 8 s after the last | 3 flocks home | a wider fold, nightmares pay double | 1.5–2.5 min (one try given up) |
+| Empty Squares | no building helps its neighbours | 80 runs/s | districts count double | given up at 23 min, 32 s at 40 min |
+
+  The sim gives a challenge up after six minutes and tries it again ten later.
 
 From `luajit tests/run.lua lucid 40` (a greedy player bringing 750 DP and
 7,000 earned, catching every golden sheep and herding every nightmare in):
@@ -349,8 +368,12 @@ their value comes from what they buy.
     tap a building to LEVEL UP or MOVE it (free); tap a dashed `+` to BUY LAND.
     Speed (gold): Clock Tower, Dream Inn, Pillow Bakery. Automation (lilac):
     Shepherd's Hut, Wool Workshop, Observatory (two dimensions each), Dream
-    Mill. Parks (green): Plaza, Wishing Fountain, Sheepfold. Lucidity: three
-    buildings to see, not to build yet.
+    Mill. Parks (green): Plaza, Wishing Fountain, Sheepfold. Lucidity: the
+    Mirror Lake, and two buildings to see, not to build yet.
+  - *Dream challenges*, under the dimensions once the Mirror Lake stands (a
+    card says how to get it before). START asks first; then the rule and how
+    far you've got show in gold over the field, the card says GIVE UP, and a
+    challenge met says DONE with its reward.
   - *The lucid golden sheep* crosses the sky: tap it and choose ×7 for 30
     seconds, Dream Points now (4 minutes' worth), or time ×2 for a minute.
   - *Nightmares*, every four to seven minutes: the field turns to night grass,
@@ -386,9 +409,9 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- Pending for phase 2: dream challenges, the second prestige layer
-  (Lucidity: its three buildings are shown, not built), nightmares that grow,
-  a soft cap on Insomnia, the end of the game
+- Pending for phase 2: the second prestige layer (the Lucid Lighthouse, shown,
+  not built), the end of phase 2 (the Gate of Horn, shown, not built),
+  nightmares that grow, a soft cap on Insomnia, surplus sheep paying points
 - `ui.lua` hands over to `lucid/ui.lua` but they don't share widgets yet
   (cards, dialogs and banners are drawn in each)
 - Restless nights past the four, or doing one again

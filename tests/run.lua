@@ -143,7 +143,9 @@ local function lucidSim(minutes, dp, earned)
         last = t
     end
     local gifts, g = { "frenzy", "points", "warp" }, 0
-    local order = { "inn", "clock", "mill", "hut", "bakery", "plaza", "fold", "workshop", "fountain", "observatory" }
+    local order = { "inn", "clock", "mill", "hut", "bakery", "plaza", "fold", "workshop", "fountain", "observatory", "mirror" }
+    local started = 0 -- when the dream challenge under way began
+    local tried = {} -- when each was last given up
     local per = {}
     print(("phase 2, a greedy player bringing %d DP, legacy x%.2f:"):format(dp, L.legacy))
     local dt, nextBuy, flowAt = 1 / 30, 0, nil
@@ -151,11 +153,27 @@ local function lucidSim(minutes, dp, earned)
         t = t + dt
         Lucid.step(L, dt, rand)
         for _, e in ipairs(Lucid.events) do
-            if e.type == "flow" then flowAt = t; new("FLOW") end
+            if e.type == "challengeDone" then new(("%s(%ds)"):format(e.id, t - started)) end
+            if e.type == "flow" and not flowAt then flowAt = t; new("FLOW") end
             if e.type == "goldenAppears" and not per.golden then per.golden = true; new("golden") end
             if e.type == "nightmare" and not per.nightmare then per.nightmare = true; new("nightmare") end
         end
         Lucid.events = {}
+        -- Once the Mirror Lake stands, each dream challenge in turn: given up
+        -- after six minutes, tried again ten minutes on.
+        if L.challenge and t - started > 360 then
+            tried[L.challenge] = t
+            Lucid.giveUp(L)
+            new("gaveUp")
+        end
+        if Lucid.mirror(L) and not L.challenge then
+            for _, c in ipairs(Lucid.CHALLENGES) do
+                if not Lucid.met(L, c.id) and t - (tried[c.id] or -1e9) > 600 then
+                    Lucid.startChallenge(L, c.id); started = t
+                    break
+                end
+            end
+        end
         if L.golden and L.golden.t > 1.5 then
             Lucid.catchGolden(L)
             g = g % 3 + 1
@@ -654,6 +672,67 @@ test("away in closed form matches stepping", function()
     close(a.runs, b.runs, 0.05)
     assert(r.secs == 600 and not r.capped)
     eq(Lucid.offline(setup(), 30 * 3600).secs, C.offline.maxHours * 3600)
+end)
+test("dream challenges", function()
+    local L = Lucid.fresh()
+    L.intro, L.goldenIn = false, 1e9
+    L.dp, L.sheep = 1e12, 1e40
+    assert(not Lucid.startChallenge(L, "onlyOne"), "not before the Mirror Lake")
+    assert(Lucid.build(L, "mirror", Lucid.cell(3, 3)))
+    assert(Lucid.build(L, "clock", Lucid.cell(2, 3)))
+    for _ = 1, 15 do assert(Lucid.upgrade(L, Lucid.cell(2, 3))) end -- cap enough for 100 runs a second
+    Lucid.buyDim(L, 1, 20)
+    -- Starting wakes the flock; the town and the points stay.
+    local dp = L.dp
+    assert(Lucid.startChallenge(L, "onlyOne"))
+    eq(L.dims[1].bought, D.startDims[1]); eq(L.sheep, 0); eq(L.dp, dp); eq(L.built.clock, 16)
+    L.sheep = 1e20
+    eq(Lucid.buyDim(L, 1, "max"), 1 - D.startDims[1]) -- one at most
+    eq(Lucid.buyDim(L, 2, 10), 1)
+    -- Met: 1e15 dream sheep counted under the rule.
+    eq(select(2, Lucid.progress(L)), 15)
+    L.dims[1].amount = 1e20
+    Lucid.step(L, 1 / 30, function() return 0.5 end)
+    assert(Lucid.met(L, "onlyOne") and not L.challenge)
+    L.dims[1].bought = 10
+    close(Lucid.dimRate(L, 1) / Lucid.dimMult(L), D.dims[1].rate * 2.5)
+    -- Stopped Clocks: half strength, then a steeper cap.
+    local cap, S = Lucid.cap(L), Lucid.sum(L, "clock")
+    assert(Lucid.startChallenge(L, "stoppedClocks"))
+    close(Lucid.cap(L), D.runCap * (1 + S / 2) ^ Lucid.BY.clock.capPower)
+    assert(Lucid.giveUp(L) and not L.challenge)
+    eq(Lucid.cap(L), cap)
+    L.done.stoppedClocks = true
+    close(Lucid.cap(L), D.runCap * (1 + S) ^ (Lucid.BY.clock.capPower + 0.15))
+    -- Empty Squares: no neighbour helps; met, districts count double.
+    L.sheep = 1e20 -- starting Stopped Clocks woke the flock
+    assert(Lucid.build(L, "plaza", Lucid.cell(2, 2)))
+    local c = Lucid.cell(2, 3)
+    assert(Lucid.startChallenge(L, "emptySquares"))
+    eq(Lucid.strength(L, c), 16)
+    Lucid.giveUp(L)
+    eq(Lucid.strength(L, c), 16 * 1.5)
+    L.done.emptySquares = true
+    L.sheep = 1e20
+    assert(Lucid.openPlot(L, Lucid.cell(1, 3)) and Lucid.build(L, "inn", Lucid.cell(1, 3)))
+    eq(Lucid.strength(L, c), 16 * (1.5 + 0.5))
+    -- Nightmare Season: one after another; three brought home.
+    assert(Lucid.startChallenge(L, "season"))
+    eq(L.nightmareIn, Lucid.CH.season.nightmareEvery)
+    for _ = 1, 3 do
+        L.nightmareIn = 0.01
+        Lucid.step(L, 1 / 30, function() return 0.5 end)
+        assert(L.nightmare)
+        for _, sh in ipairs(L.nightmare.sheep) do sh.x, sh.y = L.nightmare.pen.x, L.nightmare.pen.y end
+        Lucid.step(L, 1 / 30, function() return 0.5 end)
+        assert(not L.nightmare)
+    end
+    assert(Lucid.met(L, "season") and not L.challenge)
+    assert(not Lucid.startChallenge(L, "season"), "once is enough")
+    -- Kept in the save.
+    L.challenge = "stoppedClocks"
+    local back = Lucid.deserialize(require("lib.json").decode(require("lib.json").encode(Lucid.serialize(L))))
+    eq(back.challenge, "stoppedClocks"); assert(back.done.season and back.done.onlyOne and not back.done.bogus)
 end)
 test("lucid saves", function()
     local L = Lucid.fresh({ dreamPoints = 12, dreamEarned = 100 })
