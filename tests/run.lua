@@ -209,6 +209,17 @@ test("sleepwalking and the auto-buyers", function()
     assert(s.sheep >= 1000 * (1 - 2 * C.auto.share), "a trip spends a share at a time")
     assert(not Game.automated(s, "barn") and Game.automated(s, "meadow") and not Game.automated(s, "pen"))
 end)
+test("warm bed", function()
+    local s = Game.fresh()
+    s.owned.dog, s.owned.os, s.owned.barn = 10, 3, 4
+    s.dream.warmBed = 2
+    Game.dreamAgain(s)
+    eq(s.owned.dog, 4); eq(s.owned.os, 1); eq(s.owned.barn, 0) -- helpers only
+    s.owned.dog, s.dream.warmBed = 7, 5
+    Game.dreamAgain(s)
+    eq(s.owned.dog, 7)
+    assert(Game.visible(s, "meadow"), "the next helper shows")
+end)
 test("golden dreams", function()
     local s = Game.fresh()
     s.dream.goldenDreams = 1

@@ -347,7 +347,11 @@ function Game.dreamAgain(s)
     s.dreamPoints = s.dreamPoints + gained
     s.dreamEarned = s.dreamEarned + gained
     s.dreams = s.dreams + 1
+    -- Warm Bed: a share of every helper stays for the new night.
+    local keep = {}
+    for _, g in ipairs(GENS) do keep[g.id] = floor(s.owned[g.id] * BY_ID.warmBed.keep * s.dream.warmBed) end
     freshRun(s)
+    for id, n in pairs(keep) do s.owned[id] = n end
     return gained
 end
 

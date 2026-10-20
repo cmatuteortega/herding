@@ -602,6 +602,9 @@ local function describeDream(it)
         if o == 0 then return d .. ", FROM THE DOG UP" end
         local top = Game.GENS[math.min(#Game.GENS, it.tiers * o)]
         return "BUYS HELPERS UP TO THE " .. top.name:upper() .. ". " .. o .. "/" .. it.max
+    elseif it.id == "warmBed" then
+        if o == 0 then return d end
+        return "KEEPS " .. floor(it.keep * o * 100 + 0.5) .. "% OF YOUR HELPERS EACH NIGHT. " .. o .. "/" .. it.max
     elseif it.mult then
         return d .. ". NOW X" .. N.format(it.mult ^ o)
     elseif it.add then

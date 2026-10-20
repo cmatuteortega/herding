@@ -655,6 +655,11 @@ local ART = {
     },
     heart = { ".l.l.", "lllll", ".lll.", "..l.." },
     z = { "llll", "..l.", ".l..", "llll" },
+    bed = {
+        "oo..............", "owo.............", "owo..ooooooooooo", "owoooowwwwlllllo",
+        "owowwwolllllilio", "owowwwolilllllio", "owoooooooooooooo", "owpppppppppppppo",
+        "oooooooooooooooo", "oo............oo",
+    },
     catcher = {
         "....ooooooo....", "..oollllllloo..", ".olo.l.l.l.olo.", ".ol.l.l.l.l.lo.", "ol...l.l.l...lo",
         "ollllllyllllllo", "ol...l.l.l...lo", ".ol.l.l.l.l.lo.", ".olo.l.l.l.olo.", "..oollllllloo..",
@@ -698,6 +703,9 @@ function Scene.icon(id, x, y)
         G.art(ART.z, x + 22, y + 1)
     elseif id == "deepSleep" then blit(Models.moon(8), x + 14, y + 11)
     elseif id == "dreamCatcher" then G.art(ART.catcher, x + 7, y + 3)
+    elseif id == "warmBed" then
+        G.art(ART.bed, x + 6, y + 9)
+        G.art(ART.z, x + 20, y + 2)
     end
 end
 

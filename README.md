@@ -88,7 +88,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
   golden, goldenIn,               -- a golden sheep crossing { t, lane }, and when the next comes
   asleep,                         -- the night is over; waiting for Dream Again
   dreamPoints, dreamEarned,       -- prestige: to spend, and ever earned (the bonus)
-  dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, dreamCatcher },
+  dreams, dream = { sleepwalk, nightShift, goldenDreams, sleepTalk, tuckedIn, deepSleep, warmBed, dreamCatcher },
   lastNight, lucid,               -- the last night's length; a night under a second was slept
   taps, buyMode, muted, lastSeen,
 }
@@ -143,15 +143,16 @@ checked against the real game with `--speed 10 --autoplay 300`:
 Night after night (`luajit tests/run.lua nights`: 1.5 taps a second, and each
 night's Dream Points go on the cheapest thing in the Dream shop):
 
-| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 15 | 17 | 19 | 21 |
+| night | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 15 | 17 | 18 | 19 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| seconds | 1494 | 599 | 522 | 406 | 207 | 150 | 140 | 64 | 51 | 39 | 15 | 9.4 | 6.0 | 2.1 | 1.5 | **1.0** |
-| Dream Points | 22 | 30 | 32 | 37 | 44 | 75 | 76 | 101 | 146 | 160 | 225 | 331 | 389 | 575 | 799 | 872 |
+| seconds | 1494 | 599 | 522 | 406 | 207 | 150 | 122 | 76 | 42 | 34 | 25 | 7.3 | 4.5 | 2.5 | 1.4 | **0.6** |
+| Dream Points | 22 | 30 | 32 | 37 | 44 | 75 | 80 | 107 | 116 | 168 | 188 | 289 | 430 | 532 | 651 | 776 |
 
-The automation is all bought by night 7. Night 21 is the first to fill the bar
+The automation is all bought by night 7, and Warm Bed keeps every helper by
+night 17. Night 19 is the first to fill the bar
 in under a second, so the dream turns lucid: about an hour of play in all,
 most of it the first few nights. With no taps at all after the first night,
-it's night 23. The auto-buyers shop every 0.05 seconds, or a night near the end
+it's night 20. The auto-buyers shop every 0.05 seconds, or a night near the end
 would be over before their second trip.
 
 In the first five minutes something new turns up every 20 to 60 seconds (Tap
@@ -191,7 +192,9 @@ their value comes from what they buy.
     buys Tap Power and Better Fence, and **Tucked In** buys Barns and Lullabies.
     A card the automation buys says AUTO.
   - *Deeper sleep:* **Deep Sleep** doubles everything per level (×4 dearer
-    each), and **Dream Catcher** adds +50% Dream Points.
+    each), **Warm Bed** starts each night with 20% of the helpers you fell
+    asleep with per level (all of them at level 5; Barns, Lullabies and tap
+    upgrades still reset), and **Dream Catcher** adds +50% Dream Points.
   - A gold star on the button means there's something you can buy. After Dream
     Again, the shop opens on it.
 - **Lucid:** the first night that fills the bar in under a second ends as *A

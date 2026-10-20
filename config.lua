@@ -93,6 +93,9 @@ return {
         { id = "sleepTalk", group = "auto", name = "Sleep Talking", desc = "Buys tap upgrades for you", base = 10, max = 1 },
         { id = "tuckedIn", group = "auto", name = "Tucked In", desc = "Buys Barns and Lullabies", base = 16, max = 1 },
         { id = "deepSleep", group = "boost", name = "Deep Sleep", desc = "Doubles every sheep counted", base = 5, growth = 4, mult = 2 },
+        -- Warm Bed: each level, a night starts with this share of every helper
+        -- you had when you fell asleep, up to all of them.
+        { id = "warmBed", group = "boost", name = "Warm Bed", desc = "Keeps 20% of your helpers each night", base = 50, growth = 2, max = 5, keep = 0.2 },
         { id = "dreamCatcher", group = "boost", name = "Dream Catcher", desc = "+50% Dream Points", base = 20, growth = 4, add = 0.5 },
     },
 

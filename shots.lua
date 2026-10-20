@@ -33,7 +33,7 @@ local MOMENTS = {
     { "6-asleep", function() return preset(1.4999e9, { dog = 40, os = 6, lullaby = 5, drones = 10, mill = 10 }, { runTime = 600 }) end, 0, "sleep" },
     { "7-dreams", function()
         return preset(3e3, { dog = 3, tapPower = 2 }, { dreams = 3, dreamPoints = 26, dreamEarned = 90,
-            dream = { sleepwalk = 2, nightShift = 1, deepSleep = 1 } })
+            dream = { sleepwalk = 2, nightShift = 1, deepSleep = 1, warmBed = 1 } })
     end, 0, "dreams" },
     { "8-automatic", function()
         return preset(4e7, { dog = 30, meadow = 25, pen = 15, mill = 8, tapPower = 15, betterFence = 3, barn = 3, lullaby = 2 },
