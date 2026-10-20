@@ -139,6 +139,23 @@ local DEFS = {
         chime(1.65, midi(67), 2.5, 0.6), chime(2.2, midi(64), 2.5, 0.6), chime(2.75, midi(60), 3.5, 0.6) },
     dream = { vol = 0.4, gap = 2, echo = { 0.2, 0.35 },
         chime(0, midi(60), 1, 0.5, "tri"), chime(0.2, midi(67), 1, 0.5, "tri"), chime(0.4, midi(72), 1.5, 0.5, "tri") },
+    -- The lucid dream: going in (a slow rise, an octave over the top, a hush
+    -- of air), a run waking itself (a soft tick), a nightmare (a low minor
+    -- fall), the flock safe (it resolves), and a gift chosen.
+    lucid = { vol = 0.45, gap = 4, echo = { 0.35, 0.45 },
+        chime(0, midi(48), 4, 0.5, "tri"), chime(0.4, midi(55), 3.6, 0.45, "tri"), chime(0.8, midi(64), 3.2, 0.45),
+        chime(1.2, midi(71), 3, 0.4), chime(1.6, midi(74), 3, 0.4), chime(2.0, midi(79), 3.5, 0.35),
+        chime(2.6, midi(86), 3.5, 0.3), { dur = 3.5, wave = "noise", hp = { 3000 }, vol = 0.05, curve = 1 } },
+    run = { vol = 0.12, gap = 0.08, wob = 0.08, chime(0, midi(84), 0.12, 0.6), chime(0, midi(91), 0.08, 0.2, "tri") },
+    nightmare = { vol = 0.4, gap = 2, echo = { 0.25, 0.4 },
+        chime(0, midi(57), 1.2, 0.6, "tri"), chime(0.3, midi(53), 1.2, 0.6, "tri"), chime(0.6, midi(48), 1.8, 0.6, "tri"),
+        chime(0.6, midi(51), 1.8, 0.4, "tri") },
+    safe = { vol = 0.4, gap = 1, echo = { 0.15, 0.35 },
+        chime(0, midi(67), 0.8, 0.5, "tri"), chime(0.15, midi(72), 0.8, 0.5, "tri"), chime(0.3, midi(76), 1.2, 0.5),
+        chime(0.45, midi(79), 1.6, 0.5) },
+    gift = { vol = 0.4, gap = 0.5, echo = { 0.1, 0.3 },
+        chime(0, midi(79), 0.4, 0.5), chime(0.08, midi(84), 0.4, 0.5), chime(0.16, midi(88), 0.7, 0.5) },
+    bleat = { vol = 0.18, gap = 0.25, wob = 0.12, { dur = 0.22, wave = "tri", f0 = 420, f1 = 380, vib = { 18, 0.06 }, lp = { 1600 }, curve = 1.5 } },
 }
 for i, n in ipairs(PENTA) do
     if i <= 10 then

@@ -5,6 +5,7 @@
 
 local C = require "config"
 local N = require "num"
+local Lucid = require "lucid.game"
 
 local floor, min, max = math.floor, math.min, math.max
 local function clamp(x, a, b) return min(b, max(a, x)) end
@@ -81,7 +82,7 @@ end
 -- A new game: a run, and what lasts across runs.
 function Game.fresh()
     return freshRun({
-        version = 1,
+        version = C.saveVersion,
         dreamPoints = 0, -- to spend in the Dream shop
         dreamEarned = 0, -- ever earned: the production bonus
         dreams = 0,
@@ -89,8 +90,9 @@ function Game.fresh()
         done = {}, -- restless nights slept through: id = true
         lastNight = 0, -- how long the last night lasted, in seconds
         -- "nights" (counting sheep), or "lucid": past the first night
-        -- shorter than C.lucid.under, the next phase (a placeholder for now).
+        -- shorter than C.lucid.under, phase 2 (lucid/game.lua), for good.
         phase = "nights",
+        lucid = nil, -- phase 2's state, from the moment you go lucid
         allTime = N.zero(),
         taps = 0,
         buyMode = "1",
@@ -502,16 +504,15 @@ function Game.giveUp(s)
     return true
 end
 
--- After a lucid night: its Dream Points banked, and on to the next phase.
+-- After a lucid night: its Dream Points banked, and on to phase 2 for good.
+-- The points come along to spend; every point ever earned is its legacy.
+-- Phase 1's state stays in the save as it was, and plays no more.
 function Game.goLucid(s)
     local gained = Game.dreamAgain(s)
     s.phase = "lucid"
+    s.lucid = Lucid.fresh(s)
+    s.dreamPoints = 0
     return gained
-end
-
--- Back from the lucid placeholder to counting, the Dream shop and all.
-function Game.backToNights(s)
-    s.phase = "nights"
 end
 
 function Game.currentLine(s)
@@ -533,15 +534,34 @@ function Game.serialize(s)
     local o = {}
     for k, v in pairs(s) do o[k] = v end
     o.sheep, o.runTotal, o.allTime = N.serialize(s.sheep), N.serialize(s.runTotal), N.serialize(s.allTime)
+    o.lucid = s.lucid and Lucid.serialize(s.lucid) or nil
+    o.version = C.saveVersion
     o.lastSeen = os.time()
     return o
 end
 
+-- What each save version needs to become the next, in order. A save without a
+-- version is 1.
+local MIGRATE = {
+    -- 1 -> 2: phase 2 arrives. A save that went lucid in the placeholder gets
+    -- its lucid state now, from its points; one still counting is untouched.
+    [1] = function(o)
+        if o.phase == "lucid" and type(o.lucid) ~= "table" then o.lucid = { fromV1 = true } end
+        o.version = 2
+    end,
+}
+Game.MIGRATE = MIGRATE
+
 function Game.deserialize(o)
     if type(o) ~= "table" then return nil end
+    local v = tonumber(o.version) or 1
+    while MIGRATE[v] and v < C.saveVersion do
+        MIGRATE[v](o)
+        v = v + 1
+    end
     local s = Game.fresh()
     for k, v in pairs(s) do
-        if k ~= "owned" and k ~= "dream" and k ~= "made" and k ~= "done" and o[k] ~= nil and type(o[k]) == type(v) then s[k] = o[k] end
+        if k ~= "owned" and k ~= "dream" and k ~= "made" and k ~= "done" and k ~= "version" and o[k] ~= nil and type(o[k]) == type(v) then s[k] = o[k] end
     end
     if type(o.golden) == "table" and tonumber(o.golden.t) then s.golden = { t = o.golden.t, lane = tonumber(o.golden.lane) or 0.5 } end
     if type(o.owned) == "table" then
@@ -564,6 +584,15 @@ function Game.deserialize(o)
     s.sheep, s.runTotal, s.allTime = N.deserialize(o.sheep), N.deserialize(o.runTotal), N.deserialize(o.allTime)
     if s.buyMode ~= "1" and s.buyMode ~= "10" and s.buyMode ~= "max" then s.buyMode = "1" end
     if s.phase ~= "lucid" then s.phase = "nights" end
+    if s.phase == "lucid" then
+        -- From the placeholder (v1): the points held come along, the same as going lucid.
+        if type(o.lucid) == "table" and o.lucid.fromV1 then
+            s.lucid = Lucid.fresh(s)
+            s.dreamPoints = 0
+        else
+            s.lucid = Lucid.deserialize(o.lucid, s)
+        end
+    end
     s.stage = max(s.stage, Game.stageOf(s))
     return s
 end

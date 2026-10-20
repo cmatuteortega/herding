@@ -15,6 +15,7 @@ local Scene = require "scene"
 local Audio = require "audio"
 local flux = require "lib.flux"
 local lume = require "lib.lume"
+local LUI = require "lucid.ui"
 
 local floor, min, max, sin = math.floor, math.min, math.max, math.sin
 
@@ -49,8 +50,15 @@ local expanded = {} -- night-shop sections opened though all on auto, by kind
 
 UI.cue = function(name, data) Audio.cue(name, data) end
 
+-- Phase 2 has its own screen (lucid/ui.lua): once `phase` is "lucid", every
+-- call below hands over to it.
+local function lucid() return S and S.phase == "lucid" and S.lucid end
+LUI.save = function() UI.save() end
+LUI.setReducedAll = function(v) UI.setReduced(v) end
+
 function UI.setState(s)
     S = s
+    if lucid() then LUI.setState(s) end
     UI.setReduced(S.reducedMotion)
     shown = N.toNumber(S.sheep)
     modal, endingWaits, UI.endingIn, banner.text, scroll = nil, false, nil, nil, 0
@@ -59,7 +67,7 @@ function UI.setState(s)
     for _, it in ipairs(Game.ITEMS) do if Game.visible(S, it.id) then seen[it.id] = true end end
 end
 function UI.state() return S end
-function UI.setReduced(v) reduced = v; Scene.reduced = v end
+function UI.setReduced(v) reduced = v; Scene.reduced = v; LUI.setReduced(v) end
 
 --- layout -------------------------------------------------------------------------
 
@@ -92,9 +100,10 @@ function UI.fit(w, h, ins)
         R.shop = rect(sx, y + 17, shopW, b - (y + 17))
     end
     Scene.resize(R.scene.w, R.scene.h)
+    LUI.fit(w, h, inset)
 end
 
-function UI.sceneRect() return R.scene end
+function UI.sceneRect() return lucid() and LUI.sceneRect() or R.scene end
 
 --- the shop's rows ------------------------------------------------------------------
 
@@ -209,6 +218,7 @@ end
 
 -- Back after `seconds` away: the sheep counted meanwhile, and a word about it.
 function UI.away(seconds)
+    if lucid() then return LUI.away(seconds) end
     local r = Game.offline(S, seconds)
     if not r or seconds < C.offline.minSeconds or not N.gte(r.gain, N.from(1)) then return end
     UI.showModal({
@@ -257,11 +267,11 @@ function UI.showEnding()
         onClose = function()
             if lucid then
                 Game.goLucid(S)
-                Audio.cue("dream")
                 Scene.reset()
                 shown, seen, scroll = 0, {}, 0
+                LUI.setState(S)
+                LUI.enter()
                 UI.save()
-                UI.showLucid()
                 return
             end
             Game.dreamAgain(S)
@@ -279,30 +289,11 @@ function UI.showEnding()
     })
 end
 
--- The lucid phase: a placeholder until the next phase is built. It stays
--- (and comes back on load) until you go back to counting.
+-- Coming back to a save in phase 2.
 function UI.showLucid()
-    if S.phase ~= "lucid" then return end
-    Audio.setAsleep(true)
-    UI.showModal({
-        night = true,
-        title = "LUCID DREAMING",
-        lines = {
-            "YOU ARE DREAMING, AND YOU KNOW IT.",
-            "",
-            "THE NEXT PHASE OF THE GAME BEGINS HERE. IT ISN'T BUILT YET: THIS IS A PLACEHOLDER.",
-            "",
-            "YOUR " .. S.dreamPoints .. " DREAM POINTS AND THE DREAM SHOP ARE KEPT.",
-        },
-        big = "PHASE 2",
-        button = "BACK TO COUNTING",
-        onClose = function()
-            Game.backToNights(S)
-            Audio.setAsleep(false)
-            UI.save()
-            UI.banner("A NEW NIGHT", "THE SHEEP ARE WAITING")
-        end,
-    })
+    if not lucid() then return end
+    LUI.setState(S)
+    LUI.resume()
 end
 
 -- A night starts over (a new one, or a restless one): the field and shop too.
@@ -390,6 +381,7 @@ end
 
 -- The rules' events: banners and sounds.
 function UI.drain()
+    if lucid() then return LUI.drain() end
     local ev = Game.events
     Game.events = {}
     for _, e in ipairs(ev) do
@@ -473,6 +465,7 @@ local function modalButton()
 end
 
 function UI.pressed(x, y, id)
+    if lucid() and not modal then return LUI.pressed(x, y, id) end
     if modal then
         if inside(modalButton(), x, y) then Audio.start(); UI.cue("click"); closeModal()
         elseif inside(modal.cancelRect, x, y) then Audio.start(); UI.cue("click"); closeModal(true) end
@@ -516,6 +509,7 @@ function UI.pressed(x, y, id)
 end
 
 function UI.moved(x, y, id)
+    if lucid() then return LUI.moved(x, y, id) end
     if not press or press.id ~= id then return end
     if math.abs(y - press.y0) > 3 then press.moved = true end
     if press.moved then
@@ -526,6 +520,7 @@ function UI.moved(x, y, id)
 end
 
 function UI.released(x, y, id)
+    if lucid() then return LUI.released(x, y, id) end
     if not press or press.id ~= id then return end
     local p = press
     press = nil
@@ -547,10 +542,12 @@ end
 function UI.buy(id) return buy(id) end
 
 function UI.wheel(dy)
+    if lucid() then return LUI.wheel(dy) end
     scroll = lume.clamp(scroll - dy * 18, 0, maxScroll())
 end
 
 function UI.key(key)
+    if lucid() and not modal then return LUI.key(key) end
     if modal then
         if key == "return" or key == "space" or key == "kpenter" then UI.cue("click"); closeModal()
         elseif modal.cancel and (key == "backspace" or key == "n") then UI.cue("click"); closeModal(true) end
@@ -571,6 +568,7 @@ end
 
 function UI.update(dt)
     t = t + dt
+    if lucid() then return LUI.update(dt) end
     local real = N.toNumber(S.sheep)
     if real < shown then shown = real else shown = shown + (real - shown) * min(1, dt * 12) end
     if math.abs(real - shown) < 0.5 then shown = real end
@@ -972,6 +970,7 @@ end
 
 -- Draws everything but the field's own picture, which main lays first.
 function UI.draw()
+    if lucid() and not modal then return LUI.draw() end
     local r = R.scene
     -- The field, in its frame.
     G.box(r.x, r.y, r.w, r.h, "n")

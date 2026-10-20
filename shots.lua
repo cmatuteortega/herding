@@ -3,6 +3,8 @@
 -- quits. The save is left alone.
 
 local Game = require "game"
+local Lucid = require "lucid.game"
+local LUI = require "lucid.ui"
 local Scene = require "scene"
 local flux = require "lib.flux"
 
@@ -18,6 +20,36 @@ local function preset(total, owned, extra)
     for k, v in pairs(extra or {}) do
         if k == "dream" or k == "made" or k == "done" then for id, n in pairs(v) do s[k][id] = n end else s[k] = v end
     end
+    return s
+end
+
+-- Phase 2, `minutes` in: dimensions bought, a town built round a Plaza.
+local function lucidAt(minutes, flow)
+    local s = preset(0, {}, { dreams = 19, dreamPoints = 750, dreamEarned = 7000 })
+    s.phase = "lucid"
+    s.lucid = Lucid.fresh(s)
+    s.dreamPoints = 0
+    local L = s.lucid
+    L.intro, L.flow, L.goldenIn, L.nightmareIn = false, flow, 1e9, 1e9
+    L.dp, L.sheep = 1e3 * minutes ^ 3, 1e4 * 10 ^ minutes
+    for k = 1, math.min(6, minutes + 1) do
+        L.dims[k].bought = math.floor(math.max(1, 22 - k * 3) * minutes / 2) + 1
+        L.dims[k].amount = L.dims[k].bought * 10 ^ (6 - k)
+    end
+    local town = { { 3, 3, "plaza" }, { 2, 3, "clock" }, { 4, 3, "clock" }, { 3, 2, "inn" }, { 3, 4, "bakery" },
+        { 2, 2, "hut" }, { 4, 2, "mill" }, { 2, 4, "fold" }, { 4, 4, "fountain" } }
+    for i = 1, math.min(#town, minutes + 2) do
+        local b = town[i]
+        L.grid[Lucid.cell(b[1], b[2])], L.level[Lucid.cell(b[1], b[2])] = b[3], 1
+        L.built[b[3]] = L.built[b[3]] + 1
+    end
+    if minutes >= 5 then
+        L.open[Lucid.cell(3, 1)], L.open[Lucid.cell(1, 3)] = true, true
+        L.plots = 2
+        L.level[Lucid.cell(2, 3)] = 3
+        L.built.clock = L.built.clock + 2
+    end
+    L.runAcc = 0.6
     return s
 end
 
@@ -44,9 +76,11 @@ local MOMENTS = {
         return preset(1.4999e9, { dog = 40, os = 6, lullaby = 5, drones = 10, mill = 10 },
             { runTime = 0.8, dreams = 21, dreamEarned = 9000, dream = { sleepwalk = 5, deepSleep = 5 } })
     end, 0, "sleep" },
-    { "10-lucid-phase", function()
-        return preset(0, {}, { phase = "lucid", dreams = 22, dreamPoints = 340, dreamEarned = 9800, dream = { sleepwalk = 5, deepSleep = 5 } })
-    end, 0, "lucid" },
+    { "10-lucid-enter", function()
+        local s = preset(0, {}, { dreams = 19, dreamPoints = 750, dreamEarned = 7000 })
+        Game.goLucid(s)
+        return s
+    end, 0, "enter" },
     { "11-ways", function()
         return preset(3e3, { dog = 3, tapPower = 2 }, { dreams = 5, dreamPoints = 40, dreamEarned = 160,
             dream = { sleepwalk = 3, nightShift = 2, deepSleep = 2, warmBed = 1, lightSleeper = 2 }, done = { insomnia = true } })
@@ -59,6 +93,24 @@ local MOMENTS = {
     { "13-start-restless", function()
         return preset(3e3, { dog = 3 }, { dreams = 5, dreamEarned = 160, done = { insomnia = true } })
     end, 0, "ask" },
+    { "14-lucid-dreams", function() return lucidAt(2, false) end, 0, "lucid" },
+    { "15-lucid-town", function() return lucidAt(5, false) end, 0, "town" },
+    { "16-lucid-flow", function()
+        local s = lucidAt(8, true)
+        s.lucid.golden = { t = 4, lane = 0.3 }
+        s.lucid.effects.frenzy = 18
+        return s
+    end, 0, "lucid" },
+    { "17-nightmare", function()
+        local s = lucidAt(5, false)
+        s.lucid.nightmareIn = 0.01
+        return s
+    end, 0, "nightmare" },
+    { "18-golden-choice", function()
+        local s = lucidAt(5, false)
+        s.lucid.choosing = true
+        return s
+    end, 0, "lucid" },
 }
 
 function Shots.run(UI, fit)
@@ -74,12 +126,22 @@ function Shots.run(UI, fit)
             Scene.reset()
             Game.events = {}
             if m[4] == "away" then UI.away(os.difftime(os.time(), s.lastSeen)) end
-            if m[4] == "lucid" then UI.showLucid() end
+            if m[4] == "enter" then LUI.setState(s); LUI.enter() end
+            if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
+            if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end
             local r = UI.sceneRect()
-            local frames = m[4] == "sleep" and 400 or 70
+            local frames = (m[4] == "sleep" or m[4] == "nightmare") and 400 or (m[4] == "enter" and 170 or 70)
             for i = 1, frames do
                 local dt = 1 / 60
-                Game.step(s, dt)
+                if s.phase == "lucid" then
+                    Lucid.step(s.lucid, dt, function() return 0.5 end)
+                    -- The nightmare's dog, circling in behind the flock.
+                    if m[4] == "nightmare" and s.lucid.nightmare then
+                        Lucid.point(s.lucid, 60 + math.sin(i * 0.05) * 20, 70 + math.cos(i * 0.05) * 30)
+                    end
+                else
+                    Game.step(s, dt)
+                end
                 if m[3] > 0 and i % 7 == 0 and i <= m[3] * 7 then UI.pressed(r.x + r.w / 2, r.y + r.h * 0.8, "shot") end
                 if i == 2 and (m[4] == "dreams" or m[4] == "dreams-low") then UI.key("d") end
                 if i == 4 and m[4] == "dreams-low" then UI.wheel(-40) end

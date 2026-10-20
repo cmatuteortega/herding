@@ -10,7 +10,17 @@ way of sleeping (light, for players who tap, or heavy, for those who don't).
 From the third night on, restless nights (challenges) open one a night: a
 night under a rule, with a reward kept forever.
 Each night is quicker than the last, until the bar fills in under a second.
-Then the dream turns lucid, the door to the game's next phase.
+Then the dream turns lucid, and phase 2 begins.
+
+**Phase 2, lucid dreaming:** the night runs itself (auto-wake: a run a minute,
+then a second, then a hundred a second, until there's no run to see, only the
+flow). Six dream dimensions make each other, Antimatter Dimensions' way, from
+Dream Sheep on the hill up to Auroras in the sky. Dream Points build a town on
+a grid, a city builder where a building does more beside its own district and
+beside a Plaza, and where land and levels are what you save up for. A golden
+sheep offers one of three gifts, and now and then a nightmare scatters a flock
+for you to herd into the fold with the dog: herding, the prototype this
+repository began as.
 
 It's built for a phone held upright (the field on top, the shop under your
 thumb) and works on a computer (the field on the left, the shop on the right).
@@ -23,12 +33,16 @@ love . --autoplay 300      # dev: a scripted player taps and buys for 300 game
                            # seconds (add --speed 10), prints how it went, saves a picture
 love . --shots             # dev: scripted moments at phone and desktop size, as PNGs
 love . --sounds            # dev: every sound and pad layer written as a .wav
+love . --lucid             # dev: straight into phase 2 with 750 DP to spend (and with
+                           # any dev flag on, L jumps there mid-game)
+love . --lucid --speed 10 --autoplay 600   # dev: phase 2 played by a simple script
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
 luajit tests/run.lua sim   # dev: the balance sim (a greedy player at 3, 1.5, 0.5 taps/s,
                            # then twelve nights in a row spending Dream Points)
 luajit tests/run.lua nights 1.5 15   # dev: N nights in a row at a tap rate, then with no taps,
                                      # then playing each restless night as it opens
 luajit tests/run.lua nights 3 20 heavy restless  # dev: one run, sleeping light or heavy
+luajit tests/run.lua lucid 30        # dev: phase 2's balance sim, a greedy player for 30 minutes
 luacheck .                 # dev: the lint
 ```
 
@@ -39,6 +53,9 @@ folder's contents: `zip -9 -r counting-sheep.love . -x '.git/*' 'tests/*'`.
 **Controls:** tap or click the field to count a sheep (Space or Enter too). Tap a
 card to buy. Drag or use the wheel to scroll the shop. 1 / 2 / 3 picks ×1 / ×10 /
 Max, D (or the DREAMS button) opens the Dream shop, M mutes, R reduces motion, F11 or Alt+Enter toggles fullscreen, and Esc quits on a computer.
+In phase 2, 1 / 2 pick DREAMS / TOWN and 3 toggles ×1 / MAX; Space catches the
+golden sheep, and 1 / 2 / 3 choose its gift; in a nightmare, hold and drag on
+the field to move the dog.
 
 ## Where it comes from
 
@@ -50,6 +67,7 @@ way underroot does:
   deep navy, midnight, lavender, lilac and two golds. Nothing is drawn outside
   it, and nothing is drawn with alpha. The dusk sky, night falling over the
   grass and numbers fading out are all ordered dithers.
+  Phase 2 adds four for the dream: deep violet, rose, aurora green and cloud.
 - **The bodies** are herding's: ellipsoids ray-traced a pose at a time by
   `tracer.lua` (Survive School's 3D method, by way of underroot), then creased
   and inked. The camera is lowered to 22° for a side view. The sheep, the
@@ -71,7 +89,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 
 | file | what |
 | --- | --- |
-| `config.lua` | **every balance number**: costs, rates, multipliers, the golden sheep, Drowsiness, stages, prestige, offline, the narrator's lines |
+| `config.lua` | **every balance number**: costs, rates, multipliers, the golden sheep, Drowsiness, stages, prestige, offline, the narrator's lines, and phase 2's `dream` section |
 | `num.lua` | all amounts of sheep go through it (`add`, `mul`, `format`, geometric costs), so a big-number library can replace plain numbers later |
 | `game.lua` | the rules and the state. Pure Lua, no LÖVE, so the tests and the sim run it in luajit |
 | `main.lua` | the window, the fit, the fixed-timestep loop, input, saving on the way out, the dev flags |
@@ -80,7 +98,11 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `audio.lua`, `synth.lua`, `audiothread.lua` | the sound: playing it, making it, the worker that makes it |
 | `gfx.lua`, `tracer.lua`, `models.lua` | the palette and pixel font, the tracer, the bodies |
 | `shots.lua` | the `--shots` script |
-| `tests/run.lua` | tests and the balance sim |
+| `tests/run.lua` | tests and the balance sims (phase 1 and phase 2) |
+| `lucid/game.lua` | phase 2's rules: auto-wake in batches, the dimensions, the town, the golden choice, time away in closed form. Pure Lua |
+| `lucid/nightmare.lua` | the nightmare: herding's flock, dog and pressure field, the fold, the cloud. Pure Lua |
+| `lucid/ui.lua` | phase 2's screen: auto-wake, the DREAMS and TOWN tabs, dialogs, the way in. `ui.lua` hands over to it |
+| `lucid/scene.lua` | phase 2's field: the violet sky and aurora, sheep turning to cloud, the flow, the nightmare |
 
 ### The state
 
@@ -99,10 +121,29 @@ small helpers) and **json.lua** 0.1.2 (the save file).
                     lightSleeper, heavySleeper },
   done = { insomnia, shortage, wideAwake, coldFeet }, -- restless nights slept through: true
   lastNight, lucidNight,          -- the last night's length; this one was under a second
-  phase,                          -- "nights", or "lucid" (the next phase's placeholder)
+  phase,                          -- "nights", or "lucid": phase 2, for good
+  lucid,                          -- phase 2's state (below), from the moment you go lucid
   taps, buyMode, muted, lastSeen,
+  version,                        -- the save's shape: 2
+}
+
+lucid = {
+  sheep, sheepTotal, dp, dpEarned, runs, -- Num: dream sheep, Dream Points, runs ever
+  runAcc,                         -- the fraction of a run under way
+  legacy,                         -- phase 1's points ever earned, as a multiplier
+  dims = { { amount, bought } x6 },
+  open, grid, level, plots, built,-- the town: land, buildings by cell, their levels
+  autoOff,                        -- auto-buyers paused, by dimension
+  golden, goldenIn, choosing, effects, -- the golden sheep, its gift on offer, gifts running
+  nightmare, nightmareIn,         -- herding, while it's on (not saved: it passes)
+  flow, intro, time,
 }
 ```
+
+Saves are versioned. `Game.deserialize` reads `version` (none is 1) and runs
+`Game.MIGRATE` in order: 1 to 2 leaves a phase-1 save as it was, and gives a
+save that went lucid in the old placeholder its phase-2 state, with the points
+it held. Phase 1's fields stay where they were; phase 2 lives in `lucid`.
 
 The rules step 30 times a second on a fixed timestep, inside LÖVE's frame. The
 screen reads the state every frame and only changes it through `game.lua`'s
@@ -153,6 +194,51 @@ the same happens if the game sat frozen in the background for a while.
   `s.challenge`. Starting one ends the night you're in with nothing kept;
   falling asleep under it sets `done[id]` and its reward for good. A restless
   night never goes lucid.
+
+### Phase 2 (`dream` in config.lua)
+
+- **Auto-wake:** runs a second = `min(cap, sheep a second / sheep a run)`, and
+  half that while a nightmare is on. The cap starts at 1 and is `(1 + S)^1.7`
+  with S the Clock Towers' strength; a run needs 60 dream sheep, divided by
+  `1 + S` of Dream Inns. Runs are settled in batches: each step adds runs a
+  second × dt to `runAcc` and pays for the whole runs in it, so a thousand
+  runs a second cost what one does. Past `flowAt` (30) runs a second the
+  screen stops showing runs and shows the flow.
+- **Points a run:** `dpPerRun * legacy * (1 + 0.5 * S bakeries)`, with
+  `legacy = 1 + log10(1 + phase-1 points ever earned) * 0.5` (about ×3 for a
+  usual player).
+- **Dimensions:** D(k) makes `rate_k` of D(k-1) a second each, D1 makes dream
+  sheep. Price `base * growth^bought` in dream sheep; ×2 every 10 bought. All
+  of them × `(1 + S mills)` × `(1 + sqrt(points earned in phase 2) * 0.01)`.
+  The growths (1.8 up to 10 a copy) beat the ×2 per ten by far, or the chain
+  runs away.
+- **The town:** a building's strength is its level × (1 + 0.25 per neighbour of
+  its district + 0.5 per Plaza beside it). Prices are `dp` and `sheep`, ×growth
+  per copy built or level gained. Every effect is a polynomial in S, never an
+  exponential: prices are exponential, so the effect has to lose to them. Land
+  is `400 * 1.7^plots` and must touch land you have. Moving a building is
+  free.
+- **Time away** is closed form: with what's bought held still the chain is a
+  polynomial in t, the sheep rate meets the cap at a time found by halving,
+  and runs are the rate's integral to there plus the cap after. The points
+  those runs earn lift the dimensions, so the time is cut into 32 pieces, each
+  closed form (a test checks it against stepping: within 5%).
+- **Numbers:** every amount goes through `num.lua`, which grew `pow`, `eq`,
+  `gt`, `lte`, `min`, `floor`, `log10` and geometric prices in Num, so a
+  big-number library can take its place. A greedy player's dream sheep are at
+  1E58 after three hours, so plain numbers hold for now.
+
+From `luajit tests/run.lua lucid 40` (a greedy player bringing 750 DP and
+7,000 earned, catching every golden sheep and herding every nightmare in):
+
+| minute | 1 | 2 | 3 | 4 | 6 | 8 | 10 | 11 | 20 | 35 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| runs a second | 1 | 4.8 | 11.7 | 16.8 | 27 | 52 | 73 | 97 | 133 | 163 |
+
+In the first ten minutes there's something new 29 times, at most 90 seconds
+apart (a dimension, a building, land, the golden sheep, the first nightmare,
+the first level-up), and never more than 81 seconds without something to buy
+in town. The flow comes at 7.3 minutes.
 
 ### Pacing as shipped
 
@@ -249,9 +335,33 @@ their value comes from what they buy.
     Again, the shop opens on it.
 - **Lucid:** every night that fills the bar in under a second ends as *A lucid
   dream*, with GO LUCID instead of DREAM AGAIN. That banks the night's Dream
-  Points and enters the lucid phase (`phase = "lucid"`, saved, and the screen
-  it comes back to). For now it's a placeholder screen, PHASE 2, with a button
-  back to counting; nothing counts while you're in it.
+  Points and goes into phase 2, for good: the night closes, the dream opens
+  violet from the middle, "YOU STOP COUNTING SHEEP. YOU START DREAMING THEM.",
+  a new cadence, and a word on what's changed. The points come along to spend.
+- **Phase 2, lucid dreaming:**
+  - *Auto-wake*, under the field: a bar that fills once a run (1 RUN / 60S),
+    then shimmers, then reads NO NIGHT. ONLY DREAM. Each run you can still see
+    hops the fence with its points over it; after that it's a stream of wool.
+  - *DREAMS*: the six dimensions (Dream Sheep, Cloud Flock, Sky Meadow, Moon
+    Fold, Star Shepherd, Aurora), the next one a dashed `???`. ×1 or MAX. An
+    AUTO pill on each one a town building auto-buys; tap it to pause.
+  - *TOWN*: a 5×5 grid, the middle 3×3 open. Pick a building and tap a plot;
+    tap a building to LEVEL UP or MOVE it (free); tap a dashed `+` to BUY LAND.
+    Speed (gold): Clock Tower, Dream Inn, Pillow Bakery. Automation (lilac):
+    Shepherd's Hut, Wool Workshop, Observatory (two dimensions each), Dream
+    Mill. Parks (green): Plaza, Wishing Fountain, Sheepfold. Lucidity: three
+    buildings to see, not to build yet.
+  - *The lucid golden sheep* crosses the sky: tap it and choose ×7 for 30
+    seconds, Dream Points now (4 minutes' worth), or time ×2 for a minute.
+  - *Nightmares*, every four to seven minutes: the field turns to night grass,
+    the flock scatters, a dark cloud with rose eyes drifts after it, and runs
+    go at half speed. Drag the dog: the sheep flee its pressure field (dithered
+    green round it), and inside the fold they stay. A sheep the cloud sits on
+    too long is lost. All in: up to three minutes of points. Left alone, it
+    passes in a minute.
+  - The sky goes violet with an aurora, Dream Sheep graze the hill and the
+    higher dimensions drift as cloud-sheep. The pad keeps only its chords,
+    music box and shimmer, quieter and a little lower.
 - **Night falling:** the sky dithers from dusk down to navy, stars come out and
   twinkle, the moon rises, and the queue dozes (Zzz). Near the end the screen
   blinks and the eyelids droop. At 100% they close, and the ending is a night
@@ -276,7 +386,11 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- A second prestige layer (lucid dreaming is the gate to one, the content isn't built)
+- Pending for phase 2: dream challenges, the second prestige layer
+  (Lucidity: its three buildings are shown, not built), nightmares that grow,
+  a soft cap on Insomnia, the end of the game
+- `ui.lua` hands over to `lucid/ui.lua` but they don't share widgets yet
+  (cards, dialogs and banners are drawn in each)
 - Restless nights past the four, or doing one again
 - Settings beyond mute and motion (volume, notation, a reset button)
 - Per-generator upgrades, combos, click frenzies

@@ -30,6 +30,8 @@ local RAMP = {
     goldWood = ramp("w", "y", "h", "p"),
     metal = ramp("w", "b", "s", "p"),
     moon = ramp("w", "l", "i", "p"),
+    cloud = ramp("w", "c", "c", "l"),
+    dreamFace = ramp("c", "l", "i", "u"),
 }
 
 local cache = {}
@@ -52,12 +54,14 @@ local function angle(step) return step / M.HEADINGS * TAU end
 
 -- `squash` -2..3 (below 0 stretched in the air, above it flattened landing),
 -- `leg` 0/1 trotting or 2 leaping, `look` "plain", "pj" (striped pajamas and
--- a nightcap) or "gold", `graze` head down, `size` 1 or less.
+-- a nightcap), "gold" or "cloud" (the lucid dream's: wool turning to sky, no
+-- legs, it floats), `graze` head down, `size` 1 or less.
 function M.sheep(h, squash, leg, look, graze, size)
     local hs = M.step(h)
     squash, leg, look, size = squash or 0, leg or 0, look or "plain", size or 1
     return kept(("sheep%d.%d.%d.%s.%s.%s"):format(hs, squash, leg, look, graze and 1 or 0, size), function()
-        local W = look == "gold" and RAMP.gold or RAMP.wool
+        local W = look == "gold" and RAMP.gold or (look == "cloud" and RAMP.cloud or RAMP.wool)
+        local F = look == "cloud" and RAMP.dreamFace or RAMP.face
         -- A cloud of wool: one material, so neighbouring puffs crease into
         -- each other, but each its own part, so a puff in front is inked.
         local function puff(x, y, z, rx, ry, rz, id)
@@ -83,10 +87,10 @@ function M.sheep(h, squash, leg, look, graze, size)
         }
         local hx, hy = 6.4, 6.6
         if graze then hx, hy = 7.2, 2.8 end
-        parts[#parts + 1] = ell(hx, hy, 0, 3.0, 2.7, 2.5, RAMP.face, 2)
-        parts[#parts + 1] = ell(hx + 2.0, hy - 0.8, 0, 1.5, 1.6, 1.6, RAMP.face, 2)
-        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, 2.8, 0.8, 1.0, 1.4, RAMP.face, 3)
-        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, -2.8, 0.8, 1.0, 1.4, RAMP.face, 3)
+        parts[#parts + 1] = ell(hx, hy, 0, 3.0, 2.7, 2.5, F, 2)
+        parts[#parts + 1] = ell(hx + 2.0, hy - 0.8, 0, 1.5, 1.6, 1.6, F, 2)
+        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, 2.8, 0.8, 1.0, 1.4, F, 3)
+        parts[#parts + 1] = ell(hx - 0.6, hy + 1.0, -2.8, 0.8, 1.0, 1.4, F, 3)
         if look == "pj" then
             -- A nightcap tipped back, a cream cuff, a bobble.
             local cap = ell(hx - 1.4, hy + 3.0, 0, 2.2, 1.6, 2.2, RAMP.pj, 16)
@@ -104,8 +108,10 @@ function M.sheep(h, squash, leg, look, graze, size)
             local s = leg == 1 and 0.9 or -0.9
             legs = { { 3.4, 2.4, s, 0 }, { 3.4, -2.4, -s, 0 }, { -3.4, 2.4, -s, 0 }, { -3.4, -2.4, s, 0 } }
         end
-        for _, l in ipairs(legs) do
-            parts[#parts + 1] = ell(l[1] + l[3], 1.2 + l[4], l[2], 1.0, 1.7, 1.0, RAMP.face, 4)
+        if look ~= "cloud" then
+            for _, l in ipairs(legs) do
+                parts[#parts + 1] = ell(l[1] + l[3], 1.2 + l[4], l[2], 1.0, 1.7, 1.0, RAMP.face, 4)
+            end
         end
         local q = squash * 0.07
         return T.place(parts, A.mul(A.scale(size, size, size), A.rotY(-angle(hs)), A.scale(1 + q, 1 - q * 1.6, 1 + q)))

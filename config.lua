@@ -142,6 +142,101 @@ return {
     -- the gate to what comes after counting.
     lucid = { under = 1 },
 
+    -- The save's shape. 1: phase 1 only. 2: the lucid phase's block, `lucid`.
+    saveVersion = 2,
+
+    -- PHASE 2, LUCID DREAMING. The night runs itself (auto-wake), six dream
+    -- dimensions feed each other (Antimatter Dimensions' chain), and Dream
+    -- Points build a town on a grid (a city builder: where a building stands
+    -- matters). Every amount in here is a plain number; lucid/game.lua turns
+    -- them into Num.
+    dream = {
+        -- What you start with: one Dream Sheep, so the first run comes in a
+        -- minute (sheepPerRun / its 1 a second).
+        startDims = { 1, 0, 0, 0, 0, 0 },
+        -- Auto-wake: a run is over once the dimensions have counted this many
+        -- dream sheep, so runs a second = sheep a second / sheepPerRun, and
+        -- never more than runCap (Clock Towers raise it).
+        sheepPerRun = 60,
+        runCap = 1,
+        -- Dream Points a run pays, times the legacy of phase 1:
+        -- 1 + log10(1 + Dream Points ever earned there) * legacyPerDecade.
+        dpPerRun = 1,
+        legacyPerDecade = 0.5,
+        -- Every Dream Point earned in this phase lifts every dimension:
+        -- x(1 + sqrt(earned) * multPerRootDP). The root keeps the loop
+        -- (dimensions, runs, points, dimensions) from running away.
+        multPerRootDP = 0.01,
+        -- Past this many runs a second there is no run to show, only the flow.
+        flowAt = 30,
+        -- Auto-buyers shop this often, spending at most this share of the
+        -- sheep on each dimension, so there's wool left to build with.
+        autoEvery = 0.1,
+        autoShare = 0.5,
+
+        -- The six dimensions: D1 counts dream sheep, each one after makes
+        -- the one before it, `rate` a second each. Price in dream sheep,
+        -- base * growth^bought; every `bonusEvery` bought doubles it.
+        bonusEvery = 10,
+        bonus = 2,
+        dims = {
+            { name = "Dream Sheep", desc = "Counts dream sheep", rate = 1, base = 10, growth = 1.8 },
+            { name = "Cloud Flock", desc = "Makes Dream Sheep", rate = 0.5, base = 120, growth = 2.5 },
+            { name = "Sky Meadow", desc = "Makes Cloud Flocks", rate = 0.3, base = 3000, growth = 3.5 },
+            { name = "Moon Fold", desc = "Makes Sky Meadows", rate = 0.2, base = 1e5, growth = 5 },
+            { name = "Star Shepherd", desc = "Makes Moon Folds", rate = 0.15, base = 5e6, growth = 7 },
+            { name = "Aurora", desc = "Makes Star Shepherds", rate = 0.1, base = 4e8, growth = 10 },
+        },
+
+        -- The town: a grid, the middle `start` by `start` open at first. More
+        -- land costs Dream Points, plotBase * plotGrowth^plots bought, and
+        -- must touch land you have.
+        grid = { w = 5, h = 5, start = 3, plotBase = 400, plotGrowth = 1.7 },
+        -- A building does more for each neighbour (up, down, left, right):
+        -- +sameDistrict for one of its own district, +plaza for a Plaza.
+        adjacency = { sameDistrict = 0.25, plaza = 0.5 },
+        -- Districts: speed (gold), auto (lilac), park (mint), lucid (locked).
+        -- Price: dp and sheep, each times growth^built (levels count as
+        -- built). `max` caps how many. Effects grow with S, the sum of every
+        -- building of a kind's strength (its level, times its neighbours):
+        -- run cap * (1 + S)^capPower, sheep a run / (1 + needDiv * S),
+        -- dimensions * (1 + dimAdd * S), points a run * (1 + dpAdd * S). Never
+        -- an exponential in S: prices are, and the effect has to lose to them.
+        buildings = {
+            { id = "clock", district = "speed", name = "Clock Tower", desc = "Raises the most runs a second", dp = 250, sheep = 400, growth = 3, capPower = 1.7 },
+            { id = "inn", district = "speed", name = "Dream Inn", desc = "Runs start with helpers: fewer sheep a run", dp = 150, sheep = 100, growth = 2.5, needDiv = 1 },
+            { id = "bakery", district = "speed", name = "Pillow Bakery", desc = "+50% Dream Points a run", dp = 600, sheep = 3000, growth = 2.5, dpAdd = 0.5 },
+            { id = "hut", district = "auto", name = "Shepherd's Hut", desc = "Auto-buys Dream Sheep and Cloud Flocks", dp = 500, sheep = 2000, max = 1, autoDims = { 1, 2 } },
+            { id = "workshop", district = "auto", name = "Wool Workshop", desc = "Auto-buys Sky Meadows and Moon Folds", dp = 8000, sheep = 5e5, max = 1, autoDims = { 3, 4 } },
+            { id = "observatory", district = "auto", name = "Observatory", desc = "Auto-buys Star Shepherds and Auroras", dp = 2e5, sheep = 2e9, max = 1, autoDims = { 5, 6 } },
+            { id = "mill", district = "auto", name = "Dream Mill", desc = "Every dimension +100%", dp = 900, sheep = 1e4, growth = 4, dimAdd = 1 },
+            { id = "plaza", district = "park", name = "Plaza", desc = "+50% to every building beside it", dp = 1500, sheep = 2e4, growth = 3 },
+            { id = "fountain", district = "park", name = "Wishing Fountain", desc = "Golden sheep come 50% more often", dp = 2500, sheep = 5e4, growth = 3, max = 2, goldenAdd = 0.5 },
+            { id = "fold", district = "park", name = "Sheepfold", desc = "Nightmares: a wider pen, +50% reward", dp = 2000, sheep = 3e4, growth = 3, max = 3, penAdd = 0.2, rewardAdd = 0.5 },
+            -- Lucidity: seen, not built yet (the next layer).
+            { id = "lighthouse", district = "lucid", name = "Lucid Lighthouse", desc = "Coming: lucidity", locked = true },
+            { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Coming: dream challenges", locked = true },
+            { id = "gate", district = "lucid", name = "Gate of Horn", desc = "Coming: the way out", locked = true },
+        },
+
+        -- The lucid golden sheep: catch it and choose one of three.
+        golden = {
+            firstDelay = 40, minDelay = 60, maxDelay = 110, crossTime = 10,
+            frenzy = { mult = 7, seconds = 30 },    -- dimensions and Dream Points a run x7
+            points = { seconds = 240, least = 25 }, -- Dream Points: this many seconds' worth now
+            warp = { mult = 2, seconds = 60 },      -- time runs twice as fast
+        },
+
+        -- Nightmares: the flock scatters and a dark cloud comes for it. Herd
+        -- it into the fold with the dog (herding's pressure field). Until it
+        -- passes, runs go at half speed. Bring them all in for a reward of
+        -- rewardSeconds of Dream Points, by the share saved.
+        nightmare = {
+            firstDelay = 200, minDelay = 240, maxDelay = 400,
+            seconds = 60, sheep = 8, slow = 0.5, rewardSeconds = 180, least = 40,
+        },
+    },
+
     offline = {
         maxHours = 8,
         minSeconds = 60, -- away for less than this: no summary (the sheep still count)

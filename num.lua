@@ -17,6 +17,29 @@ function Num.lt(a, b) return a < b end
 function Num.max(a, b) return a > b and a or b end
 function Num.sqrt(a) return math.sqrt(a) end
 function Num.toNumber(a) return a end
+-- The rest of what the lucid phase needs, so nothing there touches an amount
+-- with a native operator: powers, comparisons, rounding, logs.
+function Num.pow(a, e) return a ^ e end
+function Num.eq(a, b) return a == b end
+function Num.gt(a, b) return a > b end
+function Num.lte(a, b) return a <= b end
+function Num.min(a, b) return a < b and a or b end
+function Num.floor(a) return floor(a) end
+function Num.log10(a) return a > 0 and log10(a) or -math.huge end
+function Num.isZero(a) return a == 0 end
+function Num.one() return 1 end
+
+-- Geometric prices in Num: n more with k owned, at base * growth^owned each.
+function Num.geoCost(base, growth, owned, n)
+    if n <= 0 then return 0 end
+    return base * growth ^ owned * (growth ^ n - 1) / (growth - 1)
+end
+
+-- How many more a Num budget buys with k owned, at most `cap` (a count).
+function Num.geoMax(base, growth, owned, budget, cap)
+    local n = Num.maxAffordable(base, growth, owned, budget)
+    return cap and math.min(cap, n) or n
+end
 
 -- What n more of a thing cost with k owned: base * g^k * (g^n - 1) / (g - 1).
 function Num.sumGeometric(base, growth, owned, n)
@@ -28,6 +51,7 @@ end
 function Num.maxAffordable(base, growth, owned, budget)
     local first = base * growth ^ owned
     if budget < first then return 0 end
+    if budget == math.huge then return 0 end -- an overflowed budget would never stop counting
     local n = floor(math.log(budget * (growth - 1) / first + 1) / math.log(growth))
     -- Floating point can land one either side of the edge.
     while n > 0 and Num.sumGeometric(base, growth, owned, n) > budget do n = n - 1 end

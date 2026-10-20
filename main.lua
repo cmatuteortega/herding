@@ -18,9 +18,12 @@
 --   love . --fresh      dev: ignores the save and starts a new game
 --   love . --autoplay N dev: a scripted player taps and buys for N game seconds
 --                       (with --speed, quickly), prints how it went, writes a picture
+--   love . --lucid      dev: straight into phase 2, lucid dreaming, with points to
+--                       spend (L does the same mid-game, with any dev flag on)
 
 local G = require "gfx"
 local Game = require "game"
+local Lucid = require "lucid.game"
 local C = require "config"
 local UI = require "ui"
 local Scene = require "scene"
@@ -37,6 +40,20 @@ local vw, vh, zoom, offX, offY = 320, 240, 1, 0, 0
 local speed = 1
 local acc, saveIn, wall = 0, C.save.intervalSeconds, os.time()
 local shots, autoplay
+local dev = false -- any dev flag: the L key jumps to phase 2
+
+-- Dev: phase 2 now, as if a lucid night had just been slept, with the points a
+-- player usually brings (about twenty nights' worth earned, one night's held).
+local function jumpToLucid(s)
+    s.dreams = math.max(s.dreams, 19)
+    s.dreamEarned = math.max(s.dreamEarned, 7000)
+    s.dreamPoints = math.max(s.dreamPoints, 750)
+    s.phase, s.asleep = "lucid", false
+    s.lucid = Lucid.fresh(s)
+    s.dreamPoints = 0
+    UI.setState(s)
+    require("lucid.ui").enter()
+end
 
 local function fit()
     local w, h = love.graphics.getDimensions()
@@ -72,10 +89,11 @@ function love.load(args)
     love.graphics.setLineStyle("rough")
     love.graphics.setPointSize(1)
     love.keyboard.setKeyRepeat(false)
-    local fresh = false
+    local fresh, toLucid = false, false
     for k, a in ipairs(args or {}) do
-        if a == "--speed" then speed = max(1, min(1000, tonumber(args[k + 1]) or 1)) end
-        if a == "--fresh" then fresh = true end
+        if a == "--speed" then speed = max(1, min(1000, tonumber(args[k + 1]) or 1)); dev = true end
+        if a == "--fresh" then fresh = true; dev = true end
+        if a == "--lucid" then toLucid, fresh, dev = true, true, true end
         if a == "--shots" then shots = true end
         if a == "--sounds" then
             local t0 = love.timer.getTime()
@@ -93,15 +111,17 @@ function love.load(args)
         require("shots").run(UI, fit)
         return
     end
-    if autoplay then fresh, UI.noSave = true, true end
+    if autoplay then fresh, UI.noSave, dev = true, true, true end
     local s = not fresh and UI.load() or nil
     UI.setState(s or Game.fresh())
     s = UI.state()
     Audio.setMuted(s.muted)
     Audio.setLullabies(s.owned.lullaby)
-    if s.phase == "lucid" then
-        Audio.setAsleep(true)
+    if toLucid then
+        jumpToLucid(s)
+    elseif s.phase == "lucid" then
         UI.showLucid()
+        UI.away(os.difftime(os.time(), s.lastSeen))
     elseif s.asleep then
         Scene.fx.lids.close = 1
         Audio.setAsleep(true)
@@ -130,11 +150,30 @@ function love.update(dt)
     acc = acc + dt * speed
     local n = 0
     while acc >= STEP and n < 4000 do
-        Game.step(s, STEP)
+        if s.phase == "lucid" and s.lucid then Lucid.step(s.lucid, STEP) else Game.step(s, STEP) end
         acc, n = acc - STEP, n + 1
     end
     if n >= 4000 then acc = 0 end
-    if autoplay then
+    if autoplay and s.phase == "lucid" then
+        -- Phase 2: catch the golden sheep (take the frenzy), buy dimensions
+        -- top down, and build the first thing it can on the first free plot.
+        local L = s.lucid
+        if L.golden and L.golden.t > 2 then Lucid.catchGolden(L) end
+        if L.choosing then Lucid.choose(L, "frenzy") end
+        L.intro = false
+        for k = #L.dims, 1, -1 do if Lucid.dimVisible(L, k) then Lucid.buyDim(L, k, "max", 0.5) end end
+        for _, b in ipairs(Lucid.BUILD) do
+            if Lucid.canBuild(L, b.id) then
+                for c in pairs(L.open) do
+                    if not L.grid[c] and Lucid.build(L, b.id, c) then
+                        autoplay.firsts[#autoplay.firsts + 1] = ("%s@%ds"):format(b.id, L.time)
+                        break
+                    end
+                end
+            end
+        end
+        if L.time >= autoplay.left then autoplay.done = true end
+    elseif autoplay then
         -- Two taps a game second, and the priciest thing it can pay for.
         autoplay.tap = autoplay.tap + dt * speed * 2
         while autoplay.tap >= 1 do
@@ -176,8 +215,15 @@ function love.draw()
     love.graphics.draw(canvas, offX, offY, 0, zoom, zoom)
     if autoplay and autoplay.done then
         local s = UI.state()
-        print(("autoplay: %ds, counted %s, drowsy %d%%, stage %d"):format(s.runTime, require("num").format(s.runTotal),
-            Game.drowsiness(s) * 100, s.stage))
+        local N = require "num"
+        if s.phase == "lucid" then
+            local L = s.lucid
+            print(("autoplay, lucid: %ds, %s runs, %.1f runs/s, %s DP, %s dream sheep, flow %s"):format(L.time,
+                N.format(L.runs), Lucid.runsPerSecond(L), N.format(L.dp), N.format(L.sheep), tostring(L.flow)))
+        else
+            print(("autoplay: %ds, counted %s, drowsy %d%%, stage %d"):format(s.runTime, N.format(s.runTotal),
+                Game.drowsiness(s) * 100, s.stage))
+        end
         print("firsts: " .. table.concat(autoplay.firsts, " "))
         print(("sound: %d sounds and %d of 6 pad layers ready, pad playing: %s"):format(Audio.status()))
         canvas:newImageData():encode("png", "autoplay.png")
@@ -216,6 +262,8 @@ function love.keypressed(key)
         fit()
     elseif key == "escape" and not MOBILE then
         love.event.quit()
+    elseif key == "l" and dev and UI.state() and UI.state().phase ~= "lucid" then
+        jumpToLucid(UI.state())
     else
         UI.key(key)
     end
