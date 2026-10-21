@@ -123,6 +123,9 @@ end
 -- down), then the building that pays best, on the cell where it does most,
 -- and land when the town is full. It catches every golden sheep (frenzy, then
 -- points, then warp, in turn) and herds every nightmare in, in 35 seconds.
+-- Every two minutes it climbs with the bouncing sheep for half a minute (and
+-- all the time under Thin Air), grows the cheapest root it can when that's
+-- under a tenth of its points, and opens the Gate of Horn as soon as it can.
 -- It prints each new thing as it comes, and runs a second minute by minute.
 local function lucidSim(minutes, dp, earned)
     local Lucid = require "lucid.game"
@@ -145,6 +148,7 @@ local function lucidSim(minutes, dp, earned)
     local gifts, g = { "frenzy", "points", "warp" }, 0
     local order = { "inn", "clock", "mill", "hut", "bakery", "plaza", "fold", "workshop", "fountain", "observatory", "mirror" }
     local started = 0 -- when the dream challenge under way began
+    local climbFrom = 0 -- when the climb under way began
     local tried = {} -- when each was last given up
     local per = {}
     print(("phase 2, a greedy player bringing %d DP, legacy x%.2f:"):format(dp, L.legacy))
@@ -157,6 +161,11 @@ local function lucidSim(minutes, dp, earned)
             if e.type == "flow" and not flowAt then flowAt = t; new("FLOW") end
             if e.type == "goldenAppears" and not per.golden then per.golden = true; new("golden") end
             if e.type == "nightmare" and not per.nightmare then per.nightmare = true; new("nightmare") end
+            if e.type == "fell" and e.record and e.height > 100 and not per["best" .. math.floor(e.height / 200)] then
+                per["best" .. math.floor(e.height / 200)] = true; new(("best%d"):format(e.height))
+            end
+            if e.type == "grew" and e.rank == 1 then new("root:" .. e.id) end
+            if e.type == "gate" then new("GATE") end
         end
         Lucid.events = {}
         -- Once the Mirror Lake stands, each dream challenge in turn: given up
@@ -168,18 +177,28 @@ local function lucidSim(minutes, dp, earned)
         end
         if Lucid.mirror(L) and not L.challenge then
             for _, c in ipairs(Lucid.CHALLENGES) do
-                if not Lucid.met(L, c.id) and t - (tried[c.id] or -1e9) > 600 then
-                    Lucid.startChallenge(L, c.id); started = t
+                if not Lucid.met(L, c.id) and t - (tried[c.id] or -1e9) > 600 and Lucid.startChallenge(L, c.id) then
+                    started = t
                     break
                 end
             end
         end
-        if L.golden and L.golden.t > 1.5 then
-            Lucid.catchGolden(L)
+        -- The bouncing sheep.
+        local B = L.bounce
+        if not B.on and not L.nightmare and not os.getenv("NOCLIMB") and (t % 120 < dt or L.challenge == "skyHigh") then
+            Lucid.hold(L, B.x); climbFrom = t
+        end
+        if B.on then
+            Lucid.steer(L, require("lucid.bounce").bot(B))
+            if t - climbFrom > 30 and L.challenge ~= "skyHigh" then require("lucid.bounce").stop(B) end
+        end
+        if L.golden and L.golden.t > 1.5 then Lucid.catchGolden(L) end
+        if L.choosing then -- a golden sheep caught, or a moon
             g = g % 3 + 1
             Lucid.choose(L, gifts[g])
         end
-        if L.nightmare and L.nightmare.t > 35 then
+        -- (Nightmare Season's come thick and fast: herded in ten seconds, or lost.)
+        if L.nightmare and L.nightmare.t > (L.challenge == "season" and 10 or 35) then
             for _, sh in ipairs(L.nightmare.sheep) do sh.x, sh.y = L.nightmare.pen.x, L.nightmare.pen.y end
         end
         if t >= nextBuy then
@@ -252,7 +271,22 @@ local function lucidSim(minutes, dp, earned)
                     end
                 end
             end
+            -- The roots: the cheapest one open, if it's under a third of the points.
+            local rb, rp
+            for _, r in ipairs(Lucid.ROOTS) do
+                if Lucid.rootState(L, r.id) == "open" and (r.kind == "up" or r.kind == "gate") then
+                    local pr = Lucid.rootPrice(L, r.id)
+                    if r.kind == "gate" then rb, rp = r.id, -1 break end
+                    if not rp or pr < rp then rb, rp = r.id, pr end
+                end
+            end
+            if rb and (rp < 0 or rp <= L.dp / (os.getenv("NOROOTS") and 1e99 or 10)) then Lucid.grow(L, rb) end
+            for _, e in ipairs(Lucid.events) do
+                if e.type == "grew" and e.rank == 1 then new("root:" .. e.id) end
+                if e.type == "gate" then new("GATE") end
+            end
             Lucid.events = {}
+            if L.gate then break end
         end
         if math.abs(t / 60 - math.floor(t / 60 + 0.5)) < dt / 120 and t > 1 then
             if os.getenv("DIMS") then
@@ -268,6 +302,11 @@ local function lucidSim(minutes, dp, earned)
         end
     end
     print("  new: " .. table.concat(news, " "))
+    local grown, all = Lucid.rootsGrown(L)
+    local met = {}
+    for _, c in ipairs(Lucid.CHALLENGES) do if Lucid.met(L, c.id) then met[#met + 1] = c.id end end
+    print(("  roots %d/%d, best height %d, challenges met: %s; the gate %s"):format(grown, all, L.best,
+        table.concat(met, " "), L.gate and ("open at %.1f min"):format(t / 60) or "shut"))
     local most = 0
     for _, gp in ipairs(gaps) do most = math.max(most, gp) end
     print(("  first 10 min: %d new things, longest wait %ds, longest without buying in the town %ds; flow at %s"):format(
@@ -679,6 +718,8 @@ test("dream challenges", function()
     L.dp, L.sheep = 1e12, 1e40
     assert(not Lucid.startChallenge(L, "onlyOne"), "not before the Mirror Lake")
     assert(Lucid.build(L, "mirror", Lucid.cell(3, 3)))
+    assert(not Lucid.startChallenge(L, "onlyOne"), "not before the one above it in the roots")
+    L.done.season, L.done.skyHigh = true, true -- the ones above Only One and Stopped Clocks
     assert(Lucid.build(L, "clock", Lucid.cell(2, 3)))
     for _ = 1, 15 do assert(Lucid.upgrade(L, Lucid.cell(2, 3))) end -- cap enough for 100 runs a second
     Lucid.buyDim(L, 1, 20)
@@ -689,8 +730,8 @@ test("dream challenges", function()
     L.sheep = 1e20
     eq(Lucid.buyDim(L, 1, "max"), 1 - D.startDims[1]) -- one at most
     eq(Lucid.buyDim(L, 2, 10), 1)
-    -- Met: 1e15 dream sheep counted under the rule.
-    eq(select(2, Lucid.progress(L)), 15)
+    -- Met: 1e18 dream sheep counted under the rule.
+    eq(select(2, Lucid.progress(L)), 18)
     L.dims[1].amount = 1e20
     Lucid.step(L, 1 / 30, function() return 0.5 end)
     assert(Lucid.met(L, "onlyOne") and not L.challenge)
@@ -706,6 +747,7 @@ test("dream challenges", function()
     close(Lucid.cap(L), D.runCap * (1 + S) ^ (Lucid.BY.clock.capPower + 0.15))
     -- Empty Squares: no neighbour helps; met, districts count double.
     L.sheep = 1e20 -- starting Stopped Clocks woke the flock
+    L.done.falling = true -- the one above it
     assert(Lucid.build(L, "plaza", Lucid.cell(2, 2)))
     local c = Lucid.cell(2, 3)
     assert(Lucid.startChallenge(L, "emptySquares"))
@@ -717,6 +759,7 @@ test("dream challenges", function()
     assert(Lucid.openPlot(L, Lucid.cell(1, 3)) and Lucid.build(L, "inn", Lucid.cell(1, 3)))
     eq(Lucid.strength(L, c), 16 * (1.5 + 0.5))
     -- Nightmare Season: one after another; three brought home.
+    L.done.season = nil
     assert(Lucid.startChallenge(L, "season"))
     eq(L.nightmareIn, Lucid.CH.season.nightmareEvery)
     for _ = 1, 3 do
@@ -733,6 +776,150 @@ test("dream challenges", function()
     L.challenge = "stoppedClocks"
     local back = Lucid.deserialize(require("lib.json").decode(require("lib.json").encode(Lucid.serialize(L))))
     eq(back.challenge, "stoppedClocks"); assert(back.done.season and back.done.onlyOne and not back.done.bogus)
+end)
+test("the roots: ranks, what they do, the gate", function()
+    local L = Lucid.fresh()
+    L.dp = 1e6
+    eq(Lucid.rootState(L, "dreamer"), "full")
+    eq(Lucid.rootState(L, "starbag"), "shut") -- grows from Springy Wool
+    assert(not Lucid.grow(L, "starbag"))
+    local p = Lucid.rootPrice(L, "spring")
+    assert(Lucid.grow(L, "spring"))
+    eq(L.dp, 1e6 - p); eq(Lucid.rank(L, "spring"), 1)
+    eq(Lucid.rootPrice(L, "spring"), p * Lucid.ROOT.spring.growth)
+    close(Lucid.bounceOpts(L).jump, 1 + Lucid.ROOT.spring.jumpAdd)
+    eq(Lucid.rootState(L, "starbag"), "open")
+    -- Up to its most, then full.
+    for _ = 2, Lucid.ROOT.spring.max do assert(Lucid.grow(L, "spring")) end
+    eq(Lucid.rootState(L, "spring"), "full"); assert(not Lucid.grow(L, "spring"))
+    -- The Architect: sleepers cheaper. The Surveyor: land. The Market: wool.
+    local cost, land, wool = Lucid.dimCost(L, 1), Lucid.plotPrice(L), Lucid.price(L, "clock").sheep
+    assert(Lucid.grow(L, "architect")); close(Lucid.dimCost(L, 1), cost / 1.5)
+    assert(Lucid.grow(L, "surveyor")); close(Lucid.plotPrice(L), land * 0.8)
+    assert(Lucid.grow(L, "market")); close(Lucid.price(L, "clock").sheep, wool * 0.5)
+    -- Too poor: poor.
+    L.dp = 0
+    eq(Lucid.rootState(L, "well"), "poor")
+    -- The taproot: shut until the lake, a challenge open once the one above it is mastered.
+    eq(Lucid.rootState(L, "lake"), "shut"); eq(Lucid.rootState(L, "c.season"), "shut")
+    L.built.mirror = 1
+    eq(Lucid.rootState(L, "lake"), "full"); eq(Lucid.rootState(L, "c.season"), "open")
+    eq(Lucid.rootState(L, "c.stoppedClocks"), "shut")
+    assert(not Lucid.grow(L, "c.season"), "a challenge is started, not grown")
+    for _, c in ipairs(Lucid.CHALLENGES) do L.done[c.id] = true end
+    L.dp = 1e12
+    eq(Lucid.rootState(L, "gate"), "open")
+    Lucid.events = {}
+    assert(Lucid.grow(L, "gate") and L.gate)
+    eq(Lucid.events[#Lucid.events].type, "gate")
+    eq(Lucid.rootState(L, "gate"), "full")
+    -- Kept in the save, through JSON.
+    local json = require "lib.json"
+    local back = Lucid.deserialize(json.decode(json.encode(Lucid.serialize(L))))
+    eq(back.roots.spring, Lucid.ROOT.spring.max); eq(back.roots.architect, 1); assert(back.gate)
+    eq(Lucid.deserialize({ roots = { spring = 99, nope = 2, gate = 1 } }).roots.spring, Lucid.ROOT.spring.max)
+    eq(Lucid.deserialize({ roots = { gate = 1 } }).roots.gate, nil)
+end)
+test("the bouncing sheep: hops, climbs, falls, pays", function()
+    local Bounce = require "lucid.bounce"
+    local seed = 3
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    -- Left alone, it hops on its cloud and never climbs.
+    local B = Bounce.new()
+    for _ = 1, 30 * 5 do Bounce.step(B, 1 / 30, rand) end
+    assert(not B.on and B.y >= 0 and B.y <= Bounce.apex() + 1)
+    -- Held, it climbs; the bot steering, it gets well up.
+    Bounce.press(B, 50)
+    local best, t = 0, 0
+    while B.on and t < 60 do
+        Bounce.move(B, Bounce.bot(B))
+        Bounce.step(B, 1 / 30, rand)
+        best, t = math.max(best, B.height), t + 1 / 30
+    end
+    assert(best > 150, "climbed " .. best)
+    -- Let go and steered nowhere, it falls off the bottom and the climb ends.
+    B = Bounce.new()
+    Bounce.press(B, 50)
+    Bounce.release(B)
+    local fell
+    for _ = 1, 30 * 30 do
+        Bounce.step(B, 1 / 30, rand)
+        for _, e in ipairs(B.events) do if e.type == "fell" then fell = e end end
+        B.events = {}
+        if fell then break end
+    end
+    assert(fell and not B.on, "it fell")
+    -- In the rules: a star pays, a climb's height is the best, the best lifts every layer.
+    local L = Lucid.fresh()
+    L.intro, L.goldenIn, L.nightmareIn = false, 1e9, 1e9
+    local base = Lucid.dimMult(L)
+    Lucid.hold(L, 50)
+    local stars = 0
+    for _ = 1, 30 * 40 do
+        if L.bounce.on then Lucid.steer(L, Bounce.bot(L.bounce)) end
+        Lucid.step(L, 1 / 30, rand)
+        for _, e in ipairs(Lucid.events) do if e.type == "star" then stars = stars + 1 end end
+        Lucid.events = {}
+        if not L.bounce.on then break end
+        if L.bounce.height > 120 then Lucid.hold(L, nil); L.bounce.aim = 0 end
+    end
+    assert(L.best > 100, "best " .. L.best)
+    assert(stars > 0 and L.dp >= stars * D.bounce.starLeast, "stars paid")
+    close(Lucid.recordMult(L), 1 + D.bounce.recordPer * L.best / 100)
+    assert(Lucid.dimMult(L) > base)
+    eq(Lucid.deserialize(Lucid.serialize(L)).best, L.best)
+    -- A nightmare ends the climb.
+    Lucid.hold(L, 50)
+    L.nightmareIn = 0.001
+    Lucid.step(L, 1 / 30, rand)
+    assert(L.nightmare and not L.bounce.on)
+    -- Thin Air: half-width clouds; its goal is a climb.
+    L.nightmare = nil
+    L.built.mirror = 1
+    L.done.season, L.done.stoppedClocks = true, true
+    assert(Lucid.startChallenge(L, "skyHigh"))
+    close(Lucid.bounceOpts(L).width, 0.5)
+    L.climbed = 300
+    Lucid.step(L, 1 / 30, rand)
+    assert(Lucid.met(L, "skyHigh"))
+end)
+test("shallow sleep and falling", function()
+    local L = Lucid.fresh()
+    L.intro, L.goldenIn, L.nightmareIn = false, 1e9, 1e9
+    L.dp, L.sheep = 1e9, 1e30
+    assert(Lucid.build(L, "hut", Lucid.cell(2, 3)))
+    assert(Lucid.build(L, "mirror", Lucid.cell(3, 3)))
+    for _, id in ipairs({ "season", "stoppedClocks", "skyHigh", "onlyOne" }) do L.done[id] = true end
+    assert(Lucid.startChallenge(L, "shallow"))
+    L.sheep = 1e30
+    for k = 1, 3 do assert(Lucid.buyDim(L, k, 1) == 1) end
+    eq(Lucid.buyDim(L, 4, 1), 0) -- the fourth layer doesn't dream
+    eq(Lucid.dimRate(L, 4), 0)
+    L.done.shallow, L.challenge = true, nil
+    close(Lucid.dimRate(L, 1) / Lucid.dimMult(L), D.dims[1].rate * 3)
+    -- Falling: no auto-buyers while it lasts; mastered, every layer x2.
+    assert(Lucid.autoOn(L, 1))
+    assert(Lucid.startChallenge(L, "falling"))
+    assert(not Lucid.autoOn(L, 1))
+    Lucid.giveUp(L)
+    local m = Lucid.dimMult(L)
+    L.done.falling = true
+    close(Lucid.dimMult(L), m * 2)
+end)
+test("the void: through the gate and back", function()
+    local s = Game.fresh()
+    s.phase, s.lucid = "lucid", Lucid.fresh(s)
+    assert(not Game.goVoid(s), "not before the gate")
+    s.lucid.gate = true
+    assert(Game.goVoid(s)); eq(s.phase, "void")
+    local json = require "lib.json"
+    local back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
+    eq(back.phase, "void"); assert(back.lucid and back.lucid.gate)
+    assert(Game.backToDream(back)); eq(back.phase, "lucid")
+    eq(Game.deserialize({ version = 3, phase = "void" }).phase, "nights") -- no dream to have left
+    -- A version 2 save comes in as it was.
+    back = Game.deserialize({ version = 2, phase = "lucid", lucid = { dp = 5 } })
+    eq(back.phase, "lucid"); eq(back.lucid.dp, 5); eq(back.lucid.best, 0); eq(back.version, C.saveVersion)
 end)
 test("lucid saves", function()
     local L = Lucid.fresh({ dreamPoints = 12, dreamEarned = 100 })

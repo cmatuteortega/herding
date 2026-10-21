@@ -1,10 +1,13 @@
 -- The lucid dream's field, drawn into its own low-res canvas like scene.lua:
--- a violet sky with an aurora, the moon, and the flock turning to cloud the
--- higher the dimension (Dream Sheep graze the hill, Auroras drift up top).
--- Runs hop the fence one by one until there are too many to see, and then
--- they're one stream: the flow. A golden sheep crosses the sky. In a
--- nightmare the field becomes herding's: the dog, its pressure field, the
--- flock, the fold, and the cloud.
+-- a violet sky with an aurora, the moon, the town floating in the sky (each
+-- building rising on its own cloud as it's built, where its plot is), and
+-- the flock turning to cloud the deeper the layer (the Hill's sheep graze,
+-- Auroras drift up top). Runs hop the fence one by one until there are too
+-- many to see, and then they're one stream: the flow. A golden sheep crosses
+-- the sky. In front of it all, the bouncing sheep: on its cloud at the
+-- bottom, or climbing, with the sky sliding down behind it. In a nightmare
+-- the field becomes herding's: the dog, its pressure field, the flock, the
+-- fold, and the cloud.
 --
 -- It only reads the rules' state; what only looks lives in `fx`.
 
@@ -13,6 +16,7 @@ local Models = require "models"
 local N = require "num"
 local C = require "config"
 local Nightmare = require "lucid.nightmare"
+local Bounce = require "lucid.bounce"
 
 local floor, min, max, sin, cos, sqrt, atan2 = math.floor, math.min, math.max, math.sin, math.cos, math.sqrt, math.atan2
 local TAU = 2 * math.pi
@@ -27,7 +31,7 @@ local t = 0
 local rng = love.math.newRandomGenerator(7)
 local function rand() return rng:random() end
 
-local fx = { hoppers = {}, floats = {}, stream = {}, puffs = {}, flash = 0 }
+local fx = { hoppers = {}, floats = {}, stream = {}, puffs = {}, flash = 0, rise = {}, ring = {} }
 LScene.fx = fx
 
 local function horizon() return floor(ch * 0.62) end
@@ -48,6 +52,7 @@ end
 
 function LScene.reset()
     fx.hoppers, fx.floats, fx.stream, fx.puffs, fx.flash = {}, {}, {}, {}, 0
+    fx.rise, fx.ring = {}, {}
 end
 
 local function blit(sp, x, y)
@@ -104,6 +109,41 @@ end
 
 function LScene.flash() fx.flash = 1 end
 
+-- A building put down on `cell`: it rises on its cloud. Levelled up: a ring.
+function LScene.built(cell) fx.rise[cell] = 0 end
+function LScene.upgraded(cell) fx.ring[cell] = 0 end
+
+--- the bouncing sheep's field -------------------------------------------------------------
+
+-- Field units to pixels: one scale both ways, the width of the field.
+local function bk() return cw / Bounce.CONFIG.w end
+local function groundY() return ch - 6 end
+
+-- Where a height is on the canvas, with the view's bottom at `cam`.
+local function heightY(B, y) return groundY() - (y - B.cam) * bk() end
+
+-- A canvas x to field units across, for the finger.
+function LScene.toBounce(x) return x / bk() end
+
+-- Where the bouncing sheep is on the canvas.
+function LScene.bounceAt(L) return floor(L.bounce.x * bk()), floor(heightY(L.bounce, L.bounce.y)) end
+
+-- A puff of cloud, `w` pixels wide, its middle at (x, y): a row of small
+-- bumps on a flat underside, the underside a shade down.
+local function cloud(x, y, w, top, under)
+    local r = math.max(2, floor(w / 8))
+    local n = math.max(1, floor((w - 2 * r) / r))
+    for pass = 1, 2 do
+        for i = 0, n do
+            local cx = x - w / 2 + r + i * (w - 2 * r) / n
+            local rad = r + ((i % 2 == 1 and i < n) and 1 or 0) - ((i == 0 or i == n) and 1 or 0)
+            if pass == 1 then G.disc(under, cx, y + 1, rad) else G.disc(top, cx, y, rad) end
+        end
+    end
+    G.rect(under, floor(x - w / 2 + r * 0.6), y + r - 1, floor(w - r * 1.2), 2)
+end
+LScene.cloud = cloud
+
 -- Where the golden sheep is, `g.t` into its crossing.
 local function goldenPos(g)
     local p = g.t / D.golden.crossTime
@@ -159,6 +199,15 @@ function LScene.update(dt, L)
         p.t = p.t + dt
         if p.t > 0.6 then table.remove(fx.puffs, i) end
     end
+    for c, v in pairs(fx.rise) do
+        fx.rise[c] = v + dt
+        if fx.rise[c] > 1.4 then fx.rise[c] = nil end
+    end
+    for c, v in pairs(fx.ring) do
+        fx.ring[c] = v + dt
+        if fx.ring[c] > 0.6 then fx.ring[c] = nil end
+    end
+    L.bounce.viewH = groundY() / bk()
     LScene.fenceX = fxX
 end
 
@@ -184,8 +233,8 @@ local function aurora()
     G.points("r", pts.r)
 end
 
--- The flock, by dimension: the first two on the hill, the rest as cloud,
--- higher and smaller the higher the dimension.
+-- The flock, by layer: the first two on the hill, the rest as cloud,
+-- higher and smaller the deeper the layer.
 local function flock(L)
     local hz = horizon()
     for k = 1, #L.dims do
@@ -210,17 +259,132 @@ local function flock(L)
     end
 end
 
+-- The bouncing sheep, in front: its clouds, the stars and moons over them,
+-- and the sheep, squashed landing and stretched rising.
+local function drawBounce(L)
+    local B = L.bounce
+    local k = bk()
+    for _, c in ipairs(B.clouds) do
+        if not c.broken then
+            local x, y = c.x * k, heightY(B, c.y) + 2
+            if y > -6 and y < ch + 6 then
+                if c.kind == "spring" then cloud(x, y, c.w * k, "y", "h")
+                elseif c.kind == "dark" then
+                    cloud(x, y, c.w * k, "p", "o")
+                    G.rect("r", x - 3, y - 1, 1, 1); G.rect("r", x + 2, y - 1, 1, 1)
+                else cloud(x, y, c.w * k, "c", "l") end
+            end
+        end
+    end
+    for _, it in ipairs(B.items) do
+        local x, y = floor(it.x * k), floor(heightY(B, it.y))
+        if it.kind == "moon" then
+            blit(Models.moon(3), x, y)
+        else
+            local on = LScene.reduced or floor(t * 6 + it.x) % 3 ~= 0
+            G.rect("y", x, y - 2, 1, 5); G.rect("y", x - 2, y, 5, 1)
+            G.rect(on and "w" or "y", x, y, 1, 1)
+        end
+    end
+    -- The ground cloud, under the sheep while the view is down by it.
+    local gy = heightY(B, 0) + 2
+    if gy < ch + 6 then cloud(B.x * k, gy, Bounce.CONFIG.cloudW * k, "c", "l") end
+    local sq = LScene.reduced and 0 or (B.squash > 0.5 and 1 or (B.vy > 25 and -1 or 0))
+    local h = B.vx < -3 and math.pi - 0.25 or 0.25
+    local leg = B.vy > 0 and 2 or (B.squash > 0 and 0 or 2)
+    blit(Models.sheep(h, sq, leg, "plain", false, 1), B.x * k, heightY(B, B.y) + 1)
+end
+
+-- Where a plot of the town floats in the sky: its column across, its row
+-- down the sky over the hill, every other column a little lower.
+local function plotAt(c)
+    local GW, GH = D.grid.w, D.grid.h
+    local gx, gy = (c - 1) % GW + 1, floor((c - 1) / GW) + 1
+    local top, bottom = floor(ch * 0.14), horizon() - 12
+    local x = floor(cw * (gx - 0.5) / GW)
+    local y = floor(top + (gy - 1) * (bottom - top) / (GH - 1) + (gx % 2) * 3)
+    local bob = LScene.reduced and 0 or floor(sin(t * 0.9 + c * 1.7) * 1.5 + 0.5)
+    return x, y + bob
+end
+
+-- The town, in the sky: an empty plot is a wisp of cloud, a building stands
+-- on its own puff, rising out of it when new, its levels as gold pips.
+local function skyTown(L)
+    for c in pairs(L.open) do
+        local x, y = plotAt(c)
+        local id = L.grid[c]
+        if not id then
+            local pts = {}
+            for dx = -5, 5 do if G.dither(x + dx, y, 0.4) then G.plot(pts, x + dx, y) end end
+            G.points("i", pts)
+        else
+            cloud(x, y + 1, 16, "c", "l")
+            local rise = fx.rise[c]
+            local art = LScene.ART[id]
+            if art then
+                local h = #art
+                local shown = rise and min(h, floor(h * rise / 1.0)) or h
+                if shown > 0 then
+                    local part = {}
+                    for i = h - shown + 1, h do part[#part + 1] = art[i] end
+                    G.art(part, x - floor(#art[1] / 2), y - shown)
+                end
+                if rise and shown < h and floor(t * 12) % 2 == 0 then
+                    G.rect("w", x - 4 + floor(rise * 37) % 9, y - shown - 1, 1, 1)
+                    G.rect("y", x + 3 - floor(rise * 23) % 7, y - shown - 2, 1, 1)
+                end
+            end
+            local lv = L.level[c] or 1
+            for i = 2, min(lv, 6) do G.rect("y", x - 6 + (i - 2) * 2, y + 4, 1, 1) end
+            local ring = fx.ring[c]
+            if ring and not LScene.reduced then
+                local r = floor(4 + ring * 18)
+                local pts = {}
+                for a = 0, 23 do G.plot(pts, x + cos(a / 24 * TAU) * r, y - 5 + sin(a / 24 * TAU) * r * 0.7) end
+                G.points("y", pts)
+            end
+        end
+    end
+end
+
+-- How far the field has slid down behind a climb: the sky comes down past
+-- the hill as the sheep goes up, slower than the sheep.
+local function slide(L)
+    local B = L.bounce
+    if not B or B.cam <= 0 then return 0 end
+    return floor(min(ch * 1.2, B.cam * bk() * 0.5))
+end
+
 local function drawField(L)
     if not bg then bg = backdrop() end
+    local off = slide(L)
+    -- Stars, twinkling, where they were: the sky behind everything.
+    love.graphics.push()
+    love.graphics.translate(0, off)
     love.graphics.setColor(1, 1, 1)
     love.graphics.draw(bg, 0, 0)
-    -- Stars, twinkling.
+    love.graphics.pop()
+    if off > 0 then
+        G.rect("n", 0, 0, cw, off)
+        -- High up, the dark thins out to nothing: the void, far off.
+        local deep = min(1, L.bounce.cam / 1500)
+        if deep > 0.05 then
+            local pts = {}
+            for y = 0, off - 1 do
+                for x = (y * 3) % 5, cw - 1, 5 do if G.dither(x, y, deep * 0.6) then G.plot(pts, x, y) end end
+            end
+            G.points("o", pts)
+        end
+    end
     for _, st in ipairs(stars) do
         local tw = LScene.reduced and 1 or sin(t * 1.3 + st.ph)
         if tw > -0.7 then G.rect(tw > 0.6 and "w" or "l", st.x, st.y, 1, 1) end
     end
+    love.graphics.push()
+    love.graphics.translate(0, off)
     aurora()
     blit(Models.moon(9), cw - max(18, cw * 0.15), floor(ch * 0.3))
+    skyTown(L)
     flock(L)
     local hz = horizon()
     blit(Models.fence(1, 0), fenceX(), hz + 12)
@@ -239,6 +403,7 @@ local function drawField(L)
         local lift = d > -1 and d < 1 and (1 - d * d) * 16 or 0
         blit(Models.sheep(0, lift > 2 and -1 or 0, lift > 2 and 2 or (floor(h.x / 6) % 2), h.look), h.x, hz + 10 - lift)
     end
+    love.graphics.pop()
     -- The golden sheep, sparkling.
     if L.golden then
         local gx, gy = goldenPos(L.golden)
@@ -247,6 +412,7 @@ local function drawField(L)
             G.rect("y", gx - 9, gy - 12, 1, 1); G.rect("w", gx + 8, gy - 3, 1, 1); G.rect("y", gx + 2, gy - 15, 1, 1)
         end
     end
+    drawBounce(L)
 end
 
 -- herding's field, for a nightmare.
@@ -383,7 +549,7 @@ function LScene.building(id, x, y, dim)
     G.art(rows, floor(x - w / 2), floor(y - h / 2))
 end
 
--- A dimension's picture: sheep on the ground for the first two, then cloud.
+-- A layer's picture: sheep on the ground for the first two, then cloud.
 function LScene.dimension(k, x, y)
     if k == 1 then blit(Models.sheep(0.35, 0, 0, "plain", false, 0.7), x, y + 7)
     elseif k == 2 then blit(Models.sheep(0.35, 0, 0, "cloud", false, 0.7), x, y + 7)

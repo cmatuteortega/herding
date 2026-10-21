@@ -90,7 +90,8 @@ function Game.fresh()
         done = {}, -- restless nights slept through: id = true
         lastNight = 0, -- how long the last night lasted, in seconds
         -- "nights" (counting sheep), or "lucid": past the first night
-        -- shorter than C.lucid.under, phase 2 (lucid/game.lua), for good.
+        -- shorter than C.lucid.under, phase 2 (lucid/game.lua), for good;
+        -- or "void": past the Gate of Horn, phase 3.
         phase = "nights",
         lucid = nil, -- phase 2's state, from the moment you go lucid
         allTime = N.zero(),
@@ -515,6 +516,21 @@ function Game.goLucid(s)
     return gained
 end
 
+-- Through the Gate of Horn: out of the dream, into the void (phase 3), for
+-- good. The lucid state stays in the save as it was, and plays no more.
+function Game.goVoid(s)
+    if s.phase ~= "lucid" or not (s.lucid and s.lucid.gate) then return false end
+    s.phase = "void"
+    return true
+end
+
+-- Back through the gate from the void: the dream again, as it was.
+function Game.backToDream(s)
+    if s.phase ~= "void" then return false end
+    s.phase = "lucid"
+    return true
+end
+
 function Game.currentLine(s)
     local d = Game.drowsiness(s)
     local text = C.lines[1].text
@@ -549,6 +565,9 @@ local MIGRATE = {
         if o.phase == "lucid" and type(o.lucid) ~= "table" then o.lucid = { fromV1 = true } end
         o.version = 2
     end,
+    -- 2 -> 3: the roots, the bouncing sheep and the void. Nothing to move:
+    -- they all start fresh in the lucid block.
+    [2] = function(o) o.version = 3 end,
 }
 Game.MIGRATE = MIGRATE
 
@@ -583,8 +602,9 @@ function Game.deserialize(o)
     s.dreamEarned = max(s.dreamEarned, s.dreamPoints)
     s.sheep, s.runTotal, s.allTime = N.deserialize(o.sheep), N.deserialize(o.runTotal), N.deserialize(o.allTime)
     if s.buyMode ~= "1" and s.buyMode ~= "10" and s.buyMode ~= "max" then s.buyMode = "1" end
-    if s.phase ~= "lucid" then s.phase = "nights" end
-    if s.phase == "lucid" then
+    if s.phase ~= "lucid" and s.phase ~= "void" then s.phase = "nights" end
+    if s.phase == "void" and type(o.lucid) ~= "table" then s.phase = "nights" end
+    if s.phase == "lucid" or s.phase == "void" then
         -- From the placeholder (v1): the points held come along, the same as going lucid.
         if type(o.lucid) == "table" and o.lucid.fromV1 then
             s.lucid = Lucid.fresh(s)

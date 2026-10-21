@@ -122,12 +122,43 @@ local MOMENTS = {
         L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
         return s
     end, 0, "challenge-ask" },
+    { "21-roots", function()
+        local s = lucidAt(8, true)
+        local L = s.lucid
+        L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
+        L.roots = { spring = 3, starbag = 1, architect = 2, well = 1, surveyor = 1, totem = 1 }
+        L.done.season, L.done.stoppedClocks = true, true
+        L.dp = 2e4
+        local Roots = require "lucid.roots"
+        Roots.grew.well = -0.3 -- its thread still growing down
+        return s
+    end, 0, "roots" },
+    { "22-climb", function()
+        local s = lucidAt(5, false)
+        s.lucid.best = 340
+        return s
+    end, 0, "climb" },
+    { "23-gate", function()
+        local s = lucidAt(8, true)
+        s.lucid.gate = true
+        return s
+    end, 0, "gate" },
+    { "24-void", function()
+        local s = lucidAt(8, true)
+        s.lucid.gate = true
+        Game.goVoid(s)
+        return s
+    end, 0, "void" },
     { "18-golden-choice", function()
         local s = lucidAt(5, false)
         s.lucid.choosing = true
         return s
     end, 0, "lucid" },
 }
+
+-- Seeded dice, for the climb: the same clouds every time.
+local seed = 5
+local function dice() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
 
 function Shots.run(UI, fit)
     UI.noSave = true
@@ -144,17 +175,27 @@ function Shots.run(UI, fit)
             if m[4] == "away" then UI.away(os.difftime(os.time(), s.lastSeen)) end
             if m[4] == "enter" then LUI.setState(s); LUI.enter() end
             if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
+            if s.phase == "void" then UI.showVoid() end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end
+            if m[4] == "roots" then LUI.show("roots", "well") end
+            if m[4] == "climb" then Lucid.hold(s.lucid, 50) end
+            if m[4] == "gate" then LUI.leave() end
             if m[4] == "challenge-ask" then LUI.askChallenge("season") end
             local r = UI.sceneRect()
             local frames = (m[4] == "sleep" or m[4] == "nightmare") and 400 or (m[4] == "enter" and 170 or 70)
+            if m[4] == "climb" then frames = 360 end
+            if m[4] == "gate" then frames = 290 end
+            if m[4] == "void" then frames = 300 end
             for i = 1, frames do
                 local dt = 1 / 60
                 if s.phase == "lucid" then
-                    Lucid.step(s.lucid, dt, function() return 0.5 end)
+                    Lucid.step(s.lucid, dt, m[4] == "climb" and dice or function() return 0.5 end)
                     -- The nightmare's dog, circling in behind the flock.
                     if m[4] == "nightmare" and s.lucid.nightmare then
                         Lucid.point(s.lucid, 60 + math.sin(i * 0.05) * 20, 70 + math.cos(i * 0.05) * 30)
+                    end
+                    if m[4] == "climb" and s.lucid.bounce.on then
+                        Lucid.steer(s.lucid, require("lucid.bounce").bot(s.lucid.bounce))
                     end
                 else
                     Game.step(s, dt)

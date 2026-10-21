@@ -1,21 +1,29 @@
 -- The rules of phase 2, lucid dreaming. Pure Lua, no LÖVE, like game.lua.
 --
--- The night runs itself now (auto-wake): the six dream dimensions count dream
--- sheep, a run is over every `sheepPerRun` of them (no faster than the run
--- cap), and each run pays Dream Points. Runs are settled in batches, never one
--- reset a frame: a step adds runs a second * dt to a fraction and pays for the
--- whole runs in it. Dream Points build the town, a grid where a building does
--- more beside its own district and beside a Plaza; dream sheep buy dimensions
--- and the town's materials. A golden sheep offers a choice of three, and now
--- and then a nightmare scatters a flock for the dog to herd (nightmare.lua).
+-- The night runs itself now (auto-wake): six dream layers, a dream within a
+-- dream, count dream sheep, a run is over every `sheepPerRun` of them (no
+-- faster than the run cap), and each run pays Dream Points. Runs are settled
+-- in batches, never one reset a frame: a step adds runs a second * dt to a
+-- fraction and pays for the whole runs in it. Dream Points build the town, a
+-- grid where a building does more beside its own district and beside a
+-- Plaza, and grow the roots, a network of upgrades kept for good with the
+-- dream challenges down its middle and the Gate of Horn at the bottom; dream
+-- sheep buy sleepers for the layers and the town's materials. A golden sheep
+-- offers a choice of three, now and then a nightmare scatters a flock for the
+-- dog to herd (nightmare.lua), and the bouncing sheep climbs when you hold
+-- the field (bounce.lua).
 --
--- Every amount (sheep, points, dimensions, runs) is a Num and goes through
+-- In the code a layer is still a "dim": `L.dims[k]` is layer k, its
+-- sleepers bought and its amount.
+--
+-- Every amount (sheep, points, layers, runs) is a Num and goes through
 -- num.lua; counts of things bought and the multipliers stay plain numbers.
 -- The state is `s.lucid`; game.lua's phase-1 fields stay as they were.
 
 local C = require "config"
 local N = require "num"
 local Nightmare = require "lucid.nightmare"
+local Bounce = require "lucid.bounce"
 
 local D = C.dream
 local floor, min, max = math.floor, math.min, math.max
@@ -30,6 +38,15 @@ for i, b in ipairs(D.buildings) do
     BUILD[i], BY[it.id] = it, it
 end
 Lucid.BUILD, Lucid.BY = BUILD, BY
+
+-- The roots, by id and in order.
+local ROOTS, ROOT = {}, {}
+for i, r in ipairs(D.roots) do
+    local it = { index = i, growth = 1, max = 1, kind = "up" }
+    for k, v in pairs(r) do it[k] = v end
+    ROOTS[i], ROOT[it.id] = it, it
+end
+Lucid.ROOTS, Lucid.ROOT = ROOTS, ROOT
 
 -- Dream challenges, by id too.
 local CH = {}
@@ -58,7 +75,7 @@ function Lucid.fresh(s1)
         grid = {}, -- cell = building id
         level = {}, -- cell = its level (1 when built)
         built = {}, -- id = how many, every level counted
-        autoOff = {}, -- dimension index = true when its auto-buyer is paused
+        autoOff = {}, -- layer index = true when its auto-buyer is paused
         time = 0, autoIn = 0,
         golden = nil, goldenIn = D.golden.firstDelay,
         effects = {}, -- id = seconds left: frenzy, warp
@@ -70,6 +87,11 @@ function Lucid.fresh(s1)
         done = {}, -- dream challenges met: id = true
         herded = 0, -- flocks brought home under Nightmare Season
         counted = N.zero(), -- dream sheep counted under the challenge
+        climbed = 0, -- the highest climb under the challenge
+        roots = {}, -- id = ranks grown
+        gate = false, -- the Gate of Horn grown: the way out is open
+        best = 0, -- the highest the bouncing sheep has climbed, ever
+        bounce = Bounce.new(), -- not kept: a climb passes
     }
     for k = 1, #D.dims do
         L.dims[k] = { amount = N.from(D.startDims[k] or 0), bought = D.startDims[k] or 0 }
@@ -88,6 +110,10 @@ local function under(L, key)
     return c and c[key]
 end
 function Lucid.met(L, id) return L.done[id] == true end
+
+-- Ranks grown of a root.
+local function rank(L, id) return L.roots[id] or 0 end
+Lucid.rank = rank
 
 --- the town ------------------------------------------------------------------------
 
@@ -123,7 +149,8 @@ end
 function Lucid.price(L, id)
     local b = BY[id]
     local g = N.pow(N.from(b.growth), L.built[id])
-    return { dp = N.mul(N.from(b.dp or 0), g), sheep = N.mul(N.from(b.sheep or 0), g) }
+    local wool = ROOT.market.woolCut ^ rank(L, "market")
+    return { dp = N.mul(N.from(b.dp or 0), g), sheep = N.mul(N.from((b.sheep or 0) * wool), g) }
 end
 
 function Lucid.canBuild(L, id)
@@ -173,7 +200,7 @@ end
 
 -- Land: a closed cell beside open land, for Dream Points.
 function Lucid.plotPrice(L)
-    return N.from(D.grid.plotBase * D.grid.plotGrowth ^ L.plots)
+    return N.from(D.grid.plotBase * D.grid.plotGrowth ^ L.plots * ROOT.surveyor.landCut ^ rank(L, "surveyor"))
 end
 
 function Lucid.canOpen(L, c)
@@ -199,22 +226,45 @@ end
 
 local function effect(L, id) return L.effects[id] and L.effects[id] > 0 end
 
--- Every dimension's multiplier: Dream Mills, the Dream Points earned, a frenzy.
--- Under a dream challenge the dream forgets the points: only the town counts.
+-- What the best height ever lifts every layer by.
+function Lucid.recordMult(L)
+    local per = D.bounce.recordPer * (1 + ROOT.moonpull.recordAdd * rank(L, "moonpull"))
+        * (Lucid.met(L, "skyHigh") and CH.skyHigh.rewardRecord or 1)
+    return 1 + per * L.best / 100
+end
+
+-- Every layer's multiplier: Dream Mills, the Dream Points earned (more with
+-- the Deep Well), the best height, a frenzy, Falling mastered. Under a dream
+-- challenge the dream forgets the points: only the town counts.
 function Lucid.dimMult(L)
-    local m = N.from(1 + BY.mill.dimAdd * Lucid.sum(L, "mill"))
+    local m = N.from((1 + BY.mill.dimAdd * Lucid.sum(L, "mill")) * Lucid.recordMult(L))
     if not L.challenge then
-        m = N.mul(m, N.add(N.one(), N.mul(N.sqrt(L.dpEarned), N.from(D.multPerRootDP))))
+        local per = D.multPerRootDP * (1 + ROOT.well.wellAdd * rank(L, "well"))
+        m = N.mul(m, N.add(N.one(), N.mul(N.sqrt(L.dpEarned), N.from(per))))
     end
+    if Lucid.met(L, "falling") then m = N.mul(m, N.from(CH.falling.rewardLayers)) end
     if effect(L, "frenzy") then m = N.mul(m, N.from(D.golden.frenzy.mult)) end
     return m
 end
 
--- What one of dimension k makes a second (of the one before it, or sheep).
+-- How much faster time runs in a layer for every ten sleepers in it.
+function Lucid.dilation(L)
+    local base = Lucid.met(L, "onlyOne") and CH.onlyOne.rewardBonus or D.bonus
+    return base + ROOT.dilation.bonusAdd * rank(L, "dilation")
+end
+
+-- Whether layer k dreams at all (Shallow Sleep keeps only the first three).
+function Lucid.layerOn(L, k)
+    local most = under(L, "layersMax")
+    return not most or k <= most
+end
+
+-- What one sleeper of layer k makes a second (of the layer above it, or sheep).
 function Lucid.dimRate(L, k)
+    if not Lucid.layerOn(L, k) then return N.zero() end
     local d = L.dims[k]
-    local bonus = Lucid.met(L, "onlyOne") and CH.onlyOne.rewardBonus or D.bonus
-    return N.mul(Lucid.dimMult(L), N.from(D.dims[k].rate * bonus ^ floor(d.bought / D.bonusEvery)))
+    local shallow = (k <= CH.shallow.layersMax and Lucid.met(L, "shallow")) and CH.shallow.rewardShallow or 1
+    return N.mul(Lucid.dimMult(L), N.from(D.dims[k].rate * shallow * Lucid.dilation(L) ^ floor(d.bought / D.bonusEvery)))
 end
 
 function Lucid.sheepRate(L)
@@ -250,19 +300,22 @@ function Lucid.dpPerSecond(L)
     return N.mul(Lucid.dpPerRun(L), N.from(Lucid.runsPerSecond(L)))
 end
 
---- dimensions --------------------------------------------------------------------------
+--- the layers --------------------------------------------------------------------------
+
+-- A sleeper's first price, after the Architect.
+local function dimBase(L, k) return D.dims[k].base / (1 + ROOT.architect.costCut * rank(L, "architect")) end
 
 function Lucid.dimCost(L, k, n)
-    local d = D.dims[k]
-    return N.from(N.geoCost(d.base, d.growth, L.dims[k].bought, n or 1))
+    return N.from(N.geoCost(dimBase(L, k), D.dims[k].growth, L.dims[k].bought, n or 1))
 end
 
--- Buy n of dimension k (or "max"). `share` spends no more than that share of
+-- Buy n sleepers for layer k (or "max"). `share` spends no more than that share of
 -- the sheep (the auto-buyers). Returns how many.
 function Lucid.buyDim(L, k, n, share, auto)
     local d, dim = D.dims[k], L.dims[k]
     local budget = share and N.mul(L.sheep, N.from(share)) or L.sheep
-    local can = N.geoMax(d.base, d.growth, dim.bought, budget)
+    local can = N.geoMax(dimBase(L, k), d.growth, dim.bought, budget)
+    if not Lucid.layerOn(L, k) then can = 0 end
     local most = under(L, "dimMax")
     if most then can = min(can, max(0, most - dim.bought)) end
     n = n == "max" and can or min(n, can)
@@ -274,12 +327,12 @@ function Lucid.buyDim(L, k, n, share, auto)
     return n
 end
 
--- A dimension shows once the one before it is bought (D1 always).
+-- A layer shows once the one before it has a sleeper bought (layer 1 always).
 function Lucid.dimVisible(L, k)
     return k == 1 or L.dims[k - 1].bought > 0
 end
 
--- Which dimensions the town's auto-buyers look after.
+-- Which layers the town's auto-buyers look after.
 function Lucid.autoHas(L, k)
     for _, b in ipairs(BUILD) do
         if b.autoDims and L.built[b.id] > 0 then
@@ -289,7 +342,10 @@ function Lucid.autoHas(L, k)
     return false
 end
 
-function Lucid.autoOn(L, k) return Lucid.autoHas(L, k) and not L.autoOff[k] end
+function Lucid.autoOn(L, k) return Lucid.autoHas(L, k) and not L.autoOff[k] and not under(L, "noAuto") end
+
+-- The share of the sheep an auto-buyer trip spends on a layer.
+function Lucid.autoShare(L) return D.autoShare + ROOT.bellows.shareAdd * rank(L, "bellows") end
 function Lucid.toggleAuto(L, k) if Lucid.autoHas(L, k) then L.autoOff[k] = not L.autoOff[k] or nil end end
 
 --- the golden sheep --------------------------------------------------------------------
@@ -315,7 +371,7 @@ function Lucid.choose(L, id)
         emit({ type = "gift", id = id, value = v })
         return v
     end
-    L.effects[id] = G[id].seconds
+    L.effects[id] = G[id].seconds * (1 + ROOT.totem.giftAdd * rank(L, "totem"))
     emit({ type = "gift", id = id })
     return true
 end
@@ -339,7 +395,7 @@ local function endNightmare(L)
         local M = D.nightmare
         v = N.mul(N.max(N.mul(Lucid.dpPerSecond(L), N.from(M.rewardSeconds)), N.from(M.least)),
             N.from(share * (1 + BY.fold.rewardAdd * Lucid.sum(L, "fold"))
-                * (Lucid.met(L, "season") and CH.season.rewardPay or 1)))
+                * (Lucid.met(L, "season") and CH.season.rewardPay or 1) * (1 + ROOT.dog.herdAdd * rank(L, "dog"))))
         L.dp, L.dpEarned = N.add(L.dp, v), N.add(L.dpEarned, v)
         if L.challenge == "season" then L.herded = L.herded + 1 end
     end
@@ -358,6 +414,7 @@ function Lucid.progress(L)
     local c = L.challenge and CH[L.challenge]
     if not c then return nil end
     if c.goal == "herd" then return L.herded, c.herd end
+    if c.goal == "height" then return min(floor(L.climbed), c.height), c.height end
     if c.goal == "sheep" then
         -- In decades, so the bar fills evenly: 10^n of 10^goal.
         return min(math.floor(N.log10(N.max(L.counted, N.one()))), math.floor(math.log10(c.sheep))), math.floor(math.log10(c.sheep))
@@ -365,16 +422,18 @@ function Lucid.progress(L)
     return min(Lucid.runsPerSecond(L), c.runs), c.runs
 end
 
--- Start one: the flock wakes (dimensions and dream sheep back to the start,
+-- Start one: the flock wakes (the layers and dream sheep back to the start,
 -- the gifts and the golden sheep gone), the town and the points stay.
 function Lucid.startChallenge(L, id)
-    if not Lucid.mirror(L) or not CH[id] or Lucid.met(L, id) or L.challenge == id then return false end
+    if not CH[id] or not Lucid.mirror(L) or Lucid.met(L, id) or L.challenge == id then return false end
+    if not Lucid.ready(L, ROOT["c." .. id]) then return false end
     L.sheep, L.runAcc, L.flow = N.zero(), 0, false
     for k, d in ipairs(L.dims) do
         d.amount, d.bought = N.from(D.startDims[k] or 0), D.startDims[k] or 0
     end
     L.effects, L.golden, L.choosing, L.nightmare = {}, nil, false, nil
-    L.challenge, L.herded, L.counted = id, 0, N.zero()
+    L.challenge, L.herded, L.counted, L.climbed = id, 0, N.zero(), 0
+    if L.bounce.on then Bounce.stop(L.bounce) end
     L.nightmareIn = CH[id].nightmareEvery or L.nightmareIn
     emit({ type = "challengeStart", id = id })
     return true
@@ -396,11 +455,132 @@ local function checkChallenge(L)
     end
 end
 
+--- the roots --------------------------------------------------------------------------
+
+-- Whether what a root grows from is there: the dreamer always is; the lake
+-- once the town has a Mirror Lake; a challenge once mastered; anything else
+-- once it has a rank.
+local function there(L, id)
+    local r = ROOT[id]
+    if r.kind == "root" then return true end
+    if r.kind == "lake" then return Lucid.mirror(L) end
+    if r.kind == "challenge" then return Lucid.met(L, r.challenge) end
+    if r.kind == "gate" then return L.gate end
+    return rank(L, id) > 0
+end
+Lucid.there = there
+
+-- Whether a root can be grown (or its challenge started): what it grows from is there.
+function Lucid.ready(L, r) return r ~= nil and (not r.at or there(L, r.at)) end
+
+function Lucid.rootPrice(L, id)
+    local r = ROOT[id]
+    return N.from((r.dp or 0) * r.growth ^ rank(L, id))
+end
+
+-- Where a root stands: "full" (grown all the way, or mastered), "on" (its
+-- challenge under way), "open" (it can grow now), "poor" (not the points
+-- for it), "shut" (what it grows from isn't there yet).
+function Lucid.rootState(L, id)
+    local r = ROOT[id]
+    if r.kind == "root" then return "full" end
+    if r.kind == "lake" then return Lucid.mirror(L) and "full" or "shut" end
+    if r.kind == "challenge" then
+        if Lucid.met(L, r.challenge) then return "full" end
+        if L.challenge == r.challenge then return "on" end
+        return (Lucid.ready(L, r) and Lucid.mirror(L)) and "open" or "shut"
+    end
+    if r.kind == "gate" and L.gate then return "full" end
+    if r.kind == "up" and rank(L, id) >= r.max then return "full" end
+    if not Lucid.ready(L, r) then return "shut" end
+    return N.gte(L.dp, Lucid.rootPrice(L, id)) and "open" or "poor"
+end
+
+-- A rank more of an upgrade, or the Gate of Horn opened.
+function Lucid.grow(L, id)
+    local r = ROOT[id]
+    if not r or (r.kind ~= "up" and r.kind ~= "gate") or Lucid.rootState(L, id) ~= "open" then return false end
+    L.dp = N.sub(L.dp, Lucid.rootPrice(L, id))
+    if r.kind == "gate" then
+        L.gate = true
+        emit({ type = "gate" })
+        return true
+    end
+    L.roots[id] = rank(L, id) + 1
+    emit({ type = "grew", id = id, rank = L.roots[id] })
+    return true
+end
+
+-- How many ranks there are, and how many grown, over every upgrade.
+function Lucid.rootsGrown(L)
+    local all, grown = 0, 0
+    for _, r in ipairs(ROOTS) do
+        if r.kind == "up" then all, grown = all + r.max, grown + rank(L, r.id) end
+    end
+    return grown, all
+end
+
+--- the bouncing sheep -------------------------------------------------------------------
+
+-- What the roots and the rule do to the climb.
+function Lucid.bounceOpts(L)
+    return {
+        jump = 1 + ROOT.spring.jumpAdd * rank(L, "spring"),
+        width = (1 + ROOT.steps.widthAdd * rank(L, "steps")) * (under(L, "widthMult") or 1),
+    }
+end
+
+-- What a star pays.
+function Lucid.starValue(L)
+    local P = D.bounce
+    return N.mul(N.max(N.mul(Lucid.dpPerSecond(L), N.from(P.starSeconds)), N.from(P.starLeast)),
+        N.from((1 + ROOT.starbag.starAdd * rank(L, "starbag")) * (Lucid.met(L, "skyHigh") and CH.skyHigh.rewardStars or 1)))
+end
+
+-- The finger on the field, in field units across (0..bounce.w); nil when lifted.
+function Lucid.hold(L, x)
+    if L.nightmare then return end
+    if x then Bounce.press(L.bounce, x) else Bounce.release(L.bounce) end
+end
+function Lucid.steer(L, x) Bounce.move(L.bounce, x) end
+
+local function bounce(L, dt, rand)
+    local B = L.bounce
+    if L.nightmare then
+        if B.on then Bounce.stop(B) end
+        B.events = {}
+        return
+    end
+    Bounce.step(B, dt, rand, Lucid.bounceOpts(L))
+    if L.challenge == "skyHigh" then L.climbed = math.max(L.climbed, B.height) end
+    -- The best counts as soon as it's passed, not only once the climb is over.
+    B.before = B.before or L.best
+    L.best = math.max(L.best, B.height)
+    local ev = B.events
+    B.events = {}
+    for _, e in ipairs(ev) do
+        if e.type == "star" then
+            local v = Lucid.starValue(L)
+            L.dp, L.dpEarned = N.add(L.dp, v), N.add(L.dpEarned, v)
+            emit({ type = "star", value = v, x = e.x, y = e.y })
+        elseif e.type == "moon" then
+            if not L.choosing then L.choosing = true end
+            emit({ type = "moon", x = e.x, y = e.y })
+        elseif e.type == "fell" then
+            local record = e.height > B.before
+            B.before = nil
+            emit({ type = "fell", height = e.height, stars = e.stars, record = record })
+        else
+            emit({ type = e.type, kind = e.kind })
+        end
+    end
+end
+
 --- each step --------------------------------------------------------------------------
 
 -- Runs, sheep and the auto-buyers over `dt` seconds of dream time.
 local function produce(L, dt)
-    -- The chain: each dimension makes the one before it; the first, sheep.
+    -- The chain: each layer dreams up the one above it; the first, sheep.
     for k = #L.dims, 2, -1 do
         local made = N.mul(N.mul(L.dims[k].amount, Lucid.dimRate(L, k)), N.from(dt))
         L.dims[k - 1].amount = N.add(L.dims[k - 1].amount, made)
@@ -427,7 +607,7 @@ local function produce(L, dt)
     if L.autoIn <= 0 then
         L.autoIn = D.autoEvery
         for k = #L.dims, 1, -1 do
-            if Lucid.autoOn(L, k) and Lucid.dimVisible(L, k) then Lucid.buyDim(L, k, "max", D.autoShare, true) end
+            if Lucid.autoOn(L, k) and Lucid.dimVisible(L, k) then Lucid.buyDim(L, k, "max", Lucid.autoShare(L), true) end
         end
     end
 end
@@ -468,18 +648,19 @@ function Lucid.step(L, dt, rand)
             emit({ type = "nightmare" })
         end
     end
+    bounce(L, dt, rand)
     if L.challenge then checkChallenge(L) end
 end
 
 --- away ---------------------------------------------------------------------------------
 
 -- Away `seconds`: worked out in closed form, not step by step. With what's
--- bought held still, the chain is a polynomial in t: dimension j adds
--- a_j * r_j * r_(j-1) ... r_(k+1) * t^(j-k) / (j-k)! to dimension k, and
+-- bought held still, the chain is a polynomial in t: layer j adds
+-- a_j * r_j * r_(j-1) ... r_(k+1) * t^(j-k) / (j-k)! to layer k, and
 -- a_j * r_j ... r_1 * t^j / j! sheep. Runs a second follow the sheep rate up
 -- to the cap: the time it's reached is found by halving (a few dozen
 -- evaluations, not a simulation), and the runs are the rate's integral to
--- there plus the cap after. The points those runs earn lift the dimensions'
+-- there plus the cap after. The points those runs earn lift the layers'
 -- multiplier, so the time away is cut into `AWAY_PIECES` pieces, each in
 -- closed form with the multiplier it starts with. No golden sheep, nightmares
 -- or auto-buying while away; the auto-buyers shop once on the way back.
@@ -529,7 +710,7 @@ local function advance(L, T)
     L.runAcc = N.toNumber(N.sub(runs, whole)) -- a fraction of a run, for the next piece
     runs = whole
     local _, sheep = sheepAt(L, T)
-    -- The dimensions themselves move on too.
+    -- The layers themselves move on too.
     local n = #L.dims
     local rates = {}
     for k = 1, n do rates[k] = Lucid.dimRate(L, k) end
@@ -561,7 +742,7 @@ function Lucid.offline(L, seconds)
         sheep, runs, dp = N.add(sheep, a), N.add(runs, b), N.add(dp, c)
     end
     for k = #L.dims, 1, -1 do
-        if Lucid.autoOn(L, k) and Lucid.dimVisible(L, k) then Lucid.buyDim(L, k, "max", D.autoShare, true) end
+        if Lucid.autoOn(L, k) and Lucid.dimVisible(L, k) then Lucid.buyDim(L, k, "max", Lucid.autoShare(L), true) end
     end
     return { secs = T, capped = seconds > T, sheep = sheep, runs = runs, dp = dp }
 end
@@ -583,6 +764,9 @@ function Lucid.serialize(L)
     for k in pairs(L.autoOff) do o.autoOff[tostring(k)] = true end
     o.nightmare = nil -- a nightmare in progress isn't kept: it passes while you're away
     o.choosing = nil
+    o.bounce = nil -- nor a climb
+    o.roots = {}
+    for id, n in pairs(L.roots) do o.roots[id] = n end
     return o
 end
 
@@ -591,10 +775,16 @@ function Lucid.deserialize(o, s1)
     local L = Lucid.fresh(s1)
     if type(o) ~= "table" then return L end
     for _, k in ipairs(NUMS) do if o[k] ~= nil then L[k] = N.deserialize(o[k]) end end
-    for _, k in ipairs({ "runAcc", "legacy", "plots", "time", "goldenIn", "nightmareIn", "herded" }) do
+    for _, k in ipairs({ "runAcc", "legacy", "plots", "time", "goldenIn", "nightmareIn", "herded", "best", "climbed" }) do
         if type(o[k]) == "number" then L[k] = o[k] end
     end
-    for _, k in ipairs({ "flow", "intro" }) do if type(o[k]) == "boolean" then L[k] = o[k] end end
+    if type(o.roots) == "table" then
+        for id, n in pairs(o.roots) do
+            local r = ROOT[id]
+            if r and r.kind == "up" and tonumber(n) then L.roots[id] = max(0, min(r.max, floor(tonumber(n)))) end
+        end
+    end
+    for _, k in ipairs({ "flow", "intro", "gate" }) do if type(o[k]) == "boolean" then L[k] = o[k] end end
     if type(o.dims) == "table" then
         for k, d in ipairs(L.dims) do
             local od = o.dims[k]

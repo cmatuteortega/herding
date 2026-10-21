@@ -155,6 +155,17 @@ local DEFS = {
         chime(0.45, midi(79), 1.6, 0.5) },
     gift = { vol = 0.4, gap = 0.5, echo = { 0.1, 0.3 },
         chime(0, midi(79), 0.4, 0.5), chime(0.08, midi(84), 0.4, 0.5), chime(0.16, midi(88), 0.7, 0.5) },
+    -- The bouncing sheep: a boing off a cloud (a soft rising wobble), a star
+    -- picked up (two quick high notes). The way out: a long low fall, the
+    -- notes of the way in going back down into a hush.
+    boing = { vol = 0.16, gap = 0.06, wob = 0.06,
+        { dur = 0.16, wave = "sine", f0 = 220, f1 = 520, bend = 0.5, vib = { 22, 0.05 }, curve = 1.6 } },
+    star = { vol = 0.22, gap = 0.04, wob = 0.04, echo = { 0.08, 0.25 },
+        chime(0, midi(91), 0.18, 0.6), chime(0.05, midi(96), 0.25, 0.5) },
+    void = { vol = 0.45, gap = 4, echo = { 0.4, 0.5 },
+        chime(0, midi(86), 3, 0.3), chime(0.5, midi(79), 3, 0.35), chime(1.0, midi(71), 3.2, 0.4),
+        chime(1.6, midi(64), 3.5, 0.45, "tri"), chime(2.3, midi(55), 4, 0.5, "tri"), chime(3.0, midi(43), 5, 0.5, "tri"),
+        { dur = 5, wave = "noise", lp = { 900, 120 }, vol = 0.06, curve = 1 } },
     bleat = { vol = 0.18, gap = 0.25, wob = 0.12, { dur = 0.22, wave = "tri", f0 = 420, f1 = 380, vib = { 18, 0.06 }, lp = { 1600 }, curve = 1.5 } },
 }
 for i, n in ipairs(PENTA) do

@@ -3,10 +3,15 @@
 -- edge, the 3x5 face, dithers for anything soft).
 --
 -- On top, the Dream Points; under the field, auto-wake: how fast the night
--- runs itself, until it runs too fast to see. Then two tabs: DREAMS (the six
--- dimensions) and TOWN (the city builder: a grid of land, buildings placed,
--- moved and levelled up, the next plot bought). The golden sheep's choice,
--- the nightmares, the way in and the time away are dialogs and banners.
+-- runs itself, until it runs too fast to see. Then three tabs: LAYERS (the
+-- six dream layers, a dream within a dream), TOWN (the city builder: a grid
+-- of land, buildings placed, moved and levelled up, the next plot bought; the
+-- town itself floats in the field's sky) and ROOTS (the network of upgrades
+-- kept for good, with the dream challenges down its middle and the Gate of
+-- Horn at the bottom; lucid/roots.lua draws it). The field also holds the
+-- bouncing sheep: hold it and it climbs. The golden sheep's choice, the
+-- nightmares, the way in, the way out and the time away are dialogs and
+-- banners.
 --
 -- ui.lua hands everything over to this once `phase` is "lucid".
 
@@ -15,6 +20,8 @@ local N = require "num"
 local C = require "config"
 local Lucid = require "lucid.game"
 local LScene = require "lucid.scene"
+local Models = require "models"
+local Roots = require "lucid.roots"
 local Audio = require "audio"
 local flux = require "lib.flux"
 local lume = require "lib.lume"
@@ -32,20 +39,25 @@ local t = 0
 local reduced = false
 local portrait = true
 
-local tab = "dreams" -- or "town"
+local tab = "layers" -- or "town", "roots"
 local buyMax = false
 local rows, contentH, scroll, scrollV = {}, 0, 0, 0
 local press = nil
 local dogHeld = nil -- the pointer herding the dog
+local bounceHeld = nil -- the pointer steering the bouncing sheep
 local banner = { y = 1, text = nil, sub = nil, till = 0 }
 local modal = nil -- { title, lines, big, buttons = { { label, fn } }, night, y }
 local sel, place, moving = nil, nil, nil -- the town: a cell picked, a building to put down, one being moved
 local intro = nil -- the way in: { t }
+local outro = nil -- the way out, through the Gate of Horn: { t }
+local root = nil -- the root picked on the ROOTS tab
+local ROOT_CARD = 43 -- its card, along the bottom of the panel
 
 function LUI.setState(s)
     S, L = s, s.lucid
-    modal, banner.text, scroll, sel, place, moving, intro = nil, nil, 0, nil, nil, nil, nil
-    tab = "dreams"
+    modal, banner.text, scroll, sel, place, moving, intro, outro, root = nil, nil, 0, nil, nil, nil, nil, nil, nil
+    dogHeld, bounceHeld = nil, nil
+    tab = "layers"
     LScene.reset()
 end
 function LUI.setReduced(v) reduced = v; LScene.reduced = v end
@@ -147,14 +159,28 @@ local function explain()
         lines = {
             "YOU KNOW YOU ARE DREAMING NOW, SO THE NIGHT RUNS ITSELF: EACH TIME THE DREAM SHEEP COUNT ENOUGH, YOU WAKE, AND DREAM AGAIN.",
             "",
-            "DREAMS: SIX DIMENSIONS, EACH MAKING THE ONE BEFORE IT. TOWN: BUILD WITH YOUR DREAM POINTS. WHERE A BUILDING STANDS MATTERS.",
+            "LAYERS: A DREAM WITHIN A DREAM, SIX DEEP. EACH LAYER DREAMS UP THE SLEEPERS OF THE ONE ABOVE IT, AND DEEPER DOWN TIME RUNS FASTER.",
             "",
-            "AND IF A NIGHTMARE COMES, THE DOG KNOWS WHAT TO DO.",
+            "TOWN: BUILD IN THE SKY WITH YOUR DREAM POINTS. WHERE A BUILDING STANDS MATTERS. ROOTS: GROW WHAT YOU KEEP FOR GOOD.",
+            "",
+            "HOLD THE FIELD AND THE SHEEP IN FRONT CLIMBS. AND IF A NIGHTMARE COMES, THE DOG KNOWS WHAT TO DO.",
         },
         big = "YOU DREAM THEM",
         buttons = { { label = "DREAM", fn = function() L.intro = false; LUI.save() end } },
     })
 end
+
+-- The way out: the Gate of Horn opens, the dream drains away, the void.
+-- Then ui.lua hands over (LUI.toVoid).
+function LUI.leave()
+    if outro or S.phase ~= "lucid" then return end
+    modal, root, dogHeld, bounceHeld = nil, nil, nil, nil
+    Lucid.hold(L, nil)
+    outro = { t = reduced and C.void.outro - 2.5 or 0 }
+    cue("void")
+    LUI.save()
+end
+LUI.toVoid = function() end -- set by ui.lua
 
 -- Coming back to a lucid save.
 function LUI.resume()
@@ -190,11 +216,40 @@ function LUI.drain()
             LUI.banner("NO NIGHT. ONLY DREAM.", "THE RUNS ARE TOO QUICK TO SEE")
             cue("stage")
         elseif e.type == "dim" and e.first then
-            if e.k > 1 then LUI.banner("NEW: " .. D.dims[e.k].name:upper(), D.dims[e.k].desc:upper()) end
+            if e.k > 1 then LUI.banner("LAYER " .. e.k .. ": " .. D.dims[e.k].name:upper(), "A DREAM WITHIN A DREAM") end
             cue("buy", { tier = e.k, first = true })
-        elseif e.type == "built" and e.first then
-            local b = Lucid.BY[e.id]
-            LUI.banner("NEW: " .. b.name:upper(), b.desc:upper())
+        elseif e.type == "built" then
+            LScene.built(e.cell)
+            if e.first then
+                local b = Lucid.BY[e.id]
+                LUI.banner("NEW: " .. b.name:upper(), b.desc:upper())
+            end
+        elseif e.type == "upgraded" then
+            LScene.upgraded(e.cell)
+        elseif e.type == "grew" then
+            Roots.grew[e.id] = t
+            if e.rank == 1 then
+                local r = Lucid.ROOT[e.id]
+                LUI.banner("ROOTS: " .. r.name:upper(), r.desc:upper())
+            end
+        elseif e.type == "gate" then
+            Roots.grew.gate = t
+            LUI.leave()
+        elseif e.type == "star" then
+            local x, y = LScene.bounceAt(L)
+            LScene.float("+" .. N.format(e.value) .. " DP", x, y - 10, "y")
+            cue("star")
+        elseif e.type == "moon" then
+            cue("goldenAppears")
+            LScene.flash()
+        elseif e.type == "boing" then
+            cue("boing")
+        elseif e.type == "fell" then
+            bounceHeld = nil
+            if e.record and e.height >= 10 then
+                LUI.banner("NEW BEST: " .. floor(e.height) .. " HIGH", "EVERY LAYER X" .. N.format(Lucid.recordMult(L), true) .. ", FOR GOOD")
+                cue("safe")
+            end
         elseif e.type == "goldenAppears" then
             cue("goldenAppears")
         elseif e.type == "gift" then
@@ -243,10 +298,10 @@ end
 local function layout()
     rows = {}
     local y = 0
-    if tab == "dreams" then
+    if tab == "layers" then
         rows[#rows + 1] = { summary = true, y = y, h = 24 }
         y = y + 28
-        rows[#rows + 1] = { header = "DIMENSIONS: EACH MAKES THE ONE BEFORE IT", y = y, h = 10 }
+        rows[#rows + 1] = { header = "INCEPTION: EACH LAYER DREAMS THE ONE ABOVE", y = y, h = 10 }
         y = y + 10
         for k = 1, #L.dims do
             if Lucid.dimVisible(L, k) then
@@ -258,19 +313,10 @@ local function layout()
                 break
             end
         end
-        -- Dream challenges: once the Mirror Lake stands; before, a word on it.
-        y = y + 2
-        rows[#rows + 1] = { header = "MIRROR LAKE: A DREAM UNDER A RULE", y = y, h = 10 }
-        y = y + 10
-        if Lucid.mirror(L) then
-            for _, c in ipairs(Lucid.CHALLENGES) do
-                rows[#rows + 1] = { challenge = c, y = y, h = CARD_H }
-                y = y + CARD_H + 4
-            end
-        else
-            rows[#rows + 1] = { lake = true, y = y, h = CARD_H }
-            y = y + CARD_H + 4
-        end
+    elseif tab == "roots" then
+        local h = Roots.height()
+        rows[#rows + 1] = { roots = true, y = y, h = h }
+        y = y + h + (root and ROOT_CARD + 4 or 0)
     else
         local cs = gridGeom()
         rows[#rows + 1] = { grid = true, y = y, h = cs * GH + 2 }
@@ -378,7 +424,7 @@ local function tapChallenge(c)
     showModal({
         title = "DREAM CHALLENGE: " .. c.name:upper(),
         lines = { c.rule:upper() .. ". GOAL: " .. LUI.goal(c) .. ". MEET IT AND, FOREVER:", "",
-            "THE FLOCK WAKES: DIMENSIONS AND DREAM SHEEP START OVER. THE TOWN AND YOUR POINTS STAY, BUT WHILE IT LASTS THEY DON'T LIFT THE DIMENSIONS." },
+            "THE FLOCK WAKES: THE LAYERS AND DREAM SHEEP START OVER. THE TOWN, THE ROOTS AND YOUR POINTS STAY, BUT WHILE IT LASTS YOUR POINTS DON'T LIFT THE LAYERS." },
         big = c.reward:upper(),
         buttons = {
             { label = L.challenge and "SWITCH TO IT" or "START", fn = function()
@@ -393,11 +439,85 @@ end
 function LUI.goal(c)
     if c.goal == "herd" then return "BRING " .. c.herd .. " FLOCKS HOME" end
     if c.goal == "sheep" then return "COUNT " .. N.format(c.sheep) .. " DREAM SHEEP" end
+    if c.goal == "height" then return "CLIMB " .. c.height .. " HIGH" end
     return "REACH " .. c.runs .. " RUNS/S"
 end
 
+--- the roots' card -------------------------------------------------------------------------
+
+-- What the card's button says for root `r`, whether it can be pressed, and what it does.
+local function rootButton(r)
+    local st = Lucid.rootState(L, r.id)
+    if r.kind == "root" then return nil end
+    if r.kind == "lake" then
+        if st == "full" then return "BUILT", false end
+        return "TO TOWN", true, function() tab, scroll = "town", 0 end
+    end
+    if r.kind == "challenge" then
+        local c = Lucid.CH[r.challenge]
+        if st == "full" then return "MASTERED", false end
+        if st == "on" then return "GIVE UP", true, function() tapChallenge(c) end end
+        if st == "open" then return "START", true, function() tapChallenge(c) end end
+        return "LOCKED", false
+    end
+    if r.kind == "gate" and st == "full" then return "GO THROUGH", S.phase == "lucid", function() LUI.leave() end end
+    if st == "full" then return "ALL GROWN", false end
+    local verb = r.kind == "gate" and "OPEN " or "GROW "
+    return verb .. N.format(Lucid.rootPrice(L, r.id)) .. " DP", st == "open", function()
+        if Lucid.grow(L, r.id) then cue("buy", { tier = 4, first = Lucid.rank(L, r.id) == 1 }); LUI.save() else cue("nope") end
+    end
+end
+
+-- What the card says: a few lines under the name.
+local function rootSay(r)
+    local st = Lucid.rootState(L, r.id)
+    if r.kind == "root" then
+        local grown, all = Lucid.rootsGrown(L)
+        return r.desc:upper() .. ". ROOTS GROWN: " .. grown .. "/" .. all
+    end
+    local from = r.at and Lucid.ROOT[r.at]
+    if r.kind == "challenge" then
+        local c = Lucid.CH[r.challenge]
+        if st == "full" then return "YOURS FOR GOOD: " .. c.reward:upper() end
+        local s = c.rule:upper() .. ". " .. LUI.goal(c) .. ". THEN, FOR GOOD: " .. c.reward:upper()
+        if st == "shut" then
+            s = (Lucid.mirror(L) and ("MASTER " .. Roots.name(from):upper() .. " FIRST. ")
+                or "BUILD THE MIRROR LAKE IN TOWN FIRST. ") .. s
+        end
+        return s
+    end
+    local s = r.desc:upper()
+    if st == "shut" and from then s = s .. ". GROWS FROM " .. Roots.name(from):upper() .. ": GET THAT FIRST" end
+    return s
+end
+
+local function tapRoots(x, y)
+    local id = Roots.hit(x, y, R.panel.w)
+    if not id then root = nil; cue("click") return end
+    if id == root then
+        -- Tapped again: grow it (or start it).
+        local _, ok, fn = rootButton(Lucid.ROOT[id])
+        if ok and fn then fn() else cue("nope") end
+        return
+    end
+    root = id
+    cue("click")
+end
+
+-- The card's button, in screen pixels.
+local function rootCard()
+    local r = R.panel
+    local c = { x = r.x, y = r.y + r.h - ROOT_CARD, w = r.w, h = ROOT_CARD }
+    local label = root and rootButton(Lucid.ROOT[root])
+    if label then
+        local bw = G.textWidth(label) + 10
+        c.button = { x = c.x + c.w - bw - 4, y = c.y + c.h - 17, w = bw, h = 13 }
+    end
+    return c
+end
+
 local function tapRow(row, x, y)
-    if row.challenge then tapChallenge(row.challenge) return end
+    if row.roots then tapRoots(x, y) return end
     if row.dim and not row.teaser then
         local k = row.dim
         -- The AUTO pill toggles the auto-buyer; the rest of the card buys.
@@ -429,7 +549,7 @@ end
 
 function LUI.pressed(x, y, id)
     Audio.start()
-    if intro then return end
+    if intro or outro then return end
     if modal then
         for i, b in ipairs(modal.buttons) do
             if inside(b.rect, x, y) then cue("click"); closeModal(i) return end
@@ -452,9 +572,13 @@ function LUI.pressed(x, y, id)
         return
     end
     if inside(R.tabs, x, y) then
-        local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 3)) + 1, 1, 3)
-        if k == 1 then tab = "dreams" elseif k == 2 then tab = "town" else buyMax = not buyMax end
-        scroll = 0
+        local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 4)) + 1, 1, 4)
+        if k == 4 then buyMax = not buyMax
+        else
+            local was = tab
+            tab = ({ "layers", "town", "roots" })[k]
+            if tab ~= was then scroll = 0 end
+        end
         cue("click")
         return
     end
@@ -465,8 +589,22 @@ function LUI.pressed(x, y, id)
             Lucid.point(L, LScene.toField(sx, sy))
         elseif LScene.hitGolden(L, sx, sy) and Lucid.catchGolden(L) then
             cue("golden")
+        else
+            -- The bouncing sheep: held, it climbs after the finger.
+            bounceHeld = id
+            Lucid.hold(L, LScene.toBounce(sx))
         end
         return
+    end
+    if tab == "roots" and root then
+        local c = rootCard()
+        if inside(c, x, y) then
+            local _, ok, fn = rootButton(Lucid.ROOT[root])
+            if c.button and inside(c.button, x, y) then
+                if ok and fn then cue("click"); fn() else cue("nope") end
+            end
+            return
+        end
     end
     if inside(R.panel, x, y) then
         press = { id = id, y0 = y, scroll0 = scroll, moved = false, last = y }
@@ -477,6 +615,10 @@ end
 function LUI.moved(x, y, id)
     if dogHeld == id and L.nightmare then
         Lucid.point(L, LScene.toField(x - R.scene.x, y - R.scene.y))
+        return
+    end
+    if bounceHeld == id then
+        Lucid.steer(L, LScene.toBounce(x - R.scene.x))
         return
     end
     if not press or press.id ~= id then return end
@@ -492,6 +634,11 @@ function LUI.released(x, y, id)
     if dogHeld == id then
         dogHeld = nil
         Lucid.point(L, nil)
+        return
+    end
+    if bounceHeld == id then
+        bounceHeld = nil
+        Lucid.hold(L, nil)
         return
     end
     if not press or press.id ~= id then return end
@@ -515,10 +662,11 @@ function LUI.key(key)
     end
     if key == "m" then LUI.pressed(R.mute.x + 1, R.mute.y + 1, "key")
     elseif key == "r" then LUI.pressed(R.motion.x + 1, R.motion.y + 1, "key")
-    elseif key == "1" then tab, scroll = "dreams", 0
+    elseif key == "1" then tab, scroll = "layers", 0
     elseif key == "2" then tab, scroll = "town", 0
-    elseif key == "3" then buyMax = not buyMax
-    elseif key == "escape" or key == "backspace" then sel, place, moving = nil, nil, nil
+    elseif key == "3" then tab, scroll = "roots", 0
+    elseif key == "4" then buyMax = not buyMax
+    elseif key == "escape" or key == "backspace" then sel, place, moving, root = nil, nil, nil, nil
     elseif key == "space" and L.golden and Lucid.catchGolden(L) then cue("golden")
     elseif key == "down" or key == "pagedown" then LUI.wheel(-2)
     elseif key == "up" or key == "pageup" then LUI.wheel(2) end
@@ -531,6 +679,14 @@ function LUI.update(dt)
     if intro then
         intro.t = intro.t + dt
         if intro.t > 3.6 then intro = nil; explain() end
+    end
+    if outro then
+        outro.t = outro.t + dt
+        if outro.t > C.void.outro then
+            outro = nil
+            LUI.toVoid()
+            return
+        end
     end
     if L.choosing and not modal then giftChoice() end
     if not press then
@@ -618,6 +774,24 @@ local function drawHud()
             y = y + 10
         end
     end
+    -- The bouncing sheep: how high, while it climbs; how to, before the first.
+    local B = L.bounce
+    if not L.nightmare then
+        local by = r.y + r.h - 9
+        if B.on then
+            local s = ("HEIGHT %d   BEST %d"):format(floor(B.height), floor(L.best))
+            G.label("w", s, r.x + 4, by)
+            if B.stars > 0 then
+                local st = "*" .. B.stars
+                G.label("y", st, r.x + r.w - 4 - G.textWidth(st), by)
+            end
+        elseif L.best < 10 then
+            local s = "HOLD THE FIELD: THE SHEEP CLIMBS"
+            if reduced or floor(t * 1.5) % 4 ~= 0 then G.label("c", s, floor(cx - G.textWidth(s) / 2), by - 28) end
+        elseif L.best > 0 then
+            G.label("l", ("BEST %d: LAYERS X%s"):format(floor(L.best), N.format(Lucid.recordMult(L), true)), r.x + 4, by)
+        end
+    end
     if banner.text then
         local w = min(r.w - 10, max(G.textWidth(banner.text, 2), G.textWidth(banner.sub or "")) + 14)
         local h = banner.sub and 24 or 16
@@ -663,8 +837,9 @@ end
 
 local function drawTabs()
     local r = R.tabs
-    local buttons = { { "DREAMS", tab == "dreams" }, { "TOWN", tab == "town" }, { buyMax and "MAX" or "X1", buyMax } }
-    local w = floor((r.w - 4) / 3)
+    local buttons = { { "LAYERS", tab == "layers" }, { "TOWN", tab == "town" }, { "ROOTS", tab == "roots" },
+        { buyMax and "MAX" or "X1", buyMax } }
+    local w = floor((r.w - 4) / 4)
     for i, b in ipairs(buttons) do
         local x = r.x + (i - 1) * (w + 2)
         local on = b[2]
@@ -680,7 +855,9 @@ local function drawSummary(x, y, w)
     G.box(x + 1, y + 1, w - 2, 22, "u", "i")
     G.text("l", "A RUN: " .. N.format(Lucid.need(L)) .. " SHEEP, +" .. N.format(Lucid.dpPerRun(L), true) .. " DP", x + 5, y + 4)
     G.text("c", "AT MOST " .. N.format(Lucid.cap(L), true) .. " RUNS/S. RUNS: " .. N.format(L.runs), x + 5, y + 11)
-    G.text("i", "DIMENSIONS X" .. N.format(Lucid.dimMult(L), true) .. " FROM YOUR POINTS", x + 5, y + 17)
+    local s = "EVERY LAYER X" .. N.format(Lucid.dimMult(L), true) .. ". TIME X" .. N.format(Lucid.dilation(L), true) .. " A TEN"
+    if G.textWidth(s) > w - 10 then s = "LAYERS X" .. N.format(Lucid.dimMult(L), true) .. ", TIME X" .. N.format(Lucid.dilation(L), true) .. "/10" end
+    G.text("i", s, x + 5, y + 17)
 end
 
 local function drawDim(row, x, y, w)
@@ -692,7 +869,7 @@ local function drawDim(row, x, y, w)
         G.box(x + 4, y + 4, 28, h - 8, "n", "p")
         G.text("p", "?", x + 17, y + 12)
         G.text("s", "???", x + 37, y + 6)
-        G.text("s", ("BUY A " .. D.dims[k - 1].name .. " TO FIND OUT"):upper(), x + 37, y + 15)
+        G.text("s", ("A SLEEPER IN " .. D.dims[k - 1].name .. " DREAMS IT UP"):upper(), x + 37, y + 15)
         return
     end
     local dim = L.dims[k]
@@ -716,10 +893,15 @@ local function drawDim(row, x, y, w)
     G.text("o", price, px + pw - 4 - G.textWidth(price), y + 7)
     G.text(ok and "h" or "p", qty, px + pw - 4 - G.textWidth(qty), y + 15)
     local tx = x + 37
-    G.text("o", ("D" .. k .. " " .. d.name):upper(), tx, y + 5)
-    G.text("p", N.format(dim.amount) .. " (" .. dim.bought .. " BOUGHT)", tx, y + 13)
-    local made = k == 1 and "SHEEP" or D.dims[k - 1].name:upper()
-    G.text("p", "+" .. N.format(Lucid.dimRate(L, k), true) .. " " .. made .. "/S EACH", tx, y + 19)
+    G.text("o", ("LAYER " .. k .. ": " .. d.name):upper(), tx, y + 5)
+    local asleep = not Lucid.layerOn(L, k)
+    G.text("p", N.format(dim.amount) .. " " .. d.sleeper:upper() .. (asleep and " (STILL)" or ""), tx, y + 13)
+    local made = k == 1 and "SHEEP" or D.dims[k - 1].sleeper:upper()
+    local tens = floor(dim.bought / D.bonusEvery)
+    local time = tens > 0 and ("  TIME X" .. N.format(Lucid.dilation(L) ^ tens, true)) or ""
+    local line = "+" .. N.format(Lucid.dimRate(L, k), true) .. " " .. made .. "/S" .. time
+    if G.textWidth(line) > px - tx - 3 then line = "+" .. N.format(Lucid.dimRate(L, k), true) .. "/S EACH" .. time end
+    G.text("p", line, tx, y + 19)
     row.pill = nil
     if Lucid.autoHas(L, k) then
         local on = Lucid.autoOn(L, k)
@@ -811,31 +993,26 @@ local function drawBuilding(row, x, y, w)
     G.text("p", "ALL BUILT. " .. b.desc:upper(), x + 37, y + 14)
 end
 
-local function drawChallenge(row, x, y, w)
-    local c, h = row.challenge, row.h
-    local met, on = Lucid.met(L, c.id), L.challenge == c.id
-    G.box(x + 1, y + 1, w - 2, h - 2, met and "l" or (on and "y" or "c"))
-    G.rect(on and "h" or "i", x + 1, y + h - 2, w - 2, 1)
-    G.box(x + 4, y + 4, 28, h - 8, met and "i" or "u")
-    LScene.building("mirror", x + 18, y + h / 2)
-    local label = met and "DONE" or (on and "GIVE UP" or "START")
-    local pw = G.textWidth(label) + 8
-    local px = x + w - pw - 4
-    G.box(px, y + 4, pw, h - 8, met and "l" or (on and "l" or "y"))
-    G.text("o", label, px + 4, y + 11)
-    local tx = x + 37
-    G.text("u", c.name:upper(), tx, y + 5)
-    local say = met and ("YOURS: " .. c.reward:upper()) or (c.rule:upper() .. ". " .. LUI.goal(c))
-    local lines = G.wrap(say, px - tx - 4)
-    for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
-end
-
-local function drawLake(x, y, w)
-    G.box(x + 1, y + 1, w - 2, CARD_H - 2, "u", "p")
-    G.box(x + 4, y + 4, 28, CARD_H - 8, "n", "p")
-    LScene.building("mirror", x + 18, y + CARD_H / 2, true)
-    local lines = G.wrap("BUILD THE MIRROR LAKE IN TOWN: FOUR DREAMS UNDER A RULE, EACH WITH A REWARD FOR GOOD.", w - 44)
-    for i = 1, min(3, #lines) do G.text("s", lines[i], x + 37, y + 5 + (i - 1) * 7) end
+-- The root picked, on a card along the bottom of the panel.
+local function drawRootCard()
+    local c = rootCard()
+    local r = Lucid.ROOT[root]
+    G.box(c.x + 1, c.y + 1, c.w - 2, c.h - 2, "u", "c")
+    G.rect("i", c.x + 1, c.y + c.h - 2, c.w - 2, 1)
+    G.text("y", Roots.name(r):upper(), c.x + 5, c.y + 4)
+    if r.kind == "up" then
+        local s = Lucid.rank(L, r.id) .. "/" .. r.max
+        G.text("c", s, c.x + c.w - 5 - G.textWidth(s), c.y + 4)
+    end
+    local right = c.button and c.button.x - c.x - 4 or c.w - 6
+    local lines = G.wrap(rootSay(r), right - 5)
+    for i = 1, min(4, #lines) do G.text("l", lines[i], c.x + 5, c.y + 5 + i * 7) end
+    if c.button then
+        local label, ok = rootButton(r)
+        local b = c.button
+        G.box(b.x, b.y, b.w, b.h, ok and "y" or "s", "o")
+        centred("o", label, b.x + b.w / 2, b.y + 4)
+    end
 end
 
 local function drawPanel()
@@ -852,11 +1029,11 @@ local function drawPanel()
             elseif row.grid then drawGrid(r.x, y)
             elseif row.info then drawInfo(r.x, y, r.w)
             elseif row.building then drawBuilding(row, r.x, y, r.w)
-            elseif row.challenge then drawChallenge(row, r.x, y, r.w)
-            elseif row.lake then drawLake(r.x, y, r.w) end
+            elseif row.roots then Roots.draw(L, r.x, y, r.w, root, t, reduced) end
         end
     end
     love.graphics.pop()
+    if tab == "roots" and root then drawRootCard() end
     if maxScroll() > 0 then
         local th = max(10, floor(r.h * r.h / contentH))
         local ty = r.y + floor((r.h - th) * scroll / maxScroll())
@@ -949,7 +1126,65 @@ local function drawIntro()
     say("LUCID DREAMING", 2.5, floor(vh * 0.38) + 26, 2, "y")
 end
 
+-- The way out: the Gate of Horn opens in the middle of the dream, the dream
+-- drains away round it into ink, a last sheep drifts up into nothing, and
+-- the words.
+local function drawOutro()
+    local p = outro.t
+    local T = C.void.outro
+    -- The dark coming in from the edges, then over everything.
+    local dark = lume.clamp(p / 2.6, 0, 1)
+    local cx, cy = vw / 2, vh / 2
+    local rmax = math.sqrt(cx * cx + cy * cy)
+    local pts, deep = {}, {}
+    for yy = 0, vh - 1 do
+        for xx = 0, vw - 1 do
+            local d = math.sqrt((xx - cx) ^ 2 + (yy - cy) ^ 2) / rmax
+            local v = (dark * 1.6 - (1 - d)) * 2
+            if v > 0 and G.dither(xx, yy, min(1, v)) then
+                if G.dither(xx + 1, yy + 2, (v - 1) * 0.8) then G.plot(deep, xx, yy) else G.plot(pts, xx, yy) end
+            end
+        end
+    end
+    G.points("o", pts)
+    G.points("n", deep)
+    -- The gate: two horn-white posts and a lintel, opening.
+    local open = lume.clamp((p - 1.2) / 2, 0, 1)
+    local gh = floor(min(vh * 0.4, 70))
+    local gw = floor(gh * 0.6)
+    local gx, gy = floor(cx - gw / 2), floor(cy - gh / 2)
+    if p > 0.6 and p < T - 0.8 then
+        G.rect("w", gx - 2, gy - 3, gw + 4, 3)
+        G.rect("w", gx - 2, gy, 3, gh)
+        G.rect("w", gx + gw - 1, gy, 3, gh)
+        -- Inside it: the void, widening from a line.
+        local iw = floor((gw - 4) * open)
+        G.rect("o", floor(cx - iw / 2), gy, iw, gh)
+        for i = 0, 6 do
+            local sx = floor(cx - iw / 2 + (i * 13 + floor(p * 9)) % max(1, iw))
+            if iw > 2 then G.rect(i % 2 == 0 and "l" or "i", sx, gy + (i * 17) % gh, 1, 1) end
+        end
+    end
+    -- A sheep drifting up into it, turning to cloud.
+    if p > 2 and p < T - 1 then
+        local f = (p - 2) / (T - 3)
+        local sp = Models.sheep(0.25, 0, 0, f < 0.5 and "plain" or "cloud", false, 0.8)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(sp.img, floor(cx - sp.oi), floor(cy + gh * 0.4 - f * gh * 0.8 - sp.oj))
+    end
+    local function say(text, at, y, z, k)
+        if p > at then
+            local dens = lume.clamp((p - at) / 0.6, 0, 1) * lume.clamp((T - 0.3 - p) / 0.6, 0, 1)
+            G.label(k, text, floor(cx - G.textWidth(text, z) / 2), y, z, reduced and 1 or dens, "o")
+        end
+    end
+    say("THE GATE OF HORN OPENS.", 1.4, gy + gh + 10, 1, "w")
+    say("PAST THE FIELD. PAST THE DREAM.", 2.8, gy + gh + 20, 1, "l")
+    say("THE VOID", 4.2, gy - 20, 2, "c")
+end
+
 function LUI.draw()
+    if outro and outro.t >= 2.6 then drawOutro() return end
     if intro then drawIntro() return end
     local r = R.scene
     G.box(r.x, r.y, r.w, r.h, "n")
@@ -962,6 +1197,7 @@ function LUI.draw()
     drawTabs()
     drawPanel()
     if modal then drawModal() end
+    if outro then drawOutro() end
 end
 
 -- Set by ui.lua, which owns the motion setting for both phases.
@@ -970,7 +1206,7 @@ LUI.setReducedAll = function(v) LUI.setReduced(v) end
 -- For the shots: a dream challenge's card tapped.
 function LUI.askChallenge(id) tapChallenge(Lucid.CH[id]) end
 
--- For the shots: open a tab, pick a cell.
-function LUI.show(which, cell) tab = which or tab; sel = cell end
+-- For the shots: open a tab, pick a cell (or a root).
+function LUI.show(which, cell) tab = which or tab; if tab == "roots" then root = cell else sel = cell end end
 
 return LUI

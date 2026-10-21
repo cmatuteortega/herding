@@ -28,7 +28,7 @@ local pools, last = {}, {}
 local layers = {} -- [0..5] = { src, vol }
 local clock = 0
 local combo, lastTap = 0, -1
-local lullabies, drowsy, asleep, lucid = 0, 0, false, false
+local lullabies, drowsy, asleep, lucid, void = 0, 0, false, false, false
 local jobs, done
 
 -- Gets ready to make every sound; nothing at all if there's no audio device.
@@ -129,6 +129,8 @@ function Audio.setAsleep(a) asleep = a end
 -- The lucid dream: the chords, the music box and the shimmer only, quieter
 -- and a little lower, whatever the Lullabies were.
 function Audio.setLucid(on) lucid = on end
+-- The void: only the breathing sub bass and the lowest chord tones, low and far.
+function Audio.setVoid(on) void = on end
 
 -- Each frame: the layers ease toward where they should be.
 function Audio.update(dt)
@@ -140,6 +142,7 @@ function Audio.update(dt)
         local l = layers[i]
         local want = (not asleep and i <= lullabies) and master * (0.7 - drowsy * 0.2) or 0
         if lucid then want = (i <= 3 and i ~= 1) and master * 0.4 or 0 end
+        if void then want = (i == 0 or i == 4) and master * 0.3 or 0 end
         local speed = asleep and 0.4 or 0.8
         l.vol = l.vol + (want - l.vol) * min(1, dt * speed)
         if not l.src:isPlaying() then
@@ -148,7 +151,7 @@ function Audio.update(dt)
         end
         l.src:setVolume(l.vol)
         -- Sleepier, lower: the whole pad together, so it stays in tune with itself.
-        l.src:setPitch(lucid and 0.94 or (1 - drowsy * 0.06))
+        l.src:setPitch(void and 0.84 or (lucid and 0.94 or (1 - drowsy * 0.06)))
     end
 end
 

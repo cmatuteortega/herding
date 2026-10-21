@@ -20,6 +20,7 @@
 --                       (with --speed, quickly), prints how it went, writes a picture
 --   love . --lucid      dev: straight into phase 2, lucid dreaming, with points to
 --                       spend (L does the same mid-game, with any dev flag on)
+--   love . --void       dev: straight into phase 3, the void, through the gate
 
 local G = require "gfx"
 local Game = require "game"
@@ -89,11 +90,12 @@ function love.load(args)
     love.graphics.setLineStyle("rough")
     love.graphics.setPointSize(1)
     love.keyboard.setKeyRepeat(false)
-    local fresh, toLucid = false, false
+    local fresh, toLucid, toVoid = false, false, false
     for k, a in ipairs(args or {}) do
         if a == "--speed" then speed = max(1, min(1000, tonumber(args[k + 1]) or 1)); dev = true end
         if a == "--fresh" then fresh = true; dev = true end
         if a == "--lucid" then toLucid, fresh, dev = true, true, true end
+        if a == "--void" then toLucid, toVoid, fresh, dev = true, true, true, true end
         if a == "--shots" then shots = true end
         if a == "--sounds" then
             local t0 = love.timer.getTime()
@@ -119,6 +121,13 @@ function love.load(args)
     Audio.setLullabies(s.owned.lullaby)
     if toLucid then
         jumpToLucid(s)
+        if toVoid then
+            s.lucid.intro, s.lucid.gate = false, true
+            Game.goVoid(s)
+            UI.showVoid()
+        end
+    elseif s.phase == "void" then
+        UI.showVoid()
     elseif s.phase == "lucid" then
         UI.showLucid()
         UI.away(os.difftime(os.time(), s.lastSeen))
@@ -150,14 +159,29 @@ function love.update(dt)
     acc = acc + dt * speed
     local n = 0
     while acc >= STEP and n < 4000 do
-        if s.phase == "lucid" and s.lucid then Lucid.step(s.lucid, STEP) else Game.step(s, STEP) end
+        if s.phase == "lucid" and s.lucid then Lucid.step(s.lucid, STEP)
+        elseif s.phase == "nights" then Game.step(s, STEP) end
         acc, n = acc - STEP, n + 1
     end
     if n >= 4000 then acc = 0 end
     if autoplay and s.phase == "lucid" then
-        -- Phase 2: catch the golden sheep (take the frenzy), buy dimensions
-        -- top down, and build the first thing it can on the first free plot.
+        -- Phase 2: catch the golden sheep (take the frenzy), buy layers top
+        -- down, build the first thing it can on the first free plot, grow the
+        -- first root it can, and every minute hold the field for twenty
+        -- seconds, steering the bouncing sheep from cloud to cloud.
         local L = s.lucid
+        UI.key("return") -- the word on the way in, or a golden gift: the first button
+        local r = UI.sceneRect()
+        if not L.nightmare and L.time % 60 < 20 then
+            local x = r.x + require("lucid.bounce").bot(L.bounce) * r.w / C.dream.bounce.w
+            if not autoplay.held then UI.pressed(x, r.y + r.h * 0.7, "climb"); autoplay.held = true
+            else UI.moved(x, r.y + r.h * 0.7, "climb") end
+        elseif autoplay.held then
+            UI.released(r.x, r.y, "climb"); autoplay.held = false
+        end
+        for _, root in ipairs(Lucid.ROOTS) do
+            if Lucid.grow(L, root.id) then autoplay.firsts[#autoplay.firsts + 1] = ("%s@%ds"):format(root.id, L.time) end
+        end
         if L.golden and L.golden.t > 2 then Lucid.catchGolden(L) end
         if L.choosing then Lucid.choose(L, "frenzy") end
         L.intro = false
@@ -218,8 +242,8 @@ function love.draw()
         local N = require "num"
         if s.phase == "lucid" then
             local L = s.lucid
-            print(("autoplay, lucid: %ds, %s runs, %.1f runs/s, %s DP, %s dream sheep, flow %s"):format(L.time,
-                N.format(L.runs), Lucid.runsPerSecond(L), N.format(L.dp), N.format(L.sheep), tostring(L.flow)))
+            print(("autoplay, lucid: %ds, %s runs, %.1f runs/s, %s DP, %s dream sheep, flow %s, best height %d"):format(L.time,
+                N.format(L.runs), Lucid.runsPerSecond(L), N.format(L.dp), N.format(L.sheep), tostring(L.flow), L.best))
         else
             print(("autoplay: %ds, counted %s, drowsy %d%%, stage %d"):format(s.runTime, N.format(s.runTotal),
                 Game.drowsiness(s) * 100, s.stage))
