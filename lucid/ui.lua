@@ -24,6 +24,7 @@ local D = C.dream
 
 local LUI = {}
 LUI.save = function() end -- set by ui.lua
+LUI.resetAll = function() end -- set by ui.lua
 
 local S, L -- the game's state, and its lucid part
 local vw, vh = 320, 240
@@ -41,6 +42,7 @@ local banner = { y = 1, text = nil, sub = nil, till = 0 }
 local modal = nil -- { title, lines, big, buttons = { { label, fn } }, night, y }
 local sel, place, moving = nil, nil, nil -- the town: a cell picked, a building to put down, one being moved
 local intro = nil -- the way in: { t }
+local runQuiet = 0 -- the run chime: not again until then, so it isn't constant
 
 function LUI.setState(s)
     S, L = s, s.lucid
@@ -59,6 +61,7 @@ function LUI.fit(w, h, inset)
     R.top = rect(l, top, r - l, 13)
     R.mute = rect(r - 17, top, 17, 13)
     R.motion = rect(r - 37, top, 17, 13)
+    R.reset = rect(r - 57, top, 17, 13)
     local y = top + 16
     if vh >= vw * 1.15 then
         portrait = true
@@ -84,6 +87,7 @@ function LUI.sceneRect() return R.scene end
 --- what happens --------------------------------------------------------------------------
 
 local function cue(name, data) Audio.cue(name, data) end
+local RUN_GAP = 6 -- seconds between run chimes, at the least
 
 function LUI.banner(text, sub)
     banner.text, banner.sub, banner.till = text, sub, t + 2.8
@@ -185,7 +189,7 @@ function LUI.drain()
     for _, e in ipairs(ev) do
         if e.type == "runs" then
             LScene.runs(e.n, e.value, L.flow)
-            if not L.flow then cue("run") end
+            if not L.flow and t >= runQuiet then cue("run"); runQuiet = t + RUN_GAP end
         elseif e.type == "flow" then
             LUI.banner("NO NIGHT. ONLY DREAM.", "THE RUNS ARE TOO QUICK TO SEE")
             cue("stage")
@@ -451,6 +455,16 @@ function LUI.pressed(x, y, id)
         LUI.save()
         return
     end
+    if inside(R.reset, x, y) then
+        cue("click")
+        showModal({
+            title = "RESET EVERYTHING?",
+            lines = { "DEV: THE SAVE IS WIPED, AND A NEW GAME STARTS FROM THE FIRST NIGHT." },
+            big = "ALL OF IT",
+            buttons = { { label = "RESET", fn = function() LUI.resetAll() end }, { label = "KEEP DREAMING" } },
+        })
+        return
+    end
     if inside(R.tabs, x, y) then
         local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 3)) + 1, 1, 3)
         if k == 1 then tab = "dreams" elseif k == 2 then tab = "town" else buyMax = not buyMax end
@@ -553,6 +567,9 @@ local function centred(k, s, cx, y, z, edge)
     if edge then G.label(k, s, x, y, z, nil, edge) else G.text(k, s, x, y, z) end
 end
 
+-- The reset button (dev): an arrow coming round.
+local RESET_ART = { "..lll.l", ".l...ll", "l...lll", "l......", "l.....l", ".l...l.", "..lll.." }
+
 local function drawTop()
     local r = R.top
     centred("l", "LUCID DREAMING", r.x + r.w / 2, r.y + 4)
@@ -567,6 +584,9 @@ local function drawTop()
     G.box(mo.x + 1, mo.y + 1, mo.w - 2, mo.h - 2, "u", "i")
     if S.reducedMotion then G.rect("l", mo.x + 4, mo.y + 6, 9, 1)
     else G.art({ ".ll...ll.", "l..l.l..l", "....l...." }, mo.x + 4, mo.y + 5) end
+    local re = R.reset
+    G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "u", "i")
+    G.art(RESET_ART, re.x + 5, re.y + 3)
 end
 
 local function drawHud()

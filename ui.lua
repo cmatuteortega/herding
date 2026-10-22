@@ -55,6 +55,8 @@ UI.cue = function(name, data) Audio.cue(name, data) end
 local function lucid() return S and S.phase == "lucid" and S.lucid end
 LUI.save = function() UI.save() end
 LUI.setReducedAll = function(v) UI.setReduced(v) end
+LUI.resetAll = function() UI.resetAll() end
+UI.resetAll = function() end -- set by main: wipe the save, a new game
 
 function UI.setState(s)
     S = s
@@ -81,6 +83,7 @@ function UI.fit(w, h, ins)
     R.top = rect(l, top, r - l, 13)
     R.mute = rect(r - 17, top, 17, 13)
     R.motion = rect(r - 37, top, 17, 13)
+    R.reset = rect(r - 57, top, 17, 13)
     R.dp = rect(l, top, 60, 13)
     local y = top + 16
     if vh >= vw * 1.15 then
@@ -488,6 +491,18 @@ function UI.pressed(x, y, id)
         UI.save()
         return
     end
+    if inside(R.reset, x, y) then
+        Audio.start()
+        UI.cue("click")
+        UI.showModal({
+            title = "RESET EVERYTHING?",
+            lines = { "DEV: THE SAVE IS WIPED, AND A NEW GAME STARTS FROM THE FIRST NIGHT." },
+            big = "ALL OF IT",
+            button = "RESET", cancel = "KEEP COUNTING",
+            onClose = function() UI.resetAll() end,
+        })
+        return
+    end
     if inside(R.mode, x, y) then
         local nb = dreamsOpen() and 4 or 3
         local k = lume.clamp(floor((x - R.mode.x) / (R.mode.w / nb)) + 1, 1, nb)
@@ -624,6 +639,10 @@ local function drawTop()
     G.box(mo.x + 1, mo.y + 1, mo.w - 2, mo.h - 2, "v", "i")
     if S.reducedMotion then G.rect("l", mo.x + 4, mo.y + 6, 9, 1)
     else G.art({ ".ll...ll.", "l..l.l..l", "....l...." }, mo.x + 4, mo.y + 5) end
+    -- The reset button (dev): an arrow coming round.
+    local re = R.reset
+    G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "v", "i")
+    G.art({ "..lll.l", ".l...ll", "l...lll", "l......", "l.....l", ".l...l.", "..lll.." }, re.x + 5, re.y + 3)
 end
 
 local function drawHud()

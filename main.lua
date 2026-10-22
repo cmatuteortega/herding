@@ -55,6 +55,22 @@ local function jumpToLucid(s)
     require("lucid.ui").enter()
 end
 
+-- Dev: the reset button. Everything gone, saved over, and a new game from
+-- the first night (the sound and motion settings stay as they were).
+local function resetAll()
+    local old = UI.state()
+    local s = Game.fresh()
+    s.muted, s.reducedMotion = old.muted, old.reducedMotion
+    Game.events, Lucid.events = {}, {}
+    Audio.setLucid(false)
+    Audio.setAsleep(false)
+    Audio.setLullabies(s.owned.lullaby)
+    UI.setState(s)
+    UI.newNight()
+    UI.save()
+    UI.banner("A NEW GAME", "EVERYTHING WAS RESET")
+end
+
 local function fit()
     local w, h = love.graphics.getDimensions()
     local short = min(w, h)
@@ -107,6 +123,7 @@ function love.load(args)
     fit()
     Audio.init()
     Scene.cue = function(name) UI.cue(name) end
+    UI.resetAll = resetAll
     if shots then
         require("shots").run(UI, fit)
         return
