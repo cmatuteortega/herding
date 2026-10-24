@@ -121,6 +121,19 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the nightmare |
 | `lucid/roots.lua` | the roots drawn: underroot's network, hyphae growing down from the dreamer |
 | `void/ui.lua` | phase 3, the void: a placeholder to stand in. `ui.lua` hands over to it |
+| `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
+| `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
+
+## Builds
+
+- `.github/workflows/android.yml`: the APK (LÖVE for Android 12.0, the game as
+  `game.love`), on every push that changes more than docs, as the workflow
+  artifact "Counting Sheep", and attached to a GitHub Release on a `v*` tag.
+  Signed with the `ANDROID_KEYSTORE_*` secrets when they are set (and then a
+  Play bundle too), or with a throwaway key when they are not, in which case
+  each build must be uninstalled before the next goes on. The application id
+  is `com.cmatute.countingsheep` unless the `ANDROID_APP_ID` variable says
+  otherwise. Taken from underroot's.
 
 ### The state
 

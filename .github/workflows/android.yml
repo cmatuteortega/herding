@@ -1,0 +1,239 @@
+# Android APK
+#
+# Packages the game into game.love and embeds it in a LÖVE for Android build.
+# Commits that only touch docs don't trigger a build. Taken from underroot's
+# (itself Survive School's shape), with nothing added: the game is code only,
+# its sounds are made at load (synth.lua, on a thread) and play through the
+# stock audio modules, which conf.lua turns on.
+#
+# Outputs:
+#   - every run: the signed APK as a workflow artifact, "Counting Sheep"
+#   - every run with the signing secrets set: the signed app bundle (.aab) for
+#     Play Console as a second artifact, "Counting Sheep (Play bundle)". Never with the
+#     throwaway key: Play locks in the key of the first upload, so a bundle
+#     signed with a key nobody kept must never reach it.
+#   - tags v*:   a GitHub Release with the APK attached (what players download)
+#
+# Signing (repo Settings → Secrets and variables → Actions → Secrets):
+#   ANDROID_KEYSTORE_BASE64   base64 of the .jks / .keystore file
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# Android only installs an update over an existing app when the signing key
+# (and application id) match. Without these secrets the APK is signed with a
+# throwaway key and players must uninstall before installing each build.
+#
+# Optional repo variable (Settings → Secrets and variables → Actions → Variables):
+#   ANDROID_APP_ID            application id (default com.cmatute.countingsheep)
+#                             (fixed once it ships: a new id is a new app, not
+#                             an update of the old one)
+#
+# Launcher icon: a sheep mid-hop over the hill at dusk, baked from assets/icon/
+# into love-android's res/ at build time by android/icon.py.
+
+name: Android APK
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '.claude/**'
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # LÖVE for Android revision (12.0 -- conf.lua names whichever engine runs it).
+  # The one underroot, Survive School, auto-chest and demomino build on.
+  # Pinned so builds are reproducible and the native build cache stays valid;
+  # bump on purpose.
+  LOVE_ANDROID_REF: 4c65fff4f8b38693aca5d91bc06f254f86a97adf
+  APP_NAME: Counting Sheep
+  APP_ID: ${{ vars.ANDROID_APP_ID || 'com.cmatute.countingsheep' }}
+  APK_BASENAME: Counting Sheep
+  # Either way up: upright the field is on top and the shop under the thumb,
+  # sideways the field is on the left and the shop on the right (ui.lua).
+  APP_ORIENTATION: fullUser
+  # Play Console refuses bundles below its current target API level (36 since
+  # Aug 2026), and the pinned love-android still says 35. Raised over its
+  # build.gradle in the Configure step; bump this when Play raises the floor.
+  TARGET_SDK: 36
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write   # GitHub Release on v* tags
+    steps:
+      - name: Checkout game
+        uses: actions/checkout@v4
+        with:
+          path: game
+          fetch-depth: 0   # tags for git describe
+
+      - name: Version
+        working-directory: game
+        run: |
+          # versionCode grows with every run so each APK installs over the last.
+          echo "VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$(git describe --tags --always | sed 's/^v//')" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # After setup-gradle on purpose: its wrapper validation would otherwise
+      # trip on the unused sample wrapper JARs inside SDL's android-project.
+      - name: Checkout LÖVE for Android
+        uses: actions/checkout@v4
+        with:
+          repository: love2d/love-android
+          ref: ${{ env.LOVE_ANDROID_REF }}
+          path: love-android
+          submodules: recursive
+
+      - name: Android NDK and CMake
+        working-directory: love-android
+        run: |
+          ndk=$(sed -n "s/.*ndkVersion '\([^']*\)'.*/\1/p" app/build.gradle)
+          echo "NDK $ndk"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk" "cmake;3.22.1" "platforms;android-$TARGET_SDK" > /dev/null
+
+      # Native LÖVE build is the slow part; ccache makes rebuilds near-instant
+      # when only the game (game.love) changed.
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: love-android-${{ env.LOVE_ANDROID_REF }}
+          max-size: 2G
+
+      - name: Configure LÖVE for Android
+        working-directory: love-android
+        run: |
+          # App identity
+          sed -i '/^app\.name_byte_array=/d; /^#\?app\.name=/d; /^app\.application_id=/d; /^app\.orientation=/d; /^app\.version_code=/d; /^app\.version_name=/d; /^org\.gradle\.jvmargs=/d' gradle.properties
+          {
+            # Gradle's own heap: love-android sets none, so it gets the 512 MB
+            # default, short for the APK and the bundle in one run. The runner
+            # has 16 GB.
+            echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            echo "app.name=$APP_NAME"
+            echo "app.application_id=$APP_ID"
+            echo "app.orientation=$APP_ORIENTATION"
+            echo "app.version_code=$VERSION_CODE"
+            echo "app.version_name=$VERSION_NAME"
+          } >> gradle.properties
+          # Phones only (drop x86_64 emulator ABI) and compile through ccache
+          sed -i "s/abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'/abiFilters 'armeabi-v7a', 'arm64-v8a'/" app/build.gradle
+          sed -i 's/arguments "-DANDROID_STL=c++_shared",/arguments "-DANDROID_STL=c++_shared", "-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",/' app/build.gradle
+          grep -q 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' app/build.gradle || { echo "::error::ccache patch did not apply to app/build.gradle"; exit 1; }
+          # Target API level Play currently demands (see TARGET_SDK above).
+          sed -i -E "s/^( *compileSdk)( *=)? *[0-9]+/\1 = $TARGET_SDK/; s/^( *targetSdk) +[0-9]+/\1 $TARGET_SDK/" app/build.gradle
+          grep -Eq "^ *targetSdk $TARGET_SDK\$" app/build.gradle && grep -Eq "^ *compileSdk = $TARGET_SDK\$" app/build.gradle || { echo "::error::target SDK patch did not apply to app/build.gradle"; exit 1; }
+          grep -nE 'minSdk|compileSdk|targetSdk' app/build.gradle
+          # Edge to edge: the stock activity keeps the window out of the notch's
+          # strip (cutout mode NEVER, set in onCreate), which sideways is a black
+          # bar down one side; LÖVE's later switch to SHORT_EDGES on going
+          # fullscreen only edits the attributes and never reaches the window.
+          # The game is always fullscreen, so lay out under the cutout from the
+          # start, before the window is attached.
+          act=app/src/main/java/org/love2d/android/GameActivity.java
+          sed -i 's/LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER/LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES/g' "$act"
+          ! grep -q 'CUTOUT_MODE_NEVER' "$act" || { echo "::error::cutout patch did not apply to GameActivity.java"; exit 1; }
+          grep -n '^app\.' gradle.properties
+          # The sheep launcher icon (replaces the LÖVE heart)
+          python3 ../game/android/icon.py app/src/main/res
+
+      # What the game reads at run time: only its code (it has no images or
+      # sound files). The tests stay behind.
+      - name: Package game.love
+        working-directory: game
+        run: |
+          mkdir -p ../love-android/app/src/embed/assets
+          zip -9 -r ../love-android/app/src/embed/assets/game.love ./*.lua lib lucid void -x '*.DS_Store'
+          unzip -l ../love-android/app/src/embed/assets/game.love | grep -E ' (main|conf)\.lua$'
+          ls -lh ../love-android/app/src/embed/assets/game.love
+
+      # The APK to install directly and the bundle Play Console wants, from one
+      # Gradle run so the native build is only done once.
+      - name: Build APK and app bundle
+        working-directory: love-android
+        run: ./gradlew assembleEmbedNoRecordRelease bundleEmbedNoRecordRelease --stacktrace
+
+      - name: Sign APK and app bundle
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          unsigned=$(ls love-android/app/build/outputs/apk/embedNoRecord/release/*.apk | head -1)
+          echo "Unsigned APK: $unsigned"
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          ks="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$ks"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with a throwaway key. Players will have to uninstall before installing this APK."
+            KEYSTORE_PASSWORD=android KEY_ALIAS=countingsheep KEY_PASSWORD=android
+            keytool -genkeypair -keystore "$ks" -storepass android -keypass android \
+              -alias countingsheep -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Counting Sheep"
+          fi
+          export KEYSTORE_PASSWORD KEY_PASSWORD
+          out="$RUNNER_TEMP/$APK_BASENAME.apk"
+          "$bt/zipalign" -p -f 4 "$unsigned" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" sign --ks "$ks" --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
+            --out "$out" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify --print-certs "$out"
+          echo "APK=$out" >> "$GITHUB_ENV"
+
+          # The bundle is signed with jarsigner (apksigner does not sign .aab),
+          # and only with the real key -- see the note at the top of this file.
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            bundle=$(ls love-android/app/build/outputs/bundle/embedNoRecordRelease/*.aab | head -1)
+            echo "Unsigned bundle: $bundle"
+            aab="$RUNNER_TEMP/$APK_BASENAME.aab"
+            cp "$bundle" "$aab"
+            jarsigner -keystore "$ks" -storepass:env KEYSTORE_PASSWORD \
+              -keypass:env KEY_PASSWORD -sigalg SHA256withRSA -digestalg SHA-256 \
+              "$aab" "$KEY_ALIAS"
+            jarsigner -verify "$aab"
+            keytool -printcert -jarfile "$aab" | grep -E 'SHA1:|SHA256:'
+            echo "AAB=$aab" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No signing secrets: skipping the Play bundle."
+          fi
+          rm -f "$ks"
+        shell: bash
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_BASENAME }}
+          path: ${{ env.APK }}
+          if-no-files-found: error
+
+      - name: Upload app bundle
+        if: env.AAB != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_BASENAME }} (Play bundle)
+          path: ${{ env.AAB }}
+          if-no-files-found: error
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK }}
+          generate_release_notes: true
