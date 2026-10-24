@@ -180,6 +180,21 @@ local DEFS = {
     beat = { vol = 0.22, gap = 0.1, wob = 0.01,
         { dur = 0.05, wave = "tri", f0 = 880, f1 = 620, curve = 3 }, { dur = 0.03, wave = "noise", hp = { 2500 }, vol = 0.2, curve = 2 } },
     bleat = { vol = 0.18, gap = 0.25, wob = 0.12, { dur = 0.22, wave = "tri", f0 = 420, f1 = 380, vib = { 18, 0.06 }, lp = { 1600 }, curve = 1.5 } },
+    -- Astral projection: going out (a soft rising sweep with air in it),
+    -- coming back (a chime falling home), the cord snapping (a twang that
+    -- drops away), a tug (a low thump, as of a door), and a breath (air,
+    -- swelling and going).
+    project = { vol = 0.22, gap = 0.5, echo = { 0.2, 0.3 },
+        { dur = 0.7, wave = "sine", f0 = 260, f1 = 780, bend = 0.4, vib = { 6, 0.01 }, a = 0.2, curve = 1.5 },
+        { dur = 0.7, wave = "noise", lp = { 400, 2400 }, vol = 0.12, a = 0.3, curve = 1.2 } },
+    bank = { vol = 0.3, gap = 0.3, echo = { 0.12, 0.3 },
+        chime(0, midi(84), 0.4, 0.5), chime(0.08, midi(79), 0.4, 0.5), chime(0.16, midi(76), 0.7, 0.5, "tri") },
+    snap = { vol = 0.35, gap = 1, echo = { 0.18, 0.35 },
+        { dur = 0.6, wave = "tri", f0 = 880, f1 = 110, bend = 0.3, vib = { 30, 0.04 }, curve = 1.8 },
+        { dur = 0.08, wave = "noise", hp = { 1500 }, vol = 0.5, curve = 2 } },
+    tug = { vol = 0.3, gap = 0.4, wob = 0.08, { dur = 0.25, wave = "sine", f0 = 90, f1 = 55, curve = 2.5 },
+        { dur = 0.12, wave = "noise", lp = { 300, 120 }, vol = 0.4, curve = 2 } },
+    breath = { vol = 0.14, gap = 0.3, wob = 0.1, { dur = 0.8, wave = "noise", lp = { 500, 1400 }, hp = { 150 }, a = 0.3, curve = 1.2 } },
 }
 for i, n in ipairs(PENTA) do
     if i <= 10 then

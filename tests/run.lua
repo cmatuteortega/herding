@@ -320,6 +320,97 @@ if arg[1] == "lucid" then
     return
 end
 
+-- Phase 3: a greedy player, from the records a usual player brings. It goes
+-- out and comes back at a strain of 0.8 by hand until the Silver Thread
+-- (then sets it to 0.85), takes a breath on every tug, catches every comet
+-- (for its Ether), lights every star it can, grows the cheapest upgrade
+-- under a third of its Ether, and buys the dreamer that pays back soonest.
+local function astralSim(minutes)
+    local Astral = require "astral.game"
+    local A = C.astral
+    local s = Game.fresh()
+    s.allTime, s.dreams = 3e14, 20
+    s.lucid = require("lucid.game").fresh(s)
+    s.lucid.sheepTotal, s.lucid.runs, s.lucid.best = 1e90, 2e6, 900
+    for _, c in ipairs(C.dream.challenges) do s.lucid.done[c.id] = true end
+    local P = Astral.fresh(s)
+    P.intro = false
+    local seed = 11
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local news, t, last, gaps = {}, 0, 0, {}
+    local function new(what)
+        news[#news + 1] = ("%s@%ds"):format(what, t)
+        if t <= 900 then gaps[#gaps + 1] = t - last end
+        last = t
+    end
+    print(("phase 3, a greedy player, the Akashic Library x%.2f:"):format(Astral.akashic(P)))
+    local dt, nextBuy = 1 / 30, 0
+    local banks, snaps = 0, 0
+    while t < minutes * 60 and not P.cut do
+        t = t + dt
+        Astral.step(P, dt, rand)
+        for _, e in ipairs(Astral.events) do
+            if e.type == "found" then new("dreamer:" .. A.dreamers[e.k].id) end
+            if e.type == "plane" and e.first then new("plane:" .. A.planes[e.k].id) end
+            if e.type == "constellation" then new("lit:" .. e.id) end
+            if e.type == "grew" and e.rank == 1 then new("up:" .. e.id) end
+            if e.type == "bank" then banks = banks + 1 end
+            if e.type == "snap" then snaps = snaps + 1 end
+            if e.type == "tug" and rand() < 0.8 then Astral.breathe(P) end
+        end
+        Astral.events = {}
+        if not Astral.threaded(P) then
+            if P.out and Astral.strain(P) >= 0.8 then Astral.reelIn(P) end
+        else
+            P.autoAt = tonumber(os.getenv("AUTOAT")) or 0.85
+        end
+        if not P.out and P.rest <= 0 and not Astral.tranced(P) then Astral.project(P) end
+        if P.comet and P.comet.t > 1 then Astral.catchComet(P) end
+        if P.choosing then Astral.choose(P, "ether") end
+        if t >= nextBuy then
+            nextBuy = t + 1
+            for _, c in ipairs(A.constellations) do while Astral.light(P, c.id) do end end
+            local ub, up
+            for _, u in ipairs(Astral.UPS) do
+                if Astral.upState(P, u.id) == "open" then
+                    local pr = Astral.upPrice(P, u.id)
+                    if not up or pr < up then ub, up = u.id, pr end
+                end
+            end
+            if ub and up <= P.ether / 3 then Astral.grow(P, ub) end
+            -- The dreamer that pays back soonest, with a fifth of the Ether.
+            local db, ds
+            for k = 1, #A.dreamers do
+                if Astral.found(P, k) then
+                    local secs = Astral.dreamerCost(P, k) / Astral.dreamerRate(P, k)
+                    if not ds or secs < ds then db, ds = k, secs end
+                end
+            end
+            if db and Astral.dreamerCost(P, db) <= P.ether / 5 then
+                if P.dreamers[db] == 0 then new("buy:" .. A.dreamers[db].id) end
+                Astral.buyDreamer(P, db, 1)
+            end
+            if Astral.cutCord(P) then new("CUT") end
+        end
+        if math.abs(t / 60 - math.floor(t / 60 + 0.5)) < dt / 120 and t > 1 and math.floor(t / 60 + 0.5) % (minutes > 60 and 5 or 2) == 0 then
+            local n = Astral.litCount(P)
+            print(("  %2d min  cord %-7s reach %-7s %s E/s dreamers, %s E/s cord  E %s  lit %d  ups %d"):format(math.floor(t / 60 + 0.5),
+                N.format(Astral.cord(P)), N.format(P.reach), N.format(Astral.dreamRate(P), true), N.format(P.cycleRate, true),
+                N.format(P.ether), n, (Astral.upsGrown(P))))
+        end
+    end
+    print("  new: " .. table.concat(news, " "))
+    local most = 0
+    for _, gp in ipairs(gaps) do most = math.max(most, gp) end
+    print(("  %d projections, %d banked, %d snapped; first 15 min: %d new things, longest wait %ds; %s"):format(
+        P.projections, banks, snaps, #gaps, most, P.cut and ("the cord cut at %.1f min"):format(t / 60) or "the cord holds"))
+end
+
+if arg[1] == "astral" then
+    astralSim(tonumber(arg[2]) or 60)
+    return
+end
+
 if arg[1] == "sim" then
     for _, r in ipairs({ 3, 1.5, 0.5 }) do sim(r) end
     nights(1.5, 12)
@@ -1020,20 +1111,140 @@ test("shallow sleep and falling", function()
     L.done.falling = true
     close(Lucid.dimMult(L), m * 2)
 end)
-test("the void: through the gate and back", function()
+test("astral projection: through the gate and back, and saves", function()
     local s = Game.fresh()
     s.phase, s.lucid = "lucid", Lucid.fresh(s)
-    assert(not Game.goVoid(s), "not before the gate")
+    assert(not Game.goAstral(s), "not before the gate")
     s.lucid.gate = true
-    assert(Game.goVoid(s)); eq(s.phase, "void")
+    s.lucid.runs = 1e6
+    assert(Game.goAstral(s)); eq(s.phase, "astral")
+    assert(s.astral and s.astral.rec.runs == 1e6, "the library reads the dream's records")
+    s.astral.ether = 77
     local json = require "lib.json"
     local back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
-    eq(back.phase, "void"); assert(back.lucid and back.lucid.gate)
+    eq(back.phase, "astral"); assert(back.lucid and back.lucid.gate); eq(back.astral.ether, 77)
     assert(Game.backToDream(back)); eq(back.phase, "lucid")
-    eq(Game.deserialize({ version = 3, phase = "void" }).phase, "nights") -- no dream to have left
+    back.lucid.runs = 1e9
+    assert(Game.goAstral(back)); eq(back.astral.ether, 77); eq(back.astral.rec.runs, 1e9)
+    eq(Game.deserialize({ version = 4, phase = "astral" }).phase, "nights") -- no dream to have left
+    -- The placeholder's save (version 3, "void") comes in as astral projection, fresh.
+    back = Game.deserialize({ version = 3, phase = "void", lucid = { dp = 5, gate = true } })
+    eq(back.phase, "astral"); eq(back.lucid.dp, 5); eq(N.toNumber(back.astral.ether), 0); eq(back.version, C.saveVersion)
     -- A version 2 save comes in as it was.
     back = Game.deserialize({ version = 2, phase = "lucid", lucid = { dp = 5 } })
-    eq(back.phase, "lucid"); eq(back.lucid.dp, 5); eq(back.lucid.best, 0); eq(back.version, C.saveVersion)
+    eq(back.phase, "lucid"); eq(back.lucid.dp, 5); eq(back.lucid.best, 0); eq(back.astral, nil)
+    -- Beyond: only with the cord cut, and back to the stars.
+    s = back
+    s.lucid.gate = true
+    Game.goAstral(s)
+    assert(not Game.goBeyond(s))
+    s.astral.cut = true
+    assert(Game.goBeyond(s)); eq(s.phase, "beyond")
+    back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
+    eq(back.phase, "beyond")
+    assert(Game.backToStars(back)); eq(back.phase, "astral"); eq(back.astral.cut, false)
+end)
+test("astral projection: the cord", function()
+    local Astral = require "astral.game"
+    local A = C.astral
+    local P = Astral.fresh(nil)
+    P.intro = false
+    local function never() return 0.999 end -- no tug for a while (tugs come at tugMax)
+    assert(Astral.project(P)); assert(P.out)
+    eq(Astral.project(P), false)
+    -- Out: further, faster, and Ether gathered, not banked.
+    Astral.step(P, 1, never)
+    local d1 = P.dist
+    Astral.step(P, 1, never)
+    assert(P.dist - d1 > d1, "the further, the faster")
+    assert(N.toNumber(P.gathered) > 0); eq(N.toNumber(P.ether), 0)
+    close(Astral.strain(P), (P.dist / A.cord) ^ 2)
+    -- Back: banked with the close call, then a rest.
+    local s = Astral.strain(P)
+    local want = N.toNumber(P.gathered) * (1 + A.closeCall * s ^ 3)
+    close(N.toNumber(Astral.reelIn(P)), want)
+    close(N.toNumber(P.ether), want)
+    assert(not P.out and P.rest > 0); eq(Astral.project(P), false)
+    Astral.step(P, A.rest + 0.1, never)
+    -- Out until it snaps: half kept, a longer rest.
+    assert(Astral.project(P))
+    local before = N.toNumber(P.ether)
+    local snapped
+    for _ = 1, 3000 do
+        Astral.step(P, 1 / 30, never)
+        for _, e in ipairs(Astral.events) do if e.type == "snap" then snapped = e end end
+        Astral.events = {}
+        if snapped then break end
+    end
+    assert(snapped and not P.out, "it snaps"); eq(P.snaps, 1)
+    close(N.toNumber(P.ether) - before, N.toNumber(snapped.value)); eq(P.rest, A.snapRest)
+    -- A tug: half at once, the rest coming, and a breath calms it.
+    Astral.step(P, A.snapRest + 0.1, never)
+    Astral.project(P)
+    P.tugIn = 0
+    Astral.step(P, 1 / 30, function() return 1 end)
+    assert(P.tug > 0 and P.tugLeft > 0)
+    local tug = P.tug
+    assert(Astral.breathe(P)); close(P.tug, tug * (1 - A.steady))
+    -- The Silver Thread brings you back at its strain; the Trance takes you out.
+    P.ups.thread, P.ups.trance = 1, 1
+    Astral.setAuto(P, 0.5)
+    for _ = 1, 3000 do Astral.step(P, 1 / 30, never) if not P.out then break end end
+    assert(not P.out and P.snaps == 1, "back by itself, before the snap")
+    Astral.step(P, A.rest + 0.1, never)
+    assert(P.out, "out again by itself")
+    Astral.setAuto(P, 2); eq(P.autoAt, A.autoMax)
+end)
+test("astral projection: dreamers, stars, the library, the comet, the end", function()
+    local Astral = require "astral.game"
+    local A = C.astral
+    local P = Astral.fresh({ allTime = 1e10, dreams = 10, lucid = { sheepTotal = 1e20, runs = 100, best = 200, done = { a = true } } })
+    close(Astral.akashic(P), 1 + A.akashic.per * (math.log10(1 + 1e10) + 2 + math.log10(1 + 1e20) + 2 * math.log10(101) + 1 + 2))
+    P.ether = 1e30
+    -- Dreamers: found by reach, and they dream only while you're out.
+    eq(Astral.buyDreamer(P, 2), 0)
+    eq(Astral.buyDreamer(P, 1, 3), 3)
+    eq(N.toNumber(Astral.gatherRate(P)), 0)
+    P.reach = A.dreamers[2].at
+    eq(Astral.buyDreamer(P, 2), 1)
+    Astral.project(P)
+    assert(N.toNumber(Astral.gatherRate(P)) > N.toNumber(Astral.etherRate(P)))
+    -- Constellations: in order, by plane, a star at a time; a reward when whole.
+    local aries, crook, lamb = A.constellations[1], A.constellations[2], A.constellations[3]
+    assert(not Astral.light(P, crook.id), "not before Aries")
+    local m = Astral.mult(P)
+    for _ = 1, #aries.stars do assert(Astral.light(P, aries.id)) end
+    assert(Astral.done(P, aries.id)); close(Astral.mult(P), m * aries.etherMult)
+    for _ = 1, #crook.stars do assert(Astral.light(P, crook.id)) end
+    assert(not Astral.light(P, lamb.id), "the Lamb's stars are in the Astral")
+    P.reach = A.planes[lamb.plane].at
+    assert(Astral.light(P, lamb.id))
+    -- Upgrades: in order, kept.
+    assert(not Astral.grow(P, "trance")); assert(Astral.grow(P, "thread")); assert(Astral.grow(P, "trance"))
+    local cord = Astral.cord(P)
+    assert(Astral.grow(P, "cord")); close(Astral.cord(P), cord * Astral.UP.cord.cordMult)
+    -- The comet: caught, a gift.
+    P.comet = { t = 0, lane = 0.5 }
+    assert(Astral.catchComet(P)); assert(P.choosing)
+    Astral.choose(P, "wind")
+    assert(P.effects.wind)
+    -- The end: every constellation lit, then the cord cut.
+    assert(not Astral.cutCord(P))
+    P.reach = 1e30
+    for _, c in ipairs(A.constellations) do while Astral.light(P, c.id) do end end
+    assert(Astral.cutCord(P)); assert(P.cut and P.paid)
+    P.cut = false
+    P.ether = 0
+    assert(Astral.canCut(P), "paid once, the cut is free again")
+    -- Saves.
+    local json = require "lib.json"
+    local back = Astral.deserialize(json.decode(json.encode(Astral.serialize(P))), nil)
+    eq(back.dreamers[2], 1); eq(back.lit[aries.id], #aries.stars); eq(back.ups.trance, 1); eq(back.reach, 1e30)
+    assert(back.paid and back.effects.wind)
+    -- Away: with the Thread and the Trance, the cord runs on at a share.
+    P.cycleRate, P.out = 100, false
+    local r = Astral.offline(P, 1000)
+    close(N.toNumber(r.ether), 100 * 1000 * A.awayShare)
 end)
 test("lucid saves", function()
     local L = Lucid.fresh({ dreamPoints = 12, dreamEarned = 100 })

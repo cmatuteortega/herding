@@ -143,8 +143,9 @@ return {
     lucid = { under = 1 },
 
     -- The save's shape. 1: phase 1 only. 2: the lucid phase's block, `lucid`.
-    -- 3: the roots and the bouncing sheep in `lucid`, and the void.
-    saveVersion = 3,
+    -- 3: the roots and the bouncing sheep in `lucid`, and the void. 4: phase
+    -- 3 is "astral" (it was "void", a placeholder), with its block, `astral`.
+    saveVersion = 4,
 
     -- PHASE 2, LUCID DREAMING. The night runs itself (auto-wake), six dream
     -- layers each dream the one above them (a dream within a dream), and Dream
@@ -363,11 +364,146 @@ return {
         },
     },
 
-    -- PHASE 3, ASTRAL PROJECTION: past the Gate of Horn (Sheep-OS). Not built
-    -- yet; the way in is. In the code and the save it's still the "void".
-    -- `outro` is the way in's length in seconds: Sheep-OS boots, its screen
-    -- types, the digital rain falls, and the dreamer drifts up out of it.
-    void = { outro = 10 },
+    -- PHASE 3, ASTRAL PROJECTION: past the Gate of Horn (Sheep-OS). The
+    -- dreamer's sheep leaves the body, tied to it by a silver cord. Drift out
+    -- (the further, the faster, and the more Ether a second), but the cord
+    -- strains as it goes: come back in time and the Ether is banked, with a
+    -- bonus the closer to the limit you dared; let it snap and you lose half.
+    -- Ether buys the cord longer and the drift quicker, then a Silver Thread
+    -- that comes back by itself and a Trance that goes out again: the cord
+    -- runs itself, the way the night did. Further out are the planes, the
+    -- dreamers (other sleepers, dreaming Ether for you), and the
+    -- constellations, lit a star at a time, each a reward kept for good. The
+    -- Akashic Library remembers every sheep you ever counted, in every
+    -- phase, as a multiplier. Light the Sleeper at the Edge, cut the cord,
+    -- and the sheep count you: phase 4.
+    -- Every amount in here is a plain number; astral/game.lua uses num.lua.
+    astral = {
+        -- The way in's length in seconds: Sheep-OS boots, its screen types,
+        -- the digital rain falls, and the dreamer drifts up out of it. And
+        -- the way out's: the cord cut, the sheep counting you, the light.
+        outro = 10, ending = 14,
+
+        -- The cord: strain = (distance / cord)^2, plus any tug. At 1 it snaps.
+        cord = 60,
+        -- Out, the distance grows by speed * (distance + speedFrom) a second:
+        -- the further out, the faster. A projection to the end of the cord
+        -- takes about log(cord) / speed seconds, however long the cord.
+        speed = 0.15, speedFrom = 5,
+        -- Ether a second while out: etherBase * (1 + distance)^etherPower,
+        -- times the plane you're in and every multiplier.
+        etherBase = 0.5, etherPower = 0.6,
+        -- Back in the body: the Ether gathered is banked, times
+        -- 1 + closeCall * strain^3 (a close call pays). Snapped: only
+        -- 1 - snapLoss of it, and a longer rest before going out again.
+        closeCall = 1, snapLoss = 0.5,
+        rest = 3, snapRest = 6,
+        -- Silver Thread's setting: come back at this strain. 0.5 to 0.95.
+        autoAt = 0.8, autoMin = 0.5, autoMax = 0.95, autoStep = 0.05,
+        -- Tugs: the body stirs (a door, a dream, a dog). Every tugMin to
+        -- tugMax seconds out, strain jumps by tugLow to tugHigh, half at
+        -- once and half over tugRise seconds, and drains at tugDrain a
+        -- second. A tap on the dark (a breath) calms a tug by `steady`.
+        tugMin = 6, tugMax = 14, tugLow = 0.1, tugHigh = 0.3, tugRise = 1.2, tugDrain = 0.04,
+        steady = 0.3,
+        -- Away: the dreamers dream on, and with the Thread and the Trance
+        -- the cord runs at this share of how it was running.
+        awayShare = 0.5,
+
+        -- The planes: how far out (distance), what the Ether there is worth,
+        -- and the sky (two palette keys, dithered).
+        planes = {
+            { id = "etheric", name = "The Etheric", at = 0, mult = 1, sky = { "n", "v" } },
+            { id = "astral", name = "The Astral", at = 300, mult = 2, sky = { "k", "n" } },
+            { id = "mental", name = "The Mental", at = 1e4, mult = 4, sky = { "u", "k" } },
+            { id = "causal", name = "The Causal", at = 5e5, mult = 8, sky = { "t", "k" } },
+            { id = "edge", name = "The Edge", at = 6e6, mult = 16, sky = { "p", "u" } },
+        },
+
+        -- The Akashic Library: every record of every phase, a decade at a
+        -- time, adds `per` to the multiplier on all Ether: phase 1's sheep
+        -- counted, phase 2's dream sheep, runs (x2), nights dreamt (a fifth
+        -- each), lucidity steps, the best height (a hundredth), and the
+        -- Ether earned out here (x2).
+        akashic = { per = 0.02 },
+
+        -- The dreamers: other sleepers, found out along the cord once your
+        -- reach (the farthest ever) passes `at`. Bought with Ether, each
+        -- dreams `rate` Ether a second, x2 every `every` of a kind, all of
+        -- them x(1 + reachPer * log10(1 + reach)).
+        dreamerEvery = 25, reachPer = 0.25,
+        dreamers = {
+            { id = "child", name = "The Child", desc = "Dreams of ponies, and of you", at = 0, rate = 0.4, base = 20, growth = 1.2 },
+            { id = "shepherd", name = "The Shepherd", desc = "Counts sheep in their sleep, out of habit", at = 150, rate = 5, base = 2000, growth = 1.2 },
+            { id = "insomniac", name = "The Insomniac", desc = "Barely dreams. When they do, it's vivid", at = 3e3, rate = 60, base = 1e5, growth = 1.21 },
+            { id = "collie", name = "The Old Collie", desc = "Runs in its sleep, herding stars", at = 6e4, rate = 900, base = 1e7, growth = 1.22 },
+            { id = "astronaut", name = "The Astronaut", desc = "Asleep in orbit. Closer than anyone", at = 4e5, rate = 1.5e4, base = 1e9, growth = 1.23 },
+            { id = "moon", name = "The Moon", desc = "Dreams the tides, and every night", at = 4e6, rate = 3e5, base = 1e11, growth = 1.25 },
+        },
+
+        -- Upgrades, kept: a rank at a time for ether * growth^rank, up to
+        -- `max`, each section's after the one before it (`at`) has a rank.
+        sections = {
+            { id = "cord", name = "THE SILVER CORD", how = "GO OUT, COME BACK IN TIME" },
+            { id = "auto", name = "LETTING GO", how = "THE CORD RUNS ITSELF" },
+            { id = "ether", name = "THE ETHER" },
+        },
+        ups = {
+            { id = "cord", section = "cord", name = "Longer Cord", desc = "The cord x1.5", ether = 50, growth = 2.6, max = 40, cordMult = 1.5 },
+            { id = "drift", at = "cord", section = "cord", name = "Swift Drift", desc = "Drift out 25% faster", ether = 80, growth = 3.2, max = 20, speedAdd = 0.25 },
+            { id = "close", at = "drift", section = "cord", name = "Close Call", desc = "A close call pays +50% more", ether = 300, growth = 5, max = 8, closeAdd = 0.5 },
+            { id = "calm", at = "close", section = "cord", name = "Calm Body", desc = "Tugs 15% softer", ether = 200, growth = 5, max = 6, calmCut = 0.85 },
+            { id = "breath", at = "calm", section = "cord", name = "Steady Breath", desc = "A breath (tap the dark) calms a tug 15% more", ether = 600, growth = 6, max = 4, steadyAdd = 0.15 },
+            { id = "thread", section = "auto", name = "Silver Thread", desc = "Comes back by itself, at the strain you set", ether = 250, max = 1 },
+            { id = "trance", at = "thread", section = "auto", name = "Trance", desc = "Goes out again by itself", ether = 1000, max = 1 },
+            { id = "light", at = "trance", section = "auto", name = "Light Body", desc = "Rest 30% shorter in the body", ether = 1500, growth = 8, max = 4, restCut = 0.7 },
+            { id = "lens", section = "ether", name = "Ether Lens", desc = "+50% Ether, everywhere", ether = 200, growth = 5, max = 25, etherAdd = 0.5 },
+            { id = "librarian", at = "lens", section = "ether", name = "Librarian", desc = "The Akashic records count 25% more", ether = 3000, growth = 8, max = 8, akashicAdd = 0.25 },
+            { id = "farsight", at = "librarian", section = "ether", name = "Far Sight", desc = "Your reach lifts the dreamers 50% more", ether = 2e4, growth = 8, max = 6, reachAdd = 0.5 },
+        },
+
+        -- Constellations, lit a star at a time (each star `star` *
+        -- starGrowth^i Ether), each once your reach is into its plane and the
+        -- one before it is lit. Stars are where they stand in a 1 x 1 box;
+        -- each is drawn joined to the one before it (and to `join`, if set).
+        -- Lit, the reward is kept for good. The Sleeper, at the Edge, is
+        -- the last: then the cord can be cut.
+        starGrowth = 1.35,
+        constellations = {
+            { id = "aries", name = "Aries, the Ram", plane = 1, star = 30, reward = "All Ether x2", etherMult = 2,
+                stars = { { 0.15, 0.55 }, { 0.3, 0.4 }, { 0.55, 0.42 }, { 0.75, 0.3 }, { 0.85, 0.12 } } },
+            { id = "crook", name = "The Crook", plane = 1, star = 500, reward = "The cord x2", cordMult = 2,
+                stars = { { 0.5, 0.95 }, { 0.5, 0.65 }, { 0.5, 0.35 }, { 0.58, 0.12 }, { 0.75, 0.1 }, { 0.8, 0.28 } } },
+            { id = "lamb", name = "The Lamb", plane = 2, star = 2e4, reward = "Tugs half as often, a quarter softer", tugEvery = 2, tugSoft = 0.75,
+                stars = { { 0.2, 0.5 }, { 0.35, 0.35 }, { 0.6, 0.35 }, { 0.78, 0.25 }, { 0.65, 0.6 }, { 0.3, 0.65 } }, join = { 6, 1 } },
+            { id = "dog", name = "The Collie", plane = 2, star = 3e5, reward = "A snapped cord keeps 90%", snapKeep = 0.9,
+                stars = { { 0.1, 0.4 }, { 0.3, 0.5 }, { 0.6, 0.5 }, { 0.8, 0.35 }, { 0.92, 0.2 }, { 0.6, 0.8 }, { 0.3, 0.8 } }, join = { 3, 6 } },
+            { id = "fence", name = "The Fence", plane = 3, star = 2e7, reward = "Drift x1.5, rest halved", speedMult = 1.5, restMult = 0.5,
+                stars = { { 0.1, 0.8 }, { 0.1, 0.3 }, { 0.5, 0.3 }, { 0.5, 0.8 }, { 0.9, 0.8 }, { 0.9, 0.3 }, { 0.5, 0.3 } } },
+            { id = "fleece", name = "The Golden Fleece", plane = 3, star = 4e8, reward = "Close calls and dreamers x2", closeMult = 2, dreamerMult = 2,
+                stars = { { 0.2, 0.3 }, { 0.45, 0.2 }, { 0.75, 0.25 }, { 0.85, 0.5 }, { 0.7, 0.75 }, { 0.4, 0.8 }, { 0.15, 0.6 }, { 0.5, 0.5 } }, join = { 7, 1 } },
+            { id = "flock", name = "The Great Flock", plane = 4, star = 4e11, reward = "The Akashic records count double", akashicMult = 2,
+                stars = { { 0.1, 0.6 }, { 0.25, 0.45 }, { 0.4, 0.6 }, { 0.55, 0.42 }, { 0.7, 0.58 }, { 0.85, 0.4 }, { 0.6, 0.2 }, { 0.3, 0.2 }, { 0.1, 0.6 } } },
+            { id = "sleeper", name = "The Sleeper", plane = 5, star = 5e12, reward = "The cord can be cut", last = true,
+                stars = { { 0.1, 0.7 }, { 0.3, 0.6 }, { 0.5, 0.62 }, { 0.7, 0.6 }, { 0.9, 0.7 }, { 0.78, 0.4 }, { 0.82, 0.25 }, { 0.68, 0.18 }, { 0.62, 0.35 } } },
+        },
+
+        -- The comet, the guide's gift: now and then it crosses the sky, and
+        -- tapped, it offers one of three: Ether now (`seconds` of what's
+        -- coming in), the cord slack (x2 for a while), or a wind (drift x3).
+        comet = {
+            firstDelay = 45, minDelay = 70, maxDelay = 130, crossTime = 9,
+            ether = { seconds = 120, least = 50 },
+            slack = { mult = 2, seconds = 30 },
+            wind = { mult = 3, seconds = 30 },
+        },
+
+        -- The way out, once the Sleeper is lit: the cord cut, for Ether.
+        cut = 2e14,
+    },
+
+    -- PHASE 4: past the cut cord. A placeholder: the void, or enlightenment.
+    beyond = {},
 
     offline = {
         maxHours = 8,

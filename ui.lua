@@ -16,7 +16,8 @@ local Audio = require "audio"
 local flux = require "lib.flux"
 local lume = require "lib.lume"
 local LUI = require "lucid.ui"
-local VUI = require "void.ui"
+local AUI = require "astral.ui"
+local BUI = require "beyond.ui"
 
 local floor, min, max, sin = math.floor, math.min, math.max, math.sin
 
@@ -55,35 +56,60 @@ UI.cue = function(name, data) Audio.cue(name, data) end
 -- Phase 2 has its own screen (lucid/ui.lua): once `phase` is "lucid", every
 -- call below hands over to it.
 local function lucid() return S and S.phase == "lucid" and S.lucid end
--- And phase 3 (void/ui.lua), once `phase` is "void".
-local function void() return S and S.phase == "void" end
+-- And phase 3 (astral/ui.lua), once `phase` is "astral"; and phase 4
+-- (beyond/ui.lua), once it's "beyond".
+local function astral() return S and S.phase == "astral" and S.astral end
+local function beyond() return S and S.phase == "beyond" end
+-- Either of the two after the dream: they take every call whole.
+local function later() return astral() or beyond() end
+local function laterUI() return astral() and AUI or BUI end
 LUI.save = function() UI.save() end
 LUI.setReducedAll = function(v) UI.setReduced(v) end
-VUI.save = function() UI.save() end
+AUI.save = function() UI.save() end
+AUI.setReducedAll = function(v) UI.setReduced(v) end
+BUI.save = function() UI.save() end
 -- Through the Gate of Horn, and back.
-LUI.toVoid = function()
-    if Game.goVoid(S) then
+LUI.toAstral = function()
+    if Game.goAstral(S) then
         UI.save()
-        VUI.setState(S)
-        VUI.enter()
+        AUI.setState(S)
+        AUI.enter()
     end
 end
-VUI.back = function()
+AUI.back = function()
+    Audio.setAstral(false)
     Game.backToDream(S)
     UI.save()
     UI.showLucid()
 end
+-- The cord cut: beyond, and back.
+AUI.toBeyond = function()
+    if Game.goBeyond(S) then
+        UI.save()
+        BUI.setState(S)
+        BUI.enter()
+    end
+end
+BUI.back = function()
+    Audio.setBeyond(false)
+    Game.backToStars(S)
+    UI.save()
+    UI.showAstral()
+end
 LUI.resetAll = function() UI.resetAll() end
-VUI.resetAll = function() UI.resetAll() end
+AUI.resetAll = function() UI.resetAll() end
+BUI.resetAll = function() UI.resetAll() end
 UI.resetAll = function() end -- set by main: wipe the save, a new game
 LUI.nextPhase = function() UI.nextPhase() end
-VUI.nextPhase = function() UI.nextPhase() end
+AUI.nextPhase = function() UI.nextPhase() end
+BUI.nextPhase = function() UI.nextPhase() end
 UI.nextPhase = function() end -- set by main (dev): on to the next phase
 
 function UI.setState(s)
     S = s
     if lucid() then LUI.setState(s) end
-    if void() then VUI.setState(s) end
+    if astral() then AUI.setState(s) end
+    if beyond() then BUI.setState(s) end
     UI.setReduced(S.reducedMotion)
     shown = N.toNumber(S.sheep)
     modal, endingWaits, UI.endingIn, banner.text, scroll = nil, false, nil, nil, 0
@@ -92,7 +118,7 @@ function UI.setState(s)
     for _, it in ipairs(Game.ITEMS) do if Game.visible(S, it.id) then seen[it.id] = true end end
 end
 function UI.state() return S end
-function UI.setReduced(v) reduced = v; Scene.reduced = v; LUI.setReduced(v); VUI.setReduced(v) end
+function UI.setReduced(v) reduced = v; Scene.reduced = v; LUI.setReduced(v); AUI.setReduced(v); BUI.setReduced(v) end
 
 --- layout -------------------------------------------------------------------------
 
@@ -128,10 +154,15 @@ function UI.fit(w, h, ins)
     end
     Scene.resize(R.scene.w, R.scene.h)
     LUI.fit(w, h, inset)
-    VUI.fit(w, h, inset)
+    AUI.fit(w, h, inset)
+    BUI.fit(w, h, inset)
 end
 
-function UI.sceneRect() return lucid() and LUI.sceneRect() or R.scene end
+function UI.sceneRect()
+    if lucid() then return LUI.sceneRect() end
+    if astral() then return AUI.sceneRect() end
+    return R.scene
+end
 
 --- the shop's rows ------------------------------------------------------------------
 
@@ -260,7 +291,8 @@ end
 -- Back after `seconds` away: the sheep counted meanwhile, and a word about it.
 function UI.away(seconds)
     if lucid() then return LUI.away(seconds) end
-    if void() then return end
+    if astral() then return AUI.away(seconds) end
+    if beyond() then return end
     local r = Game.offline(S, seconds)
     if not r or seconds < C.offline.minSeconds or not N.gte(r.gain, N.from(1)) then return end
     UI.showModal({
@@ -340,10 +372,17 @@ function UI.showEnding()
 end
 
 -- Coming back to a save in phase 3.
-function UI.showVoid()
-    if not void() then return end
-    VUI.setState(S)
-    VUI.enter()
+function UI.showAstral()
+    if not astral() then return end
+    AUI.setState(S)
+    AUI.enter()
+end
+
+-- Coming back to a save in phase 4.
+function UI.showBeyond()
+    if not beyond() then return end
+    BUI.setState(S)
+    BUI.enter()
 end
 
 -- Coming back to a save in phase 2.
@@ -439,7 +478,8 @@ end
 -- The rules' events: banners and sounds.
 function UI.drain()
     if lucid() then return LUI.drain() end
-    if void() then return end
+    if astral() then return AUI.drain() end
+    if beyond() then return end
     local ev = Game.events
     Game.events = {}
     for _, e in ipairs(ev) do
@@ -524,7 +564,7 @@ end
 
 function UI.pressed(x, y, id)
     if lucid() and not modal then return LUI.pressed(x, y, id) end
-    if void() then return VUI.pressed(x, y, id) end
+    if later() then return laterUI().pressed(x, y, id) end
     if modal then
         if inside(modalButton(), x, y) then Audio.start(); UI.cue("click"); closeModal()
         elseif inside(modal.cancelRect, x, y) then Audio.start(); UI.cue("click"); closeModal(true) end
@@ -587,7 +627,7 @@ end
 
 function UI.moved(x, y, id)
     if lucid() then return LUI.moved(x, y, id) end
-    if void() then return end
+    if later() then return laterUI().moved(x, y, id) end
     if not press or press.id ~= id then return end
     if math.abs(y - press.y0) > 3 then press.moved = true end
     if press.moved then
@@ -599,7 +639,7 @@ end
 
 function UI.released(x, y, id)
     if lucid() then return LUI.released(x, y, id) end
-    if void() then return end
+    if later() then return laterUI().released(x, y, id) end
     if not press or press.id ~= id then return end
     local p = press
     press = nil
@@ -622,13 +662,13 @@ function UI.buy(id) return buy(id) end
 
 function UI.wheel(dy)
     if lucid() then return LUI.wheel(dy) end
-    if void() then return end
+    if later() then return laterUI().wheel(dy) end
     scroll = lume.clamp(scroll - dy * 18, 0, maxScroll())
 end
 
 function UI.key(key)
     if lucid() and not modal then return LUI.key(key) end
-    if void() then return VUI.key(key) end
+    if later() then return laterUI().key(key) end
     if modal then
         if key == "return" or key == "space" or key == "kpenter" then UI.cue("click"); closeModal()
         elseif modal.cancel and (key == "backspace" or key == "n") then UI.cue("click"); closeModal(true) end
@@ -650,7 +690,7 @@ end
 function UI.update(dt)
     t = t + dt
     if lucid() then return LUI.update(dt) end
-    if void() then return VUI.update(dt) end
+    if later() then return laterUI().update(dt) end
     local real = N.toNumber(S.sheep)
     if real < shown then shown = real else shown = shown + (real - shown) * min(1, dt * 12) end
     if math.abs(real - shown) < 0.5 then shown = real end
@@ -1066,7 +1106,7 @@ end
 -- Draws everything but the field's own picture, which main lays first.
 function UI.draw()
     if lucid() and not modal then return LUI.draw() end
-    if void() then return VUI.draw() end
+    if later() then return laterUI().draw() end
     local r = R.scene
     -- The field, in its frame.
     G.box(r.x, r.y, r.w, r.h, "n")

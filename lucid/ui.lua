@@ -33,7 +33,7 @@ local D = C.dream
 local LUI = {}
 LUI.save = function() end -- set by ui.lua
 LUI.resetAll = function() end -- set by ui.lua
-LUI.nextPhase = function() end -- set by ui.lua (dev): on to astral projection (the void)
+LUI.nextPhase = function() end -- set by ui.lua (dev): on to astral projection
 
 local S, L -- the game's state, and its lucid part
 local vw, vh = 320, 240
@@ -179,17 +179,17 @@ local function explain()
     })
 end
 
--- The way out: Sheep-OS boots, the digital rain, astral projection (the void).
--- Then ui.lua hands over (LUI.toVoid).
+-- The way out: Sheep-OS boots, the digital rain, astral projection.
+-- Then ui.lua hands over (LUI.toAstral).
 function LUI.leave()
     if outro or S.phase ~= "lucid" then return end
     modal, dogHeld, bounceHeld = nil, nil, nil
     Lucid.hold(L, nil)
-    outro = { t = reduced and C.void.outro - 2.5 or 0 }
+    outro = { t = reduced and C.astral.outro - 2.5 or 0 }
     cue("boot")
     LUI.save()
 end
-LUI.toVoid = function() end -- set by ui.lua
+LUI.toAstral = function() end -- set by ui.lua
 
 -- Coming back to a lucid save.
 function LUI.resume()
@@ -773,9 +773,9 @@ function LUI.update(dt)
         local from = outro.t
         outro.t = outro.t + dt
         outroSounds(from, outro.t)
-        if outro.t > C.void.outro then
+        if outro.t > C.astral.outro then
             outro = nil
-            LUI.toVoid()
+            LUI.toAstral()
             return
         end
     end
@@ -1349,7 +1349,7 @@ end
 
 local function drawOutro()
     local p = outro.t
-    local T = C.void.outro
+    local T = C.astral.outro
     -- The dream breaking up: bands of ink and green across it, thicker and
     -- more of them, each knocked sideways.
     if p < GLITCH then

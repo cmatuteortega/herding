@@ -32,9 +32,24 @@ this repository began as. Upgrades kept for good come in sections, one for
 each of those games, then the layers and the farm, then seven dream
 challenges one after the other. Last of all is the Gate of Horn, Sheep-OS
 bought on the farm once lucidity is at its most, and through it, astral
-projection: phase 3,
-from the field to the dream to nothing at all (its way in is built; the phase
-is a placeholder).
+projection: phase 3.
+
+**Phase 3, astral projection:** the dreamer's sheep leaves the body, tied to
+it by a silver cord. Go out and you drift, faster the further you go, and
+gather Ether, more the further. The cord strains, though, and now and then the
+body tugs at it. Come back in time and the Ether is yours, with a bonus the
+closer you cut it; let it snap and you keep half. Ether buys a longer cord and
+a quicker drift, then a Silver Thread that comes back by itself and a Trance
+that goes out again, so the cord runs itself the way the night did. Further
+out are the planes (the Etheric, the Astral, the Mental, the Causal, the
+Edge), other dreamers who dream Ether into the cord while you're out with
+them, and eight constellations, lit a star at a time, Aries the Ram first and
+the Sleeper last, each a reward for good. The Akashic Library remembers every
+sheep you ever counted, in every phase, as a multiplier on everything, and a
+comet (your guide) crosses now and then with a gift. Light the Sleeper at the
+Edge, cut the cord, and the sheep count you: one, two, three... Then the
+light, and phase 4: beyond, the void or enlightenment (a placeholder for now).
+From the field to the dream to the stars to nothing at all.
 
 It's built for a phone held upright (the field on top, the shop under your
 thumb) and works on a computer (the field on the left, the shop on the right).
@@ -50,9 +65,11 @@ love . --sounds            # dev: every sound and pad layer written as a .wav
 love . --lucid             # dev: straight into phase 2 with 750 DP to spend (and with
                            # any dev flag on, L jumps there mid-game)
 love . --lucid --speed 10 --autoplay 600   # dev: phase 2 played by a simple script
-love . --void              # dev: straight into phase 3, astral projection, through the Gate of Horn
+love . --astral            # dev: straight into phase 3, astral projection, through the Gate of Horn
+love . --astral --speed 20 --autoplay 1200 # dev: phase 3 played by a simple script
+love . --beyond            # dev: straight into phase 4, past the cut cord (a placeholder)
                            # (and in game, the 1>2 button beside reset skips to the
-                           # next phase: 1 to 2, 2 to 3, 3 back to a new game)
+                           # next phase: 1 to 2, 2 to 3, 3 to 4, 4 back to a new game)
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
 luajit tests/run.lua sim   # dev: the balance sim (a greedy player at 3, 1.5, 0.5 taps/s,
                            # then twelve nights in a row spending Dream Points)
@@ -60,6 +77,8 @@ luajit tests/run.lua nights 1.5 15   # dev: N nights in a row at a tap rate, the
                                      # then playing each restless night as it opens
 luajit tests/run.lua nights 3 20 heavy restless  # dev: one run, sleeping light or heavy
 luajit tests/run.lua lucid 30        # dev: phase 2's balance sim, a greedy player for 30 minutes
+luajit tests/run.lua astral 60       # dev: phase 3's balance sim, a greedy player for an hour
+SHOTS=astral love . --shots          # dev: only the shots whose name has "astral" in it
 luacheck .                 # dev: the lint
 ```
 
@@ -75,7 +94,13 @@ catches the golden sheep, and 1 / 2 / 3 choose its gift; hold the field and
 drag to steer the bouncing sheep up; when a flock waits at the fence, tap it
 (or C, or Space) to count it, then tap anywhere on the field (or Space) as
 each sheep tops the fence; in a nightmare, hold and drag on the field to move
-the dog. On UPGRADES, tap a card to grow it, or start its dream challenge. In astral projection, tap the dark. The arrow coming round in the top bar
+the dog. On UPGRADES, tap a card to grow it, or start its dream challenge.
+In astral projection, GO OUT and COME BACK under the field (or Space, or a
+tap on the field while in the body); while out, a tap on the dark (or B) is a
+breath, which calms a tug; tap the pulsing star to light it, and the comet to
+catch it (Space too). 1 / 2 / 3 / 4 pick CORD / DREAMERS / STARS / LIBRARY;
+on CORD, - and + set the Silver Thread's strain and TRANCE pauses going out.
+The arrow coming round in the top bar
 (every phase) resets everything and starts a new game from scratch, after
 asking.
 
@@ -89,7 +114,8 @@ way underroot does:
   deep navy, midnight, lavender, lilac and two golds. Nothing is drawn outside
   it, and nothing is drawn with alpha. The dusk sky, night falling over the
   grass and numbers fading out are all ordered dithers.
-  Phase 2 adds four for the dream: deep violet, rose, aurora green and cloud.
+  Phase 2 adds four for the dream: deep violet, rose, aurora green and cloud;
+  phase 3 three for the planes: astral blue, the cord's silver and starlight.
 - **The bodies** are herding's: ellipsoids ray-traced a pose at a time by
   `tracer.lua` (Survive School's 3D method, by way of underroot), then creased
   and inked. The camera is lowered to 22° for a side view. The sheep, the
@@ -120,7 +146,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `audio.lua`, `synth.lua`, `audiothread.lua` | the sound: playing it, making it, the worker that makes it |
 | `gfx.lua`, `tracer.lua`, `models.lua` | the palette and pixel font, the tracer (balls and boxes), the bodies and the dream's farm |
 | `shots.lua` | the `--shots` script |
-| `tests/run.lua` | tests and the balance sims (phase 1 and phase 2) |
+| `tests/run.lua` | tests and the balance sims (phases 1, 2 and 3) |
 | `lucid/game.lua` | phase 2's rules: auto-wake in batches, the layers, the town, the upgrades, the golden choice, counting sheep's flock and pay, time away in closed form. Pure Lua |
 | `lucid/nightmare.lua` | the nightmare: herding's flock, dog and pressure field, the fold, the cloud. Pure Lua |
 | `lucid/bounce.lua` | the bouncing sheep: its cloud, the climb, clouds, stars and moons, and a bot that climbs. Pure Lua |
@@ -128,7 +154,10 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, FARM and UPGRADES tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
 | `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the flock counted over the fence, the nightmare |
 | `lucid/upgrades.lua` | the upgrades' pictures, for their cards |
-| `void/ui.lua` | phase 3, astral projection (in the code still the void): a placeholder to stand in. `ui.lua` hands over to it |
+| `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the Akashic Library, the comet, the cut, time away. Pure Lua |
+| `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS, STARS and LIBRARY tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
+| `astral/scene.lua` | phase 3's field: the plane's sky, far stars streaming past, the body asleep below, the silver cord, the constellation being lit, the dreamers, the comet |
+| `beyond/ui.lua` | phase 4, beyond: a placeholder to stand in, cream and ink, the void or enlightenment. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
 | `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
 
@@ -160,10 +189,11 @@ small helpers) and **json.lua** 0.1.2 (the save file).
                     lightSleeper, heavySleeper },
   done = { insomnia, shortage, wideAwake, coldFeet }, -- restless nights slept through: true
   lastNight, lucidNight,          -- the last night's length; this one was under a second
-  phase,                          -- "nights", "lucid" (phase 2) or "void" (phase 3, astral projection)
+  phase,                          -- "nights", "lucid" (phase 2), "astral" (phase 3) or "beyond" (phase 4)
   lucid,                          -- phase 2's state (below), from the moment you go lucid
+  astral,                         -- phase 3's state (below), from the first time through the gate
   taps, buyMode, muted, lastSeen,
-  version,                        -- the save's shape: 3
+  version,                        -- the save's shape: 4
 }
 
 lucid = {
@@ -183,14 +213,33 @@ lucid = {
   best, bounce,                   -- the best height ever; the climb (not saved: it passes)
   flow, intro, time,
 }
+
+astral = {
+  ether, etherEarned, gathered, best, -- Num: to spend, ever, gathered out (not banked yet), the most banked at once
+  out, dist, outFor,              -- projecting, how far, for how long
+  tug, tugLeft, tugIn,            -- the strain a tug adds, what's still coming of it, when the next comes
+  rest, reach,                    -- seconds before going out again; the farthest ever
+  projections, snaps, cycleRate,  -- counts; Ether a second the cord made lately (away, the comet)
+  ups,                            -- the upgrades: id = ranks
+  autoAt, autoOff,                -- the Silver Thread's strain; the Trance paused
+  dreamers, found,                -- how many of each; found once (for the banner)
+  lit, sky,                       -- stars lit by constellation; the one picked for the sky
+  comet, cometIn, choosing, effects, -- the comet, its gift on offer (not saved), gifts running
+  cut, paid,                      -- the cord cut (phase 4); the cut paid for (free again after)
+  rec,                            -- the records the library reads, from phases 1 and 2
+  planeSeen, intro, time,
+}
 ```
 
 Saves are versioned. `Game.deserialize` reads `version` (none is 1) and runs
 `Game.MIGRATE` in order: 1 to 2 leaves a phase-1 save as it was, and gives a
 save that went lucid in the old placeholder its phase-2 state, with the points
 it held; 2 to 3 changes nothing (the roots, the best height and the gate start
-fresh). Phase 1's fields stay where they were; phase 2 lives in `lucid`, and
-the void keeps it there too (back through the gate, the dream is as it was).
+fresh); 3 to 4 turns the old placeholder's phase, "void", into "astral",
+which starts fresh. Phase 1's fields stay where they were; phase 2 lives in
+`lucid` and phase 3 in `astral`, and each keeps the one before it as it was
+(back through the gate, the dream is as it was; the library reads it again
+on the way out).
 
 The rules step 30 times a second on a fixed timestep, inside LÖVE's frame. The
 screen reads the state every frame and only changes it through `game.lua`'s
@@ -341,15 +390,15 @@ the same happens if the game sat frozen in the background for a while.
   farm's Lucidity district (`gate = true`, `Lucid.openGate`). It costs 300M
   DP and 1E90 dream sheep, needs lucidity at its most (`lucidity = true`),
   and takes no plot: it's bought from its card, so a full farm can't keep
-  you in. Bought, Sheep-OS takes over the screen (`void.outro`, 10 seconds):
+  you in. Bought, Sheep-OS takes over the screen (`astral.outro`, 10 seconds):
   the dream breaks up into bands of ink, its screen types what it's done
   (COUNT SHEEP, DREAM SHEEP, LUCIDITY ... MAX, WAKE UP? N, LEAVE THE BODY?
   Y), the digital rain comes down over it and thins away, and the dreamer's
   sheep drifts up into a violet glow: ASTRAL PROJECTION. Then the phase is
-  "void" (`Game.goVoid`; in the code and the save phase 3 keeps that name).
-  It's a placeholder for phase 3; BACK TO THE DREAM goes back through the
-  gate, which stays open (GO THROUGH on Sheep-OS's card and on the Gate of
-  Horn's, at the end of UPGRADES).
+  "astral" (`Game.goAstral`). The gate stays open both ways: THE GATE OF
+  HORN at the end of LIBRARY goes back to the dream, and GO THROUGH on
+  Sheep-OS's card and on the Gate of Horn's, at the end of UPGRADES, comes
+  out again.
 - **Dream challenges** (`challenges`): at the end of the upgrades, once the
   town's Mirror Lake stands (400K DP and 1E30 sheep), one after the other.
   Starting one sets the layers and dream sheep back to the start and, while it
@@ -390,6 +439,63 @@ gate comes at 60 minutes; a person who misses some sheep lands between. In
 the first ten minutes there's something new 58 times, at most 63 seconds
 apart, and never more than 61 seconds without something to buy in town. The
 flow comes at 5.6 minutes.
+
+### Phase 3 (`astral` in config.lua)
+
+- **The cord:** out, the distance grows by `speed * (distance + 5)` a second
+  (×1.25 a rank of Swift Drift), so it grows exponentially: a projection to
+  the end of any cord takes about `log(cord) / speed` seconds, 15 to 40 of
+  them. The strain is `(distance / cord)^2` plus any tug, and 1 snaps it. The
+  cord is 60, ×1.5 a rank of Longer Cord (`growth` 2.6, the steepest price
+  that doesn't stall: each rank raises the Ether a second only ×1.28).
+- **Ether:** out, `0.5 * (1 + distance)^0.6` a second, times the plane's
+  multiplier (×1, 2, 4, 8, 16 from the Etheric at 0 to the Edge at 6M), the
+  Akashic Library, the Ether Lens (+50% a rank) and Aries (×2). The dreamers
+  add theirs to it, only while you're out. Back, it's banked ×(1 + close
+  call × strain³) (close call 1, +50% a rank, ×2 for the Golden Fleece);
+  snapped, ×0.5 (×0.9 with the Collie) and a 6 second rest, not 3.
+- **Tugs** come every 6 to 14 seconds out (twice as far apart with the
+  Lamb), 0.1 to 0.3 of strain (×0.85 a rank of Calm Body, ×0.75 the Lamb):
+  half at once, half over 1.2 seconds, draining at 0.04 a second. A breath
+  takes 30% off (+15% a rank of Steady Breath). The half at once is what makes
+  the Silver Thread's setting a bet: the sim's greedy player cuts the cord at
+  52 minutes with it at 80%, 46 at 85%, 41 at 90%, and at 95% the cord snaps
+  on 70% of projections and it never gets out (`AUTOAT=0.95 luajit
+  tests/run.lua astral 90`).
+- **The Akashic Library:** `1 + 0.02 * decades` (×1.25 a Librarian, ×2 the
+  Great Flock), the decades being log10 of phase 1's sheep counted, phase 2's
+  dream sheep, its runs (×2) and the Ether earned (×2), plus a fifth of the
+  nights dreamt, the lucidity steps and the best height's hundreds. About
+  ×3.7 for a usual player coming in. It's read again each time through the
+  gate, so going back to the dream and playing on raises it.
+- **Dreamers:** six, each found once your reach passes `at`, priced
+  `base * growth^owned` in Ether, `rate` Ether a second each, ×2 every 25 of
+  a kind, ×(1 + 0.25 * log10(1 + reach)) (+50% of that a rank of Far
+  Sight), ×2 the Golden Fleece, and every multiplier on Ether. In the sim
+  they make 10 to 20% of what the cord brings back: the cord stays the game.
+- **Constellations:** each star `star * 1.35^i` Ether, in order, each once
+  your reach is in its plane and the one before it is lit. The Sleeper (5E12
+  a star) opens the cut, 2E14 Ether.
+- **Away:** with the Silver Thread and the Trance, the cord runs on at half
+  the rate it was running (the last projections' Ether a second, an average
+  kept as it goes); without them, it waits in the body.
+
+From `luajit tests/run.lua astral 60` (a greedy player bringing the records
+of a usual run, coming back at 80% by hand until the Silver Thread and then
+setting it to 85%, breathing on four tugs in five, taking every comet's
+Ether, lighting every star it can, growing the cheapest upgrade under a third
+of its Ether, buying the dreamer that pays back soonest with a fifth):
+
+| minute | 2 | 6 | 10 | 14 | 20 | 30 | 40 | 44 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| cord | 270 | 4.6K | 23K | 118K | 1.3M | 3M | 10M | 15M |
+| constellations lit | 2 | 3 | 4 | 5 | 6 | 6 | 8 | 8 |
+
+The planes come at 2.6 (the Astral), 8.6 (the Mental), 18.7 (the Causal) and
+33 minutes (the Edge), the Sleeper is lit at 39 and the cord cut at 45.7. In
+the first quarter hour there's something new 25 times, at most 167 seconds
+apart. A person who comes back earlier, misses tugs or lets the cord snap
+lands later.
 
 ### Pacing as shipped
 
@@ -574,10 +680,14 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- Phase 3, astral projection: only its way in and a placeholder to stand in
+- Phase 4, beyond: only its way in (the cut cord, the sheep counting you)
+  and a placeholder to stand in
+- Phase 3: no challenges of its own (the restless nights' and the dream
+  challenges' kind), and the dreamers only show as orbs, not as the sleepers
+  they are
 - Pending for phase 2: nightmares that grow, a soft cap on Insomnia, surplus
   sheep paying points
-- `ui.lua` hands over to `lucid/ui.lua` but they don't share widgets yet
+- `ui.lua` hands over to `lucid/ui.lua` and `astral/ui.lua` but they don't share widgets yet
   (cards, dialogs and banners are drawn in each)
 - Restless nights past the four, or doing one again
 - Settings beyond mute, motion and reset (volume, notation)

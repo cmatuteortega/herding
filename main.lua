@@ -20,16 +20,20 @@
 --                       (with --speed, quickly), prints how it went, writes a picture
 --   love . --lucid      dev: straight into phase 2, lucid dreaming, with points to
 --                       spend (L does the same mid-game, with any dev flag on)
---   love . --void       dev: straight into phase 3, the void, through the gate
+--   love . --astral     dev: straight into phase 3, astral projection, through the gate
+--   love . --beyond     dev: straight into phase 4 (a placeholder), past the cut cord
+--                       (--astral --autoplay N: a scripted player in phase 3)
 
 local G = require "gfx"
 local Game = require "game"
 local Lucid = require "lucid.game"
+local Astral = require "astral.game"
 local C = require "config"
 local UI = require "ui"
 local Scene = require "scene"
 local Audio = require "audio"
 local flux = require "lib.flux"
+local N = require "num"
 
 local floor, min, max = math.floor, math.min, math.max
 
@@ -65,7 +69,8 @@ local function resetAll(title, line)
     s.muted, s.reducedMotion = old.muted, old.reducedMotion
     Game.events, Lucid.events = {}, {}
     Audio.setLucid(false)
-    Audio.setVoid(false)
+    Audio.setAstral(false)
+    Audio.setBeyond(false)
     Audio.setAsleep(false)
     Audio.setLullabies(s.owned.lullaby)
     UI.setState(s)
@@ -74,20 +79,44 @@ local function resetAll(title, line)
     UI.banner(title or "A NEW GAME", line or "EVERYTHING WAS RESET")
 end
 
+-- Dev: phase 3 now, through the gate, with the records a usual player
+-- brings from phase 2 (a dream played to the gate).
+local function jumpToAstral(s)
+    local L = s.lucid
+    L.intro, L.gate = false, true
+    L.sheepTotal, L.runs, L.best = N.max(L.sheepTotal, N.from(1e90)), N.max(L.runs, N.from(2e6)), math.max(L.best, 900)
+    for _, c in ipairs(C.dream.challenges) do L.done[c.id] = true end
+    s.allTime = N.max(s.allTime, N.from(3e14))
+    Game.goAstral(s)
+    UI.setState(s)
+    UI.showAstral()
+end
+
+-- Dev: phase 4 now, the Sleeper lit and the cord cut.
+local function jumpToBeyond(s)
+    local P = s.astral
+    for _, c in ipairs(Astral.CONSTELLATIONS) do P.lit[c.id] = #c.stars end
+    P.intro, P.out, P.cut, P.paid = false, false, true, true
+    Game.goBeyond(s)
+    UI.setState(s)
+    UI.showBeyond()
+end
+
 -- Dev: the phase button beside reset, for testing: phase 1 to 2 (as if a lucid
--- night had just been slept), 2 to 3 (through the gate), and 3 back to a new
--- game at the first night.
+-- night had just been slept), 2 to 3 (through the gate), 3 to 4 (the cord
+-- cut), and 4 back to a new game at the first night.
 local function nextPhase()
     local s = UI.state()
-    Game.events, Lucid.events = {}, {}
+    Game.events, Lucid.events, Astral.events = {}, {}, {}
     if s.phase == "nights" then
         Audio.setAsleep(false)
         jumpToLucid(s)
     elseif s.phase == "lucid" then
-        s.lucid.intro, s.lucid.gate = false, true
-        Game.goVoid(s)
-        UI.setState(s)
-        UI.showVoid()
+        Audio.setLucid(false)
+        jumpToAstral(s)
+        UI.save()
+    elseif s.phase == "astral" then
+        jumpToBeyond(s)
         UI.save()
     else
         resetAll("PHASE 1", "DEV: A NEW GAME")
@@ -128,12 +157,13 @@ function love.load(args)
     love.graphics.setLineStyle("rough")
     love.graphics.setPointSize(1)
     love.keyboard.setKeyRepeat(false)
-    local fresh, toLucid, toVoid = false, false, false
+    local fresh, toLucid, toAstral, toBeyond = false, false, false, false
     for k, a in ipairs(args or {}) do
         if a == "--speed" then speed = max(1, min(1000, tonumber(args[k + 1]) or 1)); dev = true end
         if a == "--fresh" then fresh = true; dev = true end
         if a == "--lucid" then toLucid, fresh, dev = true, true, true end
-        if a == "--void" then toLucid, toVoid, fresh, dev = true, true, true, true end
+        if a == "--astral" then toLucid, toAstral, fresh, dev = true, true, true, true end
+        if a == "--beyond" then toLucid, toAstral, toBeyond, fresh, dev = true, true, true, true, true end
         if a == "--shots" then shots = true end
         if a == "--sounds" then
             local t0 = love.timer.getTime()
@@ -161,13 +191,13 @@ function love.load(args)
     Audio.setLullabies(s.owned.lullaby)
     if toLucid then
         jumpToLucid(s)
-        if toVoid then
-            s.lucid.intro, s.lucid.gate = false, true
-            Game.goVoid(s)
-            UI.showVoid()
-        end
-    elseif s.phase == "void" then
-        UI.showVoid()
+        if toAstral then jumpToAstral(s) end
+        if toBeyond then jumpToBeyond(s) end
+    elseif s.phase == "beyond" then
+        UI.showBeyond()
+    elseif s.phase == "astral" then
+        UI.showAstral()
+        UI.away(os.difftime(os.time(), s.lastSeen))
     elseif s.phase == "lucid" then
         UI.showLucid()
         UI.away(os.difftime(os.time(), s.lastSeen))
@@ -200,11 +230,44 @@ function love.update(dt)
     local n = 0
     while acc >= STEP and n < 4000 do
         if s.phase == "lucid" and s.lucid then Lucid.step(s.lucid, STEP)
+        elseif s.phase == "astral" and s.astral then Astral.step(s.astral, STEP)
         elseif s.phase == "nights" then Game.step(s, STEP) end
         acc, n = acc - STEP, n + 1
     end
     if n >= 4000 then acc = 0 end
-    if autoplay and s.phase == "lucid" then
+    if autoplay and s.phase == "astral" then
+        -- Phase 3: through the word on the way in; out whenever it can, back
+        -- at 80% until the Silver Thread, a breath (a tap on the dark) on
+        -- every tug; the comet caught, for its Ether; every star it can
+        -- light, the cheapest upgrade, the cheapest dreamer; and every ten
+        -- seconds the next tab, to see them all.
+        local P = s.astral
+        if P.intro then UI.key("return") end
+        if P.comet and P.comet.t > 1 then Astral.catchComet(P) end
+        if P.choosing then Astral.choose(P, "ether") end
+        if P.out and not Astral.threaded(P) and Astral.strain(P) >= 0.8 then Astral.reelIn(P) end
+        if not P.out and P.rest <= 0 and not Astral.tranced(P) then Astral.project(P) end
+        if P.out and P.tugLeft > 0 then
+            local r = UI.sceneRect()
+            UI.pressed(r.x + r.w * 0.6, r.y + r.h * 0.8, "auto")
+            UI.released(r.x + r.w * 0.6, r.y + r.h * 0.8, "auto")
+        end
+        for _, c in ipairs(Astral.CONSTELLATIONS) do
+            if Astral.light(P, c.id) then autoplay.firsts[#autoplay.firsts + 1] = ("%s%d@%ds"):format(c.id, Astral.lit(P, c.id), P.time) end
+        end
+        local ub, up
+        for _, u in ipairs(Astral.UPS) do
+            if Astral.upState(P, u.id) == "open" and (not up or Astral.upPrice(P, u.id) < up) then ub, up = u.id, Astral.upPrice(P, u.id) end
+        end
+        if ub and Astral.grow(P, ub) and Astral.rank(P, ub) == 1 then autoplay.firsts[#autoplay.firsts + 1] = ("%s@%ds"):format(ub, P.time) end
+        for k = #Astral.DREAMERS, 1, -1 do Astral.buyDreamer(P, k, 1) end
+        Astral.cutCord(P)
+        local tabFor = math.floor(P.time / 10) % 4 + 1
+        if tabFor ~= autoplay.tab then autoplay.tab = tabFor; UI.key(tostring(tabFor)) end
+        if P.time >= autoplay.left then autoplay.done = true end
+    elseif autoplay and s.phase == "beyond" then
+        autoplay.done = true
+    elseif autoplay and s.phase == "lucid" then
         -- Phase 2: catch the golden sheep (take the frenzy), buy layers top
         -- down, build the first thing it can on the first free plot, grow the
         -- first upgrade it can, count every flock that comes to the fence,
@@ -283,8 +346,12 @@ function love.draw()
     love.graphics.draw(canvas, offX, offY, 0, zoom, zoom)
     if autoplay and autoplay.done then
         local s = UI.state()
-        local N = require "num"
-        if s.phase == "lucid" then
+        if s.phase == "astral" or s.phase == "beyond" then
+            local P = s.astral
+            local lit, all = Astral.litCount(P)
+            print(("autoplay, astral: %ds, %s Ether, cord %s, reach %s, %d out, %d snapped, lit %d/%d, phase %s"):format(P.time,
+                N.format(P.ether), N.format(Astral.cord(P)), N.format(P.reach), P.projections, P.snaps, lit, all, s.phase))
+        elseif s.phase == "lucid" then
             local L = s.lucid
             print(("autoplay, lucid: %ds, %s runs, %.1f runs/s, %s DP, %s dream sheep, flow %s, best height %d"):format(L.time,
                 N.format(L.runs), Lucid.runsPerSecond(L), N.format(L.dp), N.format(L.sheep), tostring(L.flow), L.best))
@@ -330,7 +397,7 @@ function love.keypressed(key)
         fit()
     elseif key == "escape" and not MOBILE then
         love.event.quit()
-    elseif key == "l" and dev and UI.state() and UI.state().phase ~= "lucid" then
+    elseif key == "l" and dev and UI.state() and UI.state().phase == "nights" then
         jumpToLucid(UI.state())
     else
         UI.key(key)

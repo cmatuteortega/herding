@@ -13,8 +13,9 @@ local function hex(s)
     return { tonumber(s:sub(1, 2), 16) / 255, tonumber(s:sub(3, 4), 16) / 255, tonumber(s:sub(5, 6), 16) / 255, 1 }
 end
 
--- key, colour, the key one step darker. herding's eight, the night's six, then
--- the lucid dream's four: deep violet, rose, aurora green and cloud.
+-- key, colour, the key one step darker. herding's eight, the night's six, the
+-- lucid dream's four (deep violet, rose, aurora green and cloud), then astral
+-- projection's three: the deep blue of the planes, the silver cord, starlight.
 G.LIST = {
     { "o", "37364e", "n" }, -- ink: outlines
     { "t", "355d69", "o" }, -- deep teal: grass in shadow
@@ -34,6 +35,9 @@ G.LIST = {
     { "r", "e5a3c8", "i" }, -- rose: aurora, warmth
     { "a", "86d9bd", "g" }, -- aurora green
     { "c", "e4def5", "l" }, -- cloud: wool that's turning to sky
+    { "k", "1f3358", "n" }, -- astral blue: the planes' sky
+    { "e", "a9b6cf", "s" }, -- silver: the cord
+    { "x", "e2f1ff", "e" }, -- starlight
 }
 G.C, G.DARKER = {}, {}
 for _, row in ipairs(G.LIST) do

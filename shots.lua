@@ -5,6 +5,8 @@
 local Game = require "game"
 local Lucid = require "lucid.game"
 local LUI = require "lucid.ui"
+local Astral = require "astral.game"
+local AUI = require "astral.ui"
 local Scene = require "scene"
 local flux = require "lib.flux"
 
@@ -50,6 +52,40 @@ local function lucidAt(minutes, flow)
         L.built.clock = L.built.clock + 2
     end
     L.runAcc = 0.6
+    return s
+end
+
+-- Phase 3, `stage` along (0 to 5): the cord longer, some dreamers, stars lit,
+-- upgrades grown. `out`: projecting.
+local function astralAt(stage, out)
+    local s = lucidAt(8, true)
+    local L = s.lucid
+    L.gate, L.sheepTotal, L.runs, L.best = true, 1e90, 2e6, 900
+    for _, c in ipairs(Lucid.CHALLENGES) do L.done[c.id] = true end
+    s.allTime = 3e14
+    Game.goAstral(s)
+    local P = s.astral
+    P.intro, P.cometIn = false, 1e9
+    P.ether = 50 * 30 ^ stage
+    P.reach = ({ 0, 400, 2e4, 7e5, 8e6, 2e7 })[stage + 1]
+    P.planeSeen = Astral.planeAt(P.reach)
+    for i, n in ipairs({ { cord = 0 }, { cord = 4, drift = 2, thread = 1, lens = 2 },
+        { cord = 9, drift = 4, thread = 1, trance = 1, close = 2, lens = 4, calm = 1 },
+        { cord = 14, drift = 6, thread = 1, trance = 1, close = 3, lens = 6, calm = 2, librarian = 2 },
+        { cord = 19, drift = 8, thread = 1, trance = 1, close = 4, lens = 8, calm = 3, librarian = 3, farsight = 1 },
+        { cord = 24, drift = 10, thread = 1, trance = 1, close = 5, lens = 10, calm = 4, librarian = 4, farsight = 2 } }) do
+        if i == stage + 1 then for id, r in pairs(n) do P.ups[id] = r end end
+    end
+    for k, d in ipairs(Astral.DREAMERS) do
+        if P.reach >= d.at then P.dreamers[k] = math.max(0, 30 - k * 4 - (5 - stage) * 3) end
+    end
+    for k, c in ipairs(Astral.CONSTELLATIONS) do
+        if k <= stage + 1 then P.lit[c.id] = #c.stars end
+        if k == stage + 2 then P.lit[c.id] = 2 end
+    end
+    if stage >= 5 then for _, c in ipairs(Astral.CONSTELLATIONS) do P.lit[c.id] = #c.stars end end
+    P.autoOff = true
+    if out then Astral.project(P) end
     return s
 end
 
@@ -186,12 +222,25 @@ local MOMENTS = {
         s.lucid.gate = true
         return s
     end, 0, "gate-astral" },
-    { "24-void", function()
+    { "32-astral-home", function() return astralAt(0) end, 0, "astral" },
+    { "33-astral-out", function() return astralAt(2, true) end, 0, "astral-out" },
+    { "34-astral-stars", function() return astralAt(3, true) end, 0, "astral-stars" },
+    { "35-astral-dreamers", function() return astralAt(3) end, 0, "astral-dreamers" },
+    { "36-astral-library", function() return astralAt(4) end, 0, "astral-library" },
+    { "37-astral-strain", function() return astralAt(4, true) end, 0, "astral-strain" },
+    { "38-astral-count", function() return astralAt(5) end, 0, "astral-count" },
+    { "23d-into-astral", function()
         local s = lucidAt(8, true)
         s.lucid.gate = true
-        Game.goVoid(s)
         return s
-    end, 0, "void" },
+    end, 0, "gate-through" },
+    { "38b-into-beyond", function() return astralAt(5) end, 0, "astral-through" },
+    { "39-beyond", function()
+        local s = astralAt(5)
+        s.astral.cut = true
+        Game.goBeyond(s)
+        return s
+    end, 0, "beyond" },
     { "18-golden-choice", function()
         local s = lucidAt(5, false)
         s.lucid.choosing = true
@@ -211,6 +260,8 @@ function Shots.run(UI, fit)
         local vw, vh = fit()
         local canvas = love.graphics.newCanvas(vw, vh)
         for _, m in ipairs(MOMENTS) do
+          -- SHOTS=astral: only the moments whose name has that in it.
+          if not os.getenv("SHOTS") or m[1]:find(os.getenv("SHOTS"), 1, true) then
             local s = m[2]()
             UI.setState(s)
             Scene.reset()
@@ -218,7 +269,13 @@ function Shots.run(UI, fit)
             if m[4] == "away" then UI.away(os.difftime(os.time(), s.lastSeen)) end
             if m[4] == "enter" then LUI.setState(s); LUI.enter() end
             if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
-            if s.phase == "void" then UI.showVoid() end
+            if s.phase == "astral" then UI.showAstral() end
+            if s.phase == "beyond" then UI.showBeyond() end
+            if m[4] == "astral-stars" then AUI.show("stars") end
+            if m[4] == "astral-dreamers" then AUI.show("dreamers") end
+            if m[4] == "astral-library" then AUI.show("library") end
+            if m[4] == "astral-count" then AUI.leave() end
+            if m[4] == "astral-through" then s.astral.paid = true; Astral.cutCord(s.astral) end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end
             if m[4] == "upgrades" then LUI.show("upgrades") end
             if m[4] == "town-end" then LUI.show("town", nil, 1e9) end
@@ -233,10 +290,18 @@ function Shots.run(UI, fit)
             if m[4] == "gate" then frames = 290 end
             if m[4] == "gate-rain" then frames = 380 end
             if m[4] == "gate-astral" then frames = 545 end
-            if m[4] == "void" then frames = 300 end
+            if m[4] and m[4]:sub(1, 6) == "astral" then frames = 120 end
+            if m[4] == "astral-out" or m[4] == "astral-strain" then frames = 260 end
+            if m[4] == "astral-count" then frames = 560 end
+            if m[4] == "beyond" then frames = 330 end
+            if m[4] == "gate-through" then frames = 700 end
+            if m[4] == "astral-through" then frames = 1100 end
             for i = 1, frames do
                 local dt = 1 / 60
-                if s.phase == "lucid" then
+                if s.phase == "astral" then
+                    Astral.step(s.astral, dt, function() return 0.5 end)
+                    if m[4] == "astral-strain" and s.astral.out and i == 200 then s.astral.tug = 0.25 end
+                elseif s.phase == "lucid" then
                     Lucid.step(s.lucid, dt, m[4] == "climb" and dice or function() return 0.5 end)
                     -- The nightmare's dog, circling in behind the flock.
                     if m[4] == "nightmare" and s.lucid.nightmare then
@@ -277,6 +342,7 @@ function Shots.run(UI, fit)
             local name = ("shot-%s-%s.png"):format(size[3], m[1])
             canvas:newImageData():encode("png", name)
             out[#out + 1] = love.filesystem.getSaveDirectory() .. "/" .. name
+          end
         end
     end
     print(table.concat(out, "\n"))

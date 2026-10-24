@@ -6,6 +6,7 @@
 local C = require "config"
 local N = require "num"
 local Lucid = require "lucid.game"
+local Astral = require "astral.game"
 
 local floor, min, max = math.floor, math.min, math.max
 local function clamp(x, a, b) return min(b, max(a, x)) end
@@ -91,9 +92,11 @@ function Game.fresh()
         lastNight = 0, -- how long the last night lasted, in seconds
         -- "nights" (counting sheep), or "lucid": past the first night
         -- shorter than C.lucid.under, phase 2 (lucid/game.lua), for good;
-        -- or "void": past the Gate of Horn, phase 3.
+        -- "astral": past the Gate of Horn, phase 3 (astral/game.lua); or
+        -- "beyond": past the cut cord, phase 4 (a placeholder).
         phase = "nights",
         lucid = nil, -- phase 2's state, from the moment you go lucid
+        astral = nil, -- phase 3's, from the first time through the gate
         allTime = N.zero(),
         taps = 0,
         buyMode = "1",
@@ -516,18 +519,38 @@ function Game.goLucid(s)
     return gained
 end
 
--- Through the Gate of Horn: out of the dream, into the void (phase 3), for
--- good. The lucid state stays in the save as it was, and plays no more.
-function Game.goVoid(s)
+-- Through the Gate of Horn: out of the dream, into astral projection (phase
+-- 3). The lucid state stays in the save as it was, and waits: the gate stays
+-- open both ways. The first time through, phase 3's state starts; every
+-- time, the Akashic Library reads the records again.
+function Game.goAstral(s)
     if s.phase ~= "lucid" or not (s.lucid and s.lucid.gate) then return false end
-    s.phase = "void"
+    s.phase = "astral"
+    s.astral = s.astral or Astral.fresh(s)
+    Astral.readRecords(s.astral, s)
     return true
 end
 
--- Back through the gate from the void: the dream again, as it was.
+-- Back through the gate from astral projection: the dream again, as it was.
 function Game.backToDream(s)
-    if s.phase ~= "void" then return false end
+    if s.phase ~= "astral" then return false end
     s.phase = "lucid"
+    return true
+end
+
+-- The cord cut: on to phase 4, beyond.
+function Game.goBeyond(s)
+    if s.phase ~= "astral" or not (s.astral and s.astral.cut) then return false end
+    s.phase = "beyond"
+    return true
+end
+
+-- Back from beyond (phase 4 is a placeholder): the stars again, the cord
+-- whole, as if it had never been cut.
+function Game.backToStars(s)
+    if s.phase ~= "beyond" then return false end
+    s.phase = "astral"
+    s.astral.cut = false
     return true
 end
 
@@ -551,6 +574,7 @@ function Game.serialize(s)
     for k, v in pairs(s) do o[k] = v end
     o.sheep, o.runTotal, o.allTime = N.serialize(s.sheep), N.serialize(s.runTotal), N.serialize(s.allTime)
     o.lucid = s.lucid and Lucid.serialize(s.lucid) or nil
+    o.astral = s.astral and Astral.serialize(s.astral) or nil
     o.version = C.saveVersion
     o.lastSeen = os.time()
     return o
@@ -568,6 +592,11 @@ local MIGRATE = {
     -- 2 -> 3: the roots, the bouncing sheep and the void. Nothing to move:
     -- they all start fresh in the lucid block.
     [2] = function(o) o.version = 3 end,
+    -- 3 -> 4: the void placeholder becomes astral projection, from fresh.
+    [3] = function(o)
+        if o.phase == "void" then o.phase = "astral" end
+        o.version = 4
+    end,
 }
 Game.MIGRATE = MIGRATE
 
@@ -602,9 +631,10 @@ function Game.deserialize(o)
     s.dreamEarned = max(s.dreamEarned, s.dreamPoints)
     s.sheep, s.runTotal, s.allTime = N.deserialize(o.sheep), N.deserialize(o.runTotal), N.deserialize(o.allTime)
     if s.buyMode ~= "1" and s.buyMode ~= "10" and s.buyMode ~= "max" then s.buyMode = "1" end
-    if s.phase ~= "lucid" and s.phase ~= "void" then s.phase = "nights" end
-    if s.phase == "void" and type(o.lucid) ~= "table" then s.phase = "nights" end
-    if s.phase == "lucid" or s.phase == "void" then
+    local later = s.phase == "astral" or s.phase == "beyond"
+    if s.phase ~= "lucid" and not later then s.phase = "nights" end
+    if later and type(o.lucid) ~= "table" then s.phase, later = "nights", false end
+    if s.phase == "lucid" or later then
         -- From the placeholder (v1): the points held come along, the same as going lucid.
         if type(o.lucid) == "table" and o.lucid.fromV1 then
             s.lucid = Lucid.fresh(s)
@@ -613,6 +643,12 @@ function Game.deserialize(o)
             s.lucid = Lucid.deserialize(o.lucid, s)
         end
     end
+    -- Phase 3's state, from the first time through the gate (or the
+    -- placeholder's save, coming in now).
+    if type(o.astral) == "table" or later then
+        s.astral = Astral.deserialize(o.astral, s)
+    end
+    if s.phase == "beyond" and not s.astral.cut then s.phase = "astral" end
     s.stage = max(s.stage, Game.stageOf(s))
     return s
 end
