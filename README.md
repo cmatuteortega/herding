@@ -31,7 +31,8 @@ a flock for you to herd into the fold with the dog: herding, the prototype
 this repository began as. Upgrades kept for good come in sections, one for
 each of those games, then the layers and the farm, then seven dream
 challenges one after the other. Last of all is the Gate of Horn, Sheep-OS
-bought on the farm, and through it, the void: phase 3,
+bought on the farm once lucidity is at its most, and through it, astral
+projection: phase 3,
 from the field to the dream to nothing at all (its way in is built; the phase
 is a placeholder).
 
@@ -49,7 +50,7 @@ love . --sounds            # dev: every sound and pad layer written as a .wav
 love . --lucid             # dev: straight into phase 2 with 750 DP to spend (and with
                            # any dev flag on, L jumps there mid-game)
 love . --lucid --speed 10 --autoplay 600   # dev: phase 2 played by a simple script
-love . --void              # dev: straight into phase 3, through the Gate of Horn
+love . --void              # dev: straight into phase 3, astral projection, through the Gate of Horn
                            # (and in game, the 1>2 button beside reset skips to the
                            # next phase: 1 to 2, 2 to 3, 3 back to a new game)
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
@@ -74,7 +75,7 @@ catches the golden sheep, and 1 / 2 / 3 choose its gift; hold the field and
 drag to steer the bouncing sheep up; when a flock waits at the fence, tap it
 (or C, or Space) to count it, then tap anywhere on the field (or Space) as
 each sheep tops the fence; in a nightmare, hold and drag on the field to move
-the dog. On UPGRADES, tap a card to grow it, or start its dream challenge. In the void, tap the dark. The arrow coming round in the top bar
+the dog. On UPGRADES, tap a card to grow it, or start its dream challenge. In astral projection, tap the dark. The arrow coming round in the top bar
 (every phase) resets everything and starts a new game from scratch, after
 asking.
 
@@ -127,7 +128,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, FARM and UPGRADES tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
 | `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the flock counted over the fence, the nightmare |
 | `lucid/upgrades.lua` | the upgrades' pictures, for their cards |
-| `void/ui.lua` | phase 3, the void: a placeholder to stand in. `ui.lua` hands over to it |
+| `void/ui.lua` | phase 3, astral projection (in the code still the void): a placeholder to stand in. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
 | `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
 
@@ -159,7 +160,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
                     lightSleeper, heavySleeper },
   done = { insomnia, shortage, wideAwake, coldFeet }, -- restless nights slept through: true
   lastNight, lucidNight,          -- the last night's length; this one was under a second
-  phase,                          -- "nights", "lucid" (phase 2) or "void" (phase 3)
+  phase,                          -- "nights", "lucid" (phase 2) or "void" (phase 3, astral projection)
   lucid,                          -- phase 2's state (below), from the moment you go lucid
   taps, buyMode, muted, lastSeen,
   version,                        -- the save's shape: 3
@@ -330,16 +331,25 @@ the same happens if the game sat frozen in the background for a while.
   seconds of Dream Points (at least 3), a moon every 400 high is a golden
   gift, and the best height ever lifts every layer. While it climbs the field
   slides down behind it, the hill and the town go under, and higher still the
-  dark thins towards the void.
+  dark thins towards astral projection.
+- **Lucidity** (`Lucid.lucidity`): a step for each dream challenge mastered,
+  shown as a meter heading the farm's Lucidity district and the DREAM
+  CHALLENGES section. The newest step flashes when it's earned; with all
+  seven, the meter reads LUCIDITY: MAX and flashes, and Sheep-OS can be
+  bought.
 - **The way out:** the Gate of Horn is Sheep-OS, the last building in the
   farm's Lucidity district (`gate = true`, `Lucid.openGate`). It costs 300M
-  DP and 1E90 dream sheep, needs the last challenge mastered (`after`), and
-  takes no plot: it's bought from its card, so a full farm can't keep you in.
-  Bought, the dream drains to ink from the edges, the gate opens in the
-  middle, a sheep drifts up into it, and the phase is "void"
-  (`Game.goVoid`). The void is a placeholder for phase 3; BACK TO THE DREAM
-  goes back through the gate, which stays open (GO THROUGH on Sheep-OS's card
-  and on the Gate of Horn's, at the end of UPGRADES).
+  DP and 1E90 dream sheep, needs lucidity at its most (`lucidity = true`),
+  and takes no plot: it's bought from its card, so a full farm can't keep
+  you in. Bought, Sheep-OS takes over the screen (`void.outro`, 10 seconds):
+  the dream breaks up into bands of ink, its screen types what it's done
+  (COUNT SHEEP, DREAM SHEEP, LUCIDITY ... MAX, WAKE UP? N, LEAVE THE BODY?
+  Y), the digital rain comes down over it and thins away, and the dreamer's
+  sheep drifts up into a violet glow: ASTRAL PROJECTION. Then the phase is
+  "void" (`Game.goVoid`; in the code and the save phase 3 keeps that name).
+  It's a placeholder for phase 3; BACK TO THE DREAM goes back through the
+  gate, which stays open (GO THROUGH on Sheep-OS's card and on the Gate of
+  Horn's, at the end of UPGRADES).
 - **Dream challenges** (`challenges`): at the end of the upgrades, once the
   town's Mirror Lake stands (400K DP and 1E30 sheep), one after the other.
   Starting one sets the layers and dream sheep back to the start and, while it
@@ -496,8 +506,8 @@ their value comes from what they buy.
     Speed (gold): Better Fence, Dog Kennel, Meadow. Automation (lilac):
     Breeding Pen, Wool Mill, Counting Drones (two layers each), the Barn.
     Pasture (green): Haystack, Wishing Well, Sheepfold. Lucidity: the Mirror
-    Lake, and Sheep-OS, the Gate of Horn, bought from its card once the last
-    dream challenge is mastered. Everything built stands on the dream's
+    Lake, and Sheep-OS, the Gate of Horn, bought from its card once lucidity
+    is at its most. The district is headed by the lucidity meter. Everything built stands on the dream's
     hill, rising out of the ground as it goes up.
   - *UPGRADES*: cards in sections like the farm's, each headed with its
     game and how to play it: the bouncing sheep, counting sheep, the
@@ -526,8 +536,9 @@ their value comes from what they buy.
     with it show over the field; at the end, Dream Points and a CAP chip
     while the tune lasts.
   - *The Gate of Horn*: Sheep-OS on FARM (a rose mark there, and Lucidity
-    at the top, once it's in reach), the way out, into the void. Its card at
-    the end of UPGRADES says TO THE FARM.
+    at the top, once it's in reach), the way out: a Sheep-OS screen, the
+    digital rain, and astral projection. Its card at the end of UPGRADES
+    says TO THE FARM.
   - *The lucid golden sheep* crosses the sky: tap it and choose ×7 for 30
     seconds, Dream Points now (4 minutes' worth), or time ×2 for a minute.
   - *Nightmares*, every four to seven minutes: the field turns to night grass,
@@ -563,7 +574,7 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- Phase 3, the void: only its way in and a placeholder to stand in
+- Phase 3, astral projection: only its way in and a placeholder to stand in
 - Pending for phase 2: nightmares that grow, a soft cap on Insomnia, surplus
   sheep paying points
 - `ui.lua` hands over to `lucid/ui.lua` but they don't share widgets yet

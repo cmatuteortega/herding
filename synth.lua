@@ -166,6 +166,15 @@ local DEFS = {
         chime(0, midi(86), 3, 0.3), chime(0.5, midi(79), 3, 0.35), chime(1.0, midi(71), 3.2, 0.4),
         chime(1.6, midi(64), 3.5, 0.45, "tri"), chime(2.3, midi(55), 4, 0.5, "tri"), chime(3.0, midi(43), 5, 0.5, "tri"),
         { dur = 5, wave = "noise", lp = { 900, 120 }, vol = 0.06, curve = 1 } },
+    -- Sheep-OS booting (four square-ish blips going up), a key typed on its
+    -- screen, and the digital rain coming down (a hiss opening up).
+    boot = { vol = 0.2, gap = 1, echo = { 0.06, 0.2 },
+        chime(0, midi(84), 0.07, 0.6, "tri"), chime(0.1, midi(91), 0.07, 0.5, "tri"),
+        chime(0.2, midi(88), 0.09, 0.5, "tri"), chime(0.34, midi(96), 0.16, 0.45, "tri") },
+    key = { vol = 0.08, gap = 0.035, wob = 0.15,
+        { dur = 0.02, wave = "noise", hp = { 3000 }, vol = 0.6, curve = 2 }, { dur = 0.015, wave = "tri", f0 = 1500, f1 = 1200, vol = 0.3, curve = 3 } },
+    rain = { vol = 0.16, gap = 3, echo = { 0.2, 0.3 },
+        { dur = 3.2, wave = "noise", lp = { 400, 4200 }, hp = { 200 }, vol = 0.5, a = 1.4, curve = 1 } },
     -- Counting sheep's beat: a soft woodblock, a tick on every top (the hits
     -- are the taps' music box, climbing with the count).
     beat = { vol = 0.22, gap = 0.1, wob = 0.01,

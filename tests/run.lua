@@ -816,12 +816,18 @@ test("the upgrades: ranks, what they do, the gate", function()
     eq(Lucid.rootState(L, "lake"), "full"); eq(Lucid.rootState(L, "c.season"), "open")
     eq(Lucid.rootState(L, "c.stoppedClocks"), "shut")
     assert(not Lucid.grow(L, "c.season"), "a challenge is started, not grown")
-    -- The gate: Sheep-OS on the farm, once the last challenge is mastered.
+    -- Lucidity: a step for each challenge mastered. The gate, Sheep-OS on
+    -- the farm, once it's at its most.
     L.dp, L.sheep = 1e12, 1e100
+    L.done = {}
+    local n, all = Lucid.lucidity(L)
+    eq(n, 0); eq(all, #Lucid.CHALLENGES); assert(not Lucid.lucid(L))
     for _, c in ipairs(Lucid.CHALLENGES) do if c.id ~= "emptySquares" then L.done[c.id] = true end end
+    eq(Lucid.lucidity(L), all - 1)
     eq(Lucid.rootState(L, "gate"), "shut")
-    assert(not Lucid.canBuild(L, "lighthouse") and not Lucid.openGate(L), "not before Empty Squares")
+    assert(not Lucid.canBuild(L, "lighthouse") and not Lucid.openGate(L), "not before lucidity's at its most")
     L.done.emptySquares = true
+    assert(Lucid.lucid(L))
     eq(Lucid.rootState(L, "gate"), "open")
     assert(not Lucid.grow(L, "gate"), "the gate is bought on the farm")
     assert(not Lucid.build(L, "lighthouse", Lucid.cell(3, 3)), "it takes no plot")

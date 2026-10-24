@@ -155,6 +155,18 @@ function G.text(k, s, x, y, z, dens)
     for _, p in ipairs(big) do love.graphics.rectangle("fill", p[1], p[2], z, z) end
 end
 
+-- One glyph's pixels added to a point list, for drawing many in one colour.
+function G.glyph(list, ch, x, y)
+    local g = GLYPHS[ch]
+    if not g then return end
+    for r = 1, 5 do
+        local row = g[r]
+        for c = 1, 3 do
+            if row:byte(c) == 35 then G.plot(list, x + c - 1, y + r - 1) end
+        end
+    end
+end
+
 -- Text with an ink edge, for reading over the field.
 local RING = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { 1, 1 } }
 local RING8 = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } }

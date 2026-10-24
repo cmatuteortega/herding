@@ -222,11 +222,12 @@ return {
             { id = "plaza", district = "park", name = "Haystack", desc = "+50% to every building beside it", dp = 1500, sheep = 2e4, growth = 3 },
             { id = "fountain", district = "park", name = "Wishing Well", desc = "Golden sheep come 50% more often", dp = 2500, sheep = 5e4, growth = 3, max = 2, goldenAdd = 0.5 },
             { id = "fold", district = "park", name = "Sheepfold", desc = "Nightmares: a wider pen, +50% reward", dp = 2000, sheep = 3e4, growth = 3, max = 3, penAdd = 0.2, rewardAdd = 0.5 },
-            -- Lucidity: the lake opens the dream challenges, and Sheep-OS, once
-            -- the last of them (`after`) is mastered, is the Gate of Horn. It
-            -- takes no plot: bought from its card, the dream ends in the void.
+            -- Lucidity: the lake opens the dream challenges, and each one
+            -- mastered is a step of lucidity. At its most, Sheep-OS can be
+            -- bought (`lucidity`): the Gate of Horn. It takes no plot: bought
+            -- from its card, the dream boots down into astral projection.
             { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Opens the dream challenges, on UPGRADES", dp = 4e5, sheep = 1e30, max = 1 },
-            { id = "lighthouse", district = "lucid", name = "Sheep-OS", desc = "The Gate of Horn: the way out of the dream. Past it, the void", dp = 3e8, sheep = 1e90, max = 1, after = "emptySquares", gate = true },
+            { id = "lighthouse", district = "lucid", name = "Sheep-OS", desc = "The Gate of Horn: out of the dream, into astral projection", dp = 3e8, sheep = 1e90, max = 1, lucidity = true, gate = true },
         },
 
         -- The upgrades, kept for good (in the code and the save still the
@@ -362,8 +363,11 @@ return {
         },
     },
 
-    -- PHASE 3, THE VOID: past the Gate of Horn (Sheep-OS). Not built yet; the way in is.
-    void = { outro = 7 },
+    -- PHASE 3, ASTRAL PROJECTION: past the Gate of Horn (Sheep-OS). Not built
+    -- yet; the way in is. In the code and the save it's still the "void".
+    -- `outro` is the way in's length in seconds: Sheep-OS boots, its screen
+    -- types, the digital rain falls, and the dreamer drifts up out of it.
+    void = { outro = 10 },
 
     offline = {
         maxHours = 8,

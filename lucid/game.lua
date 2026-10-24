@@ -163,7 +163,7 @@ end
 function Lucid.canBuild(L, id)
     local b = BY[id]
     if b.locked or (b.max and L.built[id] >= b.max) then return false end
-    if (b.after and not Lucid.met(L, b.after)) or (b.gate and L.gate) then return false end
+    if (b.lucidity and not Lucid.lucid(L)) or (b.gate and L.gate) then return false end
     local p = Lucid.price(L, id)
     return N.gte(L.dp, p.dp) and N.gte(L.sheep, p.sheep)
 end
@@ -438,6 +438,18 @@ end
 
 function Lucid.mirror(L) return L.built.mirror > 0 end
 
+-- Lucidity: the dream challenges mastered, of all of them. At its most,
+-- Sheep-OS (the Gate of Horn) can be bought.
+function Lucid.lucidity(L)
+    local n = 0
+    for _, c in ipairs(Lucid.CHALLENGES) do if Lucid.met(L, c.id) then n = n + 1 end end
+    return n, #Lucid.CHALLENGES
+end
+function Lucid.lucid(L)
+    local n, all = Lucid.lucidity(L)
+    return n >= all
+end
+
 -- How far the challenge under way has got: done, goal (both plain numbers).
 function Lucid.progress(L)
     local c = L.challenge and CH[L.challenge]
@@ -520,7 +532,7 @@ function Lucid.rootState(L, id)
     end
     if r.kind == "gate" then
         if L.gate then return "full" end
-        return Lucid.ready(L, r) and "open" or "shut"
+        return Lucid.lucid(L) and "open" or "shut"
     end
     if r.kind == "up" and rank(L, id) >= r.max then return "full" end
     if not Lucid.ready(L, r) then return "shut" end

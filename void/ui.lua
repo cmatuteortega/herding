@@ -1,6 +1,7 @@
--- Phase 3, the void: past the Gate of Horn, out of the dream. Not built yet:
--- this is the way in and a place to stand. The field went first, then the
--- dream; what's left is the dark, a few far motes falling slowly in towards
+-- Phase 3, astral projection: past the Gate of Horn (Sheep-OS), out of the
+-- dream and out of the dreamer. In the code and the save it's still the
+-- "void". Not built yet: this is the way in and a place to stand. The field
+-- went first, then the dream; what's left is the dark, a few far motes falling slowly in towards
 -- the middle, and one sheep floating there, turning. A tap rings out over
 -- the dark. BACK TO THE DREAM goes back through the gate (it stays open).
 -- The reset button, top right, starts everything over from the first night:
@@ -143,8 +144,8 @@ function VUI.draw()
         local dens = reduced and 1 or lume.clamp((since - at) / 0.8, 0, 1)
         if dens > 0 then G.label(k, text, floor(cx - G.textWidth(text, z) / 2), floor(y), z, dens, "o") end
     end
-    say("THE VOID", 0.3, vh * 0.2, 2, "c")
-    say("NO FIELD. NO DREAM. NOTHING TO COUNT.", 1.2, vh * 0.2 + 16, 1, "l")
+    say("ASTRAL PROJECTION", 0.3, vh * 0.2, 2, "c")
+    say("NO FIELD. NO DREAM. NO BODY.", 1.2, vh * 0.2 + 16, 1, "l")
     say("PHASE 3 BEGINS HERE. IT ISN'T BUILT YET.", 2.2, cy + 26, 1, "i")
     say("TAP THE DARK.", 3.2, cy + 36, 1, "i")
     if since > 2.5 then

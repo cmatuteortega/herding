@@ -155,6 +155,14 @@ local MOMENTS = {
         s.lucid.best = 340
         return s
     end, 0, "climb" },
+    { "22a-lucidity", function()
+        local s = lucidAt(8, true)
+        local L = s.lucid
+        L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
+        L.done.season, L.done.stoppedClocks, L.done.skyHigh = true, true, true
+        L.dp, L.sheep = 4e8, 1e95
+        return s
+    end, 0, "town-end" },
     { "22b-sheep-os", function()
         local s = lucidAt(8, true)
         local L = s.lucid
@@ -168,6 +176,16 @@ local MOMENTS = {
         s.lucid.gate = true
         return s
     end, 0, "gate" },
+    { "23b-rain", function()
+        local s = lucidAt(8, true)
+        s.lucid.gate = true
+        return s
+    end, 0, "gate-rain" },
+    { "23c-astral", function()
+        local s = lucidAt(8, true)
+        s.lucid.gate = true
+        return s
+    end, 0, "gate-astral" },
     { "24-void", function()
         local s = lucidAt(8, true)
         s.lucid.gate = true
@@ -203,15 +221,18 @@ function Shots.run(UI, fit)
             if s.phase == "void" then UI.showVoid() end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end
             if m[4] == "upgrades" then LUI.show("upgrades") end
+            if m[4] == "town-end" then LUI.show("town", nil, 1e9) end
             if m[4] == "upgrades-end" then LUI.show("upgrades", nil, 1e9) end
             if m[4] == "climb" then Lucid.hold(s.lucid, 50) end
-            if m[4] == "gate" then LUI.leave() end
+            if m[4] and m[4]:sub(1, 4) == "gate" then LUI.leave() end
             if m[4] == "challenge-ask" then LUI.askChallenge("season") end
             local r = UI.sceneRect()
             local frames = (m[4] == "sleep" or m[4] == "nightmare") and 400 or (m[4] == "enter" and 170 or 70)
             if m[4] == "climb" then frames = 360 end
             if m[4] == "count" then frames = 250 end
             if m[4] == "gate" then frames = 290 end
+            if m[4] == "gate-rain" then frames = 380 end
+            if m[4] == "gate-astral" then frames = 545 end
             if m[4] == "void" then frames = 300 end
             for i = 1, frames do
                 local dt = 1 / 60
@@ -236,6 +257,8 @@ function Shots.run(UI, fit)
                 end
                 if m[3] > 0 and i % 7 == 0 and i <= m[3] * 7 then UI.pressed(r.x + r.w / 2, r.y + r.h * 0.8, "shot") end
                 if i == 2 and (m[4] == "dreams" or m[4] == "dreams-low") then UI.key("d") end
+                -- To the end of FARM, once it's laid out (the scroll stops at the content).
+                if i == 3 and m[4] == "town-end" then LUI.show("town", nil, 1e9) end
                 if i == 4 and (m[4] == "dreams-low" or m[4] == "lucid-low") then UI.wheel(-40) end
                 if i == 2 and m[4] == "ask" then UI.askRestless("wideAwake") end
                 if i == 50 and m[4] == nil then

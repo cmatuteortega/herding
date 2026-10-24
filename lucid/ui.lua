@@ -33,7 +33,7 @@ local D = C.dream
 local LUI = {}
 LUI.save = function() end -- set by ui.lua
 LUI.resetAll = function() end -- set by ui.lua
-LUI.nextPhase = function() end -- set by ui.lua (dev): on to the void
+LUI.nextPhase = function() end -- set by ui.lua (dev): on to astral projection (the void)
 
 local S, L -- the game's state, and its lucid part
 local vw, vh = 320, 240
@@ -53,6 +53,8 @@ local modal = nil -- { title, lines, big, buttons = { { label, fn } }, night, y 
 local sel, place, moving = nil, nil, nil -- the town: a cell picked, a building to put down, one being moved
 local intro = nil -- the way in: { t }
 local outro = nil -- the way out, through the Gate of Horn: { t }
+local lucidPulse = 0 -- until when lucidity's newest step flashes
+local outroSounds -- the way out's sounds (below, with the way out)
 local challengeSeen = {} -- dream challenges looked at on UPGRADES, so the tab's mark goes
 local runQuiet = 0 -- the run chime: not again until then, so it isn't constant
 
@@ -177,14 +179,14 @@ local function explain()
     })
 end
 
--- The way out: the Gate of Horn opens, the dream drains away, the void.
+-- The way out: Sheep-OS boots, the digital rain, astral projection (the void).
 -- Then ui.lua hands over (LUI.toVoid).
 function LUI.leave()
     if outro or S.phase ~= "lucid" then return end
     modal, dogHeld, bounceHeld = nil, nil, nil
     Lucid.hold(L, nil)
     outro = { t = reduced and C.void.outro - 2.5 or 0 }
-    cue("void")
+    cue("boot")
     LUI.save()
 end
 LUI.toVoid = function() end -- set by ui.lua
@@ -275,7 +277,12 @@ function LUI.drain()
             cue("stage")
         elseif e.type == "challengeDone" then
             local c = Lucid.CH[e.id]
-            LUI.banner("MASTERED: " .. c.name:upper(), c.reward:upper())
+            if Lucid.lucid(L) then
+                LUI.banner("LUCIDITY: MAX", "SHEEP-OS CAN BE BOUGHT, ON THE FARM")
+            else
+                LUI.banner("MASTERED: " .. c.name:upper(), c.reward:upper())
+            end
+            lucidPulse = t + 3
             cue("safe")
             LScene.flash()
         elseif e.type == "flock" then
@@ -359,6 +366,10 @@ local function layout()
         for _, sec in ipairs(Lucid.SECTIONS) do
             rows[#rows + 1] = { header = sec.name .. (sec.how and (": " .. sec.how) or ""), y = y, h = 10 }
             y = y + 10
+            if sec.id == "dream" then
+                rows[#rows + 1] = { lucidity = true, y = y, h = 10 }
+                y = y + 12
+            end
             for _, r in ipairs(Lucid.ROOTS) do
                 if r.section == sec.id then
                     rows[#rows + 1] = { upgrade = r, y = y, h = CARD_H }
@@ -374,12 +385,13 @@ local function layout()
         rows[#rows + 1] = { info = true, y = y, h = 24 }
         y = y + 28
         local districts = {
-            { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PASTURE" }, { "lucid", "LUCIDITY" },
+            { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PASTURE" }, { "lucid" },
         }
         -- The Mirror Lake or Sheep-OS in reach: lucidity goes first, where it's seen.
         if lucidWaits() then table.insert(districts, 1, table.remove(districts)) end
         for _, d in ipairs(districts) do
-            rows[#rows + 1] = { header = d[2], y = y, h = 10 }
+            -- Lucidity's header is its meter.
+            rows[#rows + 1] = d[1] == "lucid" and { lucidity = true, y = y, h = 10 } or { header = d[2], y = y, h = 10 }
             y = y + 10
             for _, b in ipairs(Lucid.BUILD) do
                 if b.district == d[1] then
@@ -758,7 +770,9 @@ function LUI.update(dt)
         if intro.t > 3.6 then intro = nil; explain() end
     end
     if outro then
+        local from = outro.t
         outro.t = outro.t + dt
+        outroSounds(from, outro.t)
         if outro.t > C.void.outro then
             outro = nil
             LUI.toVoid()
@@ -806,7 +820,7 @@ local function drawTop()
     local re = R.reset
     G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "u", "i")
     G.art(RESET_ART, re.x + 5, re.y + 3)
-    -- The phase button (dev): on to the void.
+    -- The phase button (dev): on to astral projection.
     local ph = R.phase
     G.box(ph.x + 1, ph.y + 1, ph.w - 2, ph.h - 2, "u", "i")
     G.text("l", "2>3", ph.x + 3, ph.y + 4)
@@ -1113,7 +1127,10 @@ local function drawBuilding(row, x, y, w)
         G.text("o", b.name:upper(), tx, y + 5)
         if L.built[b.id] > 0 then G.text("p", "X" .. L.built[b.id], tx + G.textWidth(b.name) + 5, y + 5) end
         local desc = b.desc
-        if b.after and not Lucid.met(L, b.after) then desc = "Master " .. Lucid.CH[b.after].name .. " first" end
+        if b.lucidity and not Lucid.lucid(L) then
+            local n, all = Lucid.lucidity(L)
+            desc = "Needs lucidity at max: master every dream challenge (" .. n .. "/" .. all .. ")"
+        end
         local lines = G.wrap(desc:upper(), px - tx - 4)
         for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
         return
@@ -1147,6 +1164,34 @@ local function drawUpgrade(row, x, y, w)
     for i = 1, min(2, #lines) do G.text(shut and "s" or "p", lines[i], tx, y + 8 + i * 6) end
 end
 
+-- Lucidity: a step lit for each dream challenge mastered (the newest
+-- flashing a while), and at its most every step and the word MAX flash:
+-- Sheep-OS can be bought.
+local function drawLucidity(x, y, w)
+    local n, all = Lucid.lucidity(L)
+    local full = n >= all
+    local flash = full and (reduced or sin(t * 6) > 0)
+    G.text(full and (flash and "y" or "c") or "i", full and "LUCIDITY: MAX" or "LUCIDITY", x + 2, y + 2)
+    local count = n .. "/" .. all
+    local bx = x + 2 + G.textWidth("LUCIDITY: MAX") + 6
+    local bw = w - (bx - x) - G.textWidth(count) - 8
+    local sw = floor((bw - 2 * (all - 1)) / all)
+    for i = 1, all do
+        local k, edge = "u", "p"
+        if i <= n then
+            edge = "o"
+            if full then
+                -- A gold light running along them, over the flashing.
+                k = (flash or (floor(t * 10) - i) % all == 0) and "y" or "c"
+            else
+                k = (i == n and lucidPulse > t and sin(t * 12) > 0) and "c" or "l"
+            end
+        end
+        G.box(bx + (i - 1) * (sw + 2), y + 2, sw, 4, k, edge)
+    end
+    G.text(full and "y" or "i", count, x + w - G.textWidth(count) - 2, y + 2)
+end
+
 local function drawPanel()
     local r = R.panel
     love.graphics.push("all")
@@ -1156,6 +1201,7 @@ local function drawPanel()
         local y = oy + row.y
         if y + row.h >= r.y and y < r.y + r.h then
             if row.header then G.text("i", row.header, r.x + 2, y + 2)
+            elseif row.lucidity then drawLucidity(r.x, y, r.w)
             elseif row.summary then drawSummary(r.x, y, r.w)
             elseif row.dim then drawDim(row, r.x, y, r.w)
             elseif row.grid then drawGrid(r.x, y)
@@ -1257,65 +1303,142 @@ local function drawIntro()
     say("LUCID DREAMING", 2.5, floor(vh * 0.38) + 26, 2, "y")
 end
 
--- The way out: the Gate of Horn opens in the middle of the dream, the dream
--- drains away round it into ink, a last sheep drifts up into nothing, and
--- the words.
+-- The way out: Sheep-OS. The dream breaks up into bands of ink, the
+-- screen turns to Sheep-OS's, which types what it's done and what it's
+-- asked, then the digital rain comes down over it, thins, and out of it the
+-- dreamer's sheep drifts up: astral projection.
+local GLITCH, TYPE_AT, CPS = 0.8, 1.1, 55 -- the dream breaking up; typing from; letters a second
+local RAIN_AT, RAIN_STOP, ASTRAL_AT = 5.0, 7.6, 8.0
+local RAIN_CHARS = "Z0123456789:+*=#>/Z"
+-- Sheep-OS's screen, a line at a time: what it says, and its answer (gold)
+-- after the dots.
+local BOOT = {
+    { "SHEEP-OS 1.0" }, { "" },
+    { "> COUNT SHEEP", "DONE" }, { "> DREAM SHEEP", "DONE" }, { "> LUCIDITY", "MAX" },
+    { "> WAKE UP?", "N" }, { "> LEAVE THE BODY?", "Y" }, { "> PROJECTING" },
+}
+local bootLines = {} -- { s, ans (where the answer starts), at }
+do
+    local at = TYPE_AT
+    for _, b in ipairs(BOOT) do
+        local line = b[1]
+        if b[2] then line = line .. " " .. ("."):rep(max(2, 21 - #line)) .. " " .. b[2] end
+        bootLines[#bootLines + 1] = { s = line, ans = b[2] and #line - #b[2] or nil, at = at }
+        at = at + #line / CPS + 0.14
+    end
+end
+
+-- Letters typed on Sheep-OS's screen by `p` seconds in.
+local function typed(p)
+    local n = 0
+    for _, l in ipairs(bootLines) do n = n + lume.clamp(floor((p - l.at) * CPS), 0, #l.s) end
+    return n
+end
+
+-- The way out's sounds, as it passes each moment: keys, the rain, the fall.
+function outroSounds(from, to)
+    if typed(to) > typed(from) and to < RAIN_AT + 1 then cue("key") end
+    if from < RAIN_AT and to >= RAIN_AT then cue("rain") end
+    if from < RAIN_STOP and to >= RAIN_STOP then cue("void") end
+end
+
+local function hash(a, b)
+    local v = sin(a * 12.9898 + b * 78.233) * 43758.5453
+    return v - floor(v)
+end
+
 local function drawOutro()
     local p = outro.t
     local T = C.void.outro
-    -- The dark coming in from the edges, then over everything.
-    local dark = lume.clamp(p / 2.6, 0, 1)
-    local cx, cy = vw / 2, vh / 2
-    local rmax = math.sqrt(cx * cx + cy * cy)
-    local pts, deep = {}, {}
-    for yy = 0, vh - 1 do
-        for xx = 0, vw - 1 do
-            local d = math.sqrt((xx - cx) ^ 2 + (yy - cy) ^ 2) / rmax
-            local v = (dark * 1.6 - (1 - d)) * 2
-            if v > 0 and G.dither(xx, yy, min(1, v)) then
-                if G.dither(xx + 1, yy + 2, (v - 1) * 0.8) then G.plot(deep, xx, yy) else G.plot(pts, xx, yy) end
+    -- The dream breaking up: bands of ink and green across it, thicker and
+    -- more of them, each knocked sideways.
+    if p < GLITCH then
+        local f = p / GLITCH
+        for y = 0, vh - 1, 3 do
+            local h = hash(y, floor(p * 24))
+            if h < f * 1.3 then
+                local off = floor((hash(y, 7) - 0.5) * 16 * f)
+                G.rect(h < f * 0.9 and "n" or "a", off, y, vw, h < f * 0.6 and 3 or 1)
             end
         end
+        return
     end
-    G.points("o", pts)
-    G.points("n", deep)
-    -- The gate: two horn-white posts and a lintel, opening.
-    local open = lume.clamp((p - 1.2) / 2, 0, 1)
-    local gh = floor(min(vh * 0.4, 70))
-    local gw = floor(gh * 0.6)
-    local gx, gy = floor(cx - gw / 2), floor(cy - gh / 2)
-    if p > 0.6 and p < T - 0.8 then
-        G.rect("w", gx - 2, gy - 3, gw + 4, 3)
-        G.rect("w", gx - 2, gy, 3, gh)
-        G.rect("w", gx + gw - 1, gy, 3, gh)
-        -- Inside it: the void, widening from a line.
-        local iw = floor((gw - 4) * open)
-        G.rect("o", floor(cx - iw / 2), gy, iw, gh)
-        for i = 0, 6 do
-            local sx = floor(cx - iw / 2 + (i * 13 + floor(p * 9)) % max(1, iw))
-            if iw > 2 then G.rect(i % 2 == 0 and "l" or "i", sx, gy + (i * 17) % gh, 1, 1) end
+    G.rect("n", 0, 0, vw, vh)
+    for y = 1, vh - 1, 3 do G.rect("v", 0, y, vw, 1) end -- the screen's lines
+    local cx, cy = vw / 2, vh / 2
+    -- The screen, typed, going under the rain.
+    local fade = 1 - lume.clamp((p - RAIN_AT - 0.6) / 1.6, 0, 1)
+    if fade > 0 then
+        local x0, y0 = floor(max(6, cx - 50)), floor(vh * 0.3)
+        local green, gold = {}, {}
+        for i, l in ipairs(bootLines) do
+            local n = lume.clamp(floor((p - l.at) * CPS), 0, #l.s)
+            local y = y0 + (i - 1) * 8
+            for k = 1, n do
+                if G.dither(k, i * 3, fade) then
+                    G.glyph((l.ans and k > l.ans) and gold or green, l.s:sub(k, k), x0 + (k - 1) * 4, y)
+                end
+            end
+            -- The cursor: on the line being typed, then blinking on the last.
+            local nxt = bootLines[i + 1]
+            if p >= l.at and (not nxt or p < nxt.at) and (n < #l.s or floor(p * 3) % 2 == 0) then
+                G.rect("a", x0 + n * 4, y, 3, 5)
+            end
         end
+        G.points("a", green)
+        G.points("y", gold)
     end
-    -- A sheep drifting up into it, turning to cloud.
-    if p > 2 and p < T - 1 then
-        local f = (p - 2) / (T - 3)
-        local sp = Models.sheep(0.25, 0, 0, f < 0.5 and "plain" or "cloud", false, 0.8)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.draw(sp.img, floor(cx - sp.oi), floor(cy + gh * 0.4 - f * gh * 0.8 - sp.oj))
+    -- The digital rain: a column every glyph, each drop at its own speed and
+    -- length, a bright head and a trail going down to deep teal, the
+    -- glyphs flickering. No new drops after RAIN_STOP; then it thins away.
+    if p >= RAIN_AT then
+        local cols, rows = floor(vw / 4) + 1, floor(vh / 6) + 2
+        local out = lume.clamp((p - RAIN_STOP) / 1.2, 0, 1)
+        local lists = { c = {}, a = {}, g = {}, t = {} }
+        for c = 0, cols - 1 do
+            local v = 14 + hash(c, 1) * 22
+            local s0 = RAIN_AT + hash(c, 2) * 1.2
+            local len = 5 + floor(hash(c, 3) * 14)
+            local loop = rows + len
+            local head = (p - s0) * v
+            local drop = floor(head / loop)
+            if head > 0 and s0 + drop * loop / v <= RAIN_STOP then
+                local hd = floor(head - drop * loop)
+                local flick = floor(p * (4 + hash(c, 4) * 6))
+                for d = 0, len do
+                    local j = hd - d
+                    if j >= 0 and j < rows and not (out > 0 and G.dither(c, j, out)) then
+                        local k = d == 0 and "c" or (d <= 2 and "a" or (d <= len * 0.55 and "g" or "t"))
+                        local ci = 1 + floor(hash(c * 31 + j, flick + j) * #RAIN_CHARS)
+                        G.glyph(lists[k], RAIN_CHARS:sub(ci, ci), c * 4, j * 6)
+                    end
+                end
+            end
+        end
+        for _, k in ipairs({ "t", "g", "a", "c" }) do G.points(k, lists[k]) end
     end
+    -- Astral projection: out of the thinning rain, the dreamer's sheep
+    -- drifting up from below into a violet glow, and the words.
     local function say(text, at, y, z, k)
         if p > at then
             local dens = lume.clamp((p - at) / 0.6, 0, 1) * lume.clamp((T - 0.3 - p) / 0.6, 0, 1)
             G.label(k, text, floor(cx - G.textWidth(text, z) / 2), y, z, reduced and 1 or dens, "o")
         end
     end
-    say("THE GATE OF HORN OPENS.", 1.4, gy + gh + 10, 1, "w")
-    say("PAST THE FIELD. PAST THE DREAM.", 2.8, gy + gh + 20, 1, "l")
-    say("THE VOID", 4.2, gy - 20, 2, "c")
+    if p >= ASTRAL_AT then
+        local f = lume.clamp((p - ASTRAL_AT) / 1.2, 0, 1)
+        G.disc("u", cx, cy, floor(12 + f * 14), min(1, f * 1.5) * 0.7)
+        local sp = Models.sheep(t * 0.3, 0, 0, "cloud", false, 1.4)
+        local bob = reduced and 0 or sin(t * 0.8) * 2 * f
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(sp.img, floor(cx - sp.oi), floor(vh + 16 - (vh / 2 + 16) * (1 - (1 - f) ^ 2) + bob - sp.oj))
+        say("ASTRAL PROJECTION", ASTRAL_AT + 0.3, floor(cy - 52), 2, "c")
+        say("YOU LEAVE THE DREAMER BEHIND.", ASTRAL_AT + 0.9, floor(cy + 40), 1, "l")
+    end
 end
 
 function LUI.draw()
-    if outro and outro.t >= 2.6 then drawOutro() return end
+    if outro and outro.t >= GLITCH then drawOutro() return end
     if intro then drawIntro() return end
     local r = R.scene
     G.box(r.x, r.y, r.w, r.h, "n")
