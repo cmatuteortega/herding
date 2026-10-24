@@ -76,6 +76,9 @@ end
 LUI.resetAll = function() UI.resetAll() end
 VUI.resetAll = function() UI.resetAll() end
 UI.resetAll = function() end -- set by main: wipe the save, a new game
+LUI.nextPhase = function() UI.nextPhase() end
+VUI.nextPhase = function() UI.nextPhase() end
+UI.nextPhase = function() end -- set by main (dev): on to the next phase
 
 function UI.setState(s)
     S = s
@@ -104,6 +107,7 @@ function UI.fit(w, h, ins)
     R.mute = rect(r - 17, top, 17, 13)
     R.motion = rect(r - 37, top, 17, 13)
     R.reset = rect(r - 57, top, 17, 13)
+    R.phase = rect(r - 77, top, 17, 13)
     R.dp = rect(l, top, 60, 13)
     local y = top + 16
     if vh >= vw * 1.15 then
@@ -555,6 +559,12 @@ function UI.pressed(x, y, id)
         })
         return
     end
+    if inside(R.phase, x, y) then
+        Audio.start()
+        UI.cue("click")
+        UI.nextPhase()
+        return
+    end
     if inside(R.mode, x, y) then
         local nb = dreamsOpen() and 4 or 3
         local k = lume.clamp(floor((x - R.mode.x) / (R.mode.w / nb)) + 1, 1, nb)
@@ -700,6 +710,10 @@ local function drawTop()
     local re = R.reset
     G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "v", "i")
     G.art({ "..lll.l", ".l...ll", "l...lll", "l......", "l.....l", ".l...l.", "..lll.." }, re.x + 5, re.y + 3)
+    -- The phase button (dev): on to the next phase.
+    local ph = R.phase
+    G.box(ph.x + 1, ph.y + 1, ph.w - 2, ph.h - 2, "v", "i")
+    G.text("l", "1>2", ph.x + 3, ph.y + 4)
 end
 
 local function drawHud()

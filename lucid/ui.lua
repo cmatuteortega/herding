@@ -33,6 +33,7 @@ local D = C.dream
 local LUI = {}
 LUI.save = function() end -- set by ui.lua
 LUI.resetAll = function() end -- set by ui.lua
+LUI.nextPhase = function() end -- set by ui.lua (dev): on to the void
 
 local S, L -- the game's state, and its lucid part
 local vw, vh = 320, 240
@@ -75,6 +76,7 @@ function LUI.fit(w, h, inset)
     R.mute = rect(r - 17, top, 17, 13)
     R.motion = rect(r - 37, top, 17, 13)
     R.reset = rect(r - 57, top, 17, 13)
+    R.phase = rect(r - 77, top, 17, 13)
     local y = top + 16
     if vh >= vw * 1.15 then
         portrait = true
@@ -625,6 +627,11 @@ function LUI.pressed(x, y, id)
         })
         return
     end
+    if inside(R.phase, x, y) then
+        cue("click")
+        LUI.nextPhase()
+        return
+    end
     if inside(R.tabs, x, y) then
         local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 4)) + 1, 1, 4)
         if k == 4 then buyMax = not buyMax
@@ -782,6 +789,10 @@ local function drawTop()
     local re = R.reset
     G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "u", "i")
     G.art(RESET_ART, re.x + 5, re.y + 3)
+    -- The phase button (dev): on to the void.
+    local ph = R.phase
+    G.box(ph.x + 1, ph.y + 1, ph.w - 2, ph.h - 2, "u", "i")
+    G.text("l", "2>3", ph.x + 3, ph.y + 4)
 end
 
 local function drawHud()

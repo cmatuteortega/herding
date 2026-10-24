@@ -19,13 +19,14 @@ local VUI = {}
 VUI.save = function() end -- set by ui.lua
 VUI.back = function() end -- set by ui.lua: back through the gate
 VUI.resetAll = function() end -- set by ui.lua: wipe the save, a new game
+VUI.nextPhase = function() end -- set by ui.lua (dev): round to phase 1
 
 local S
 local vw, vh = 320, 240
 local t, since = 0, 0 -- the clock, and time since coming in
 local reduced = false
 local motes, rings = {}, {}
-local button, reset
+local button, reset, phase
 local confirm = 0 -- until when the reset button waits for its second tap
 local RESET_ART = { "..lll.l", ".l...ll", "l...lll", "l......", "l.....l", ".l...l.", "..lll.." }
 
@@ -37,6 +38,7 @@ function VUI.fit(w, h, inset)
     local bw = G.textWidth("BACK TO THE DREAM") + 24
     button = { x = floor(vw / 2 - bw / 2), y = vh - inset.b - 26, w = bw, h = 14 }
     reset = { x = vw - inset.r - 3 - 17, y = inset.t + 2, w = 17, h = 13 }
+    phase = { x = reset.x - 20, y = reset.y, w = 17, h = 13 }
     local r = love.math.newRandomGenerator(5)
     motes = {}
     for _ = 1, floor(vw * vh / 260) do
@@ -71,6 +73,12 @@ function VUI.pressed(x, y)
         else
             confirm = t + 3
         end
+        return
+    end
+    if inside(phase, x, y) then
+        Audio.cue("click")
+        Audio.setVoid(false)
+        VUI.nextPhase()
         return
     end
     if #rings < 6 then rings[#rings + 1] = { x = x, y = y, t = 0 } end
@@ -148,6 +156,9 @@ function VUI.draw()
     -- The reset button: an arrow coming round, and its question while it waits.
     G.box(reset.x + 1, reset.y + 1, reset.w - 2, reset.h - 2, "v", confirm > t and "y" or "i")
     G.art(RESET_ART, reset.x + 5, reset.y + 3)
+    -- The phase button (dev): round to phase 1, a new game.
+    G.box(phase.x + 1, phase.y + 1, phase.w - 2, phase.h - 2, "v", "i")
+    G.text("l", "3>1", phase.x + 3, phase.y + 4)
     if confirm > t then
         local q = "TAP AGAIN TO RESET ALL"
         G.label("y", q, floor(math.max(4, reset.x + reset.w - G.textWidth(q))), reset.y + reset.h + 3, 1, 1, "o")

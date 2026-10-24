@@ -49,6 +49,8 @@ love . --lucid             # dev: straight into phase 2 with 750 DP to spend (an
                            # any dev flag on, L jumps there mid-game)
 love . --lucid --speed 10 --autoplay 600   # dev: phase 2 played by a simple script
 love . --void              # dev: straight into phase 3, through the Gate of Horn
+                           # (and in game, the 1>2 button beside reset skips to the
+                           # next phase: 1 to 2, 2 to 3, 3 back to a new game)
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
 luajit tests/run.lua sim   # dev: the balance sim (a greedy player at 3, 1.5, 0.5 taps/s,
                            # then twelve nights in a row spending Dream Points)

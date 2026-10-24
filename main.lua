@@ -59,7 +59,7 @@ end
 -- The reset button (in every phase's top bar): everything gone, saved over,
 -- and a new game from the first night, from scratch (the sound and motion
 -- settings stay as they were).
-local function resetAll()
+local function resetAll(title, line)
     local old = UI.state()
     local s = Game.fresh()
     s.muted, s.reducedMotion = old.muted, old.reducedMotion
@@ -71,7 +71,27 @@ local function resetAll()
     UI.setState(s)
     UI.newNight()
     UI.save()
-    UI.banner("A NEW GAME", "EVERYTHING WAS RESET")
+    UI.banner(title or "A NEW GAME", line or "EVERYTHING WAS RESET")
+end
+
+-- Dev: the phase button beside reset, for testing: phase 1 to 2 (as if a lucid
+-- night had just been slept), 2 to 3 (through the gate), and 3 back to a new
+-- game at the first night.
+local function nextPhase()
+    local s = UI.state()
+    Game.events, Lucid.events = {}, {}
+    if s.phase == "nights" then
+        Audio.setAsleep(false)
+        jumpToLucid(s)
+    elseif s.phase == "lucid" then
+        s.lucid.intro, s.lucid.gate = false, true
+        Game.goVoid(s)
+        UI.setState(s)
+        UI.showVoid()
+        UI.save()
+    else
+        resetAll("PHASE 1", "DEV: A NEW GAME")
+    end
 end
 
 local function fit()
@@ -128,6 +148,7 @@ function love.load(args)
     Audio.init()
     Scene.cue = function(name) UI.cue(name) end
     UI.resetAll = resetAll
+    UI.nextPhase = nextPhase
     if shots then
         require("shots").run(UI, fit)
         return
