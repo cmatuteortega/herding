@@ -114,7 +114,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `scene.lua` | the field: sky, hills, fence, every sheep, and the view-only effects |
 | `ui.lua` | the counter, the Drowsiness bar, the shop, banners, dialogs, input hit tests, the save file |
 | `audio.lua`, `synth.lua`, `audiothread.lua` | the sound: playing it, making it, the worker that makes it |
-| `gfx.lua`, `tracer.lua`, `models.lua` | the palette and pixel font, the tracer, the bodies |
+| `gfx.lua`, `tracer.lua`, `models.lua` | the palette and pixel font, the tracer (balls and boxes), the bodies and the dream's farm |
 | `shots.lua` | the `--shots` script |
 | `tests/run.lua` | tests and the balance sims (phase 1 and phase 2) |
 | `lucid/game.lua` | phase 2's rules: auto-wake in batches, the layers, the town, the upgrades, the golden choice, counting sheep's flock and pay, time away in closed form. Pure Lua |
@@ -280,15 +280,20 @@ the same happens if the game sat frozen in the background for a while.
   1E58 after three hours, so plain numbers hold for now.
 
 - **The farm on the hill:** each plot of the 5×5 grid has a place on the
-  dream's hill (the back row on the skyline, the front row at the bottom of
-  the field, the columns wider apart as they come forward). Buildings on the
-  hill are drawn from shapes (`SHAPES` in `lucid/scene.lua`), not the small
-  pictures the FARM grid uses: in perspective, a pixel a unit on the skyline
-  up to 2.8 at the front, inked round as one, with a shadow thrown left and
-  grass at the foot, and the back two rows dithered into the horizon's lilac.
-  An empty plot is turned earth; a building rises out of the ground when it's
-  put down, a level up rings out, and its levels show as gold pips. Moving
-  one moves it on the hill too.
+  dream's hill, below the sheep's line and the fence (they keep the skyline):
+  the back row a little under them, the front row at your feet, every other
+  row half a column over and each plot nudged off the grid by its own amount,
+  so the farm looks grown rather than laid out. The buildings there are
+  traced like the sheep (`Models.building`): boxes for walls, whose corners
+  the crease pass draws, boxes turned 45 degrees for roofs, balls for trees,
+  hay and stones, doors and windows printed on the faces. Each is painted at
+  its row's size (1 to 2.3 times), turned a little towards the middle, the
+  back two rows dithered into the horizon's lilac, with a shadow thrown away
+  from the moon; the lamb in the pen, the sheep in the fold and the drone at
+  its mast move. The FARM grid keeps its small pictures. An empty plot is
+  turned earth; a building rises out of the ground when it's put down, a
+  level up rings out, and its levels show as gold pips. Moving one moves it
+  on the hill too.
 - **The upgrades** (`sections` and `roots`: in the code and the save they're
   still the roots): a rank at a time, for `dp * growth^rank` Dream Points, up
   to `max`, kept for good, as cards in sections like the farm's. In a section
