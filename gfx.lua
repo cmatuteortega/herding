@@ -52,10 +52,11 @@ function G.rect(k, x, y, w, h)
     love.graphics.rectangle("fill", floor(x), floor(y), w, h)
 end
 
--- 4x4 ordered dither: pixel (x, y) is "on" at density v (0..1).
+-- 4x4 ordered dither: pixel (x, y) is "on" at density v (0..1). A fraction
+-- of a pixel is the pixel it's in.
 local BAYER = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 }
 function G.dither(x, y, v)
-    return v * 16 > BAYER[(y % 4) * 4 + (x % 4) + 1] + 0.5
+    return v * 16 > BAYER[(floor(y) % 4) * 4 + (floor(x) % 4) + 1] + 0.5
 end
 
 -- Points as a flat list of pixel coordinates; plotted at pixel centres.

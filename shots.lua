@@ -228,6 +228,7 @@ local MOMENTS = {
     { "35-astral-dreamers", function() return astralAt(3) end, 0, "astral-dreamers" },
     { "36-astral-library", function() return astralAt(4) end, 0, "astral-library" },
     { "37-astral-strain", function() return astralAt(4, true) end, 0, "astral-strain" },
+    { "37b-astral-snap", function() return astralAt(3, true) end, 0, "astral-snap" },
     { "38-astral-count", function() return astralAt(5) end, 0, "astral-count" },
     { "23d-into-astral", function()
         local s = lucidAt(8, true)
@@ -292,6 +293,7 @@ function Shots.run(UI, fit)
             if m[4] == "gate-astral" then frames = 545 end
             if m[4] and m[4]:sub(1, 6) == "astral" then frames = 120 end
             if m[4] == "astral-out" or m[4] == "astral-strain" then frames = 260 end
+            if m[4] == "astral-snap" then frames = 180 end
             if m[4] == "astral-count" then frames = 560 end
             if m[4] == "beyond" then frames = 330 end
             if m[4] == "gate-through" then frames = 700 end
@@ -301,6 +303,8 @@ function Shots.run(UI, fit)
                 if s.phase == "astral" then
                     Astral.step(s.astral, dt, function() return 0.5 end)
                     if m[4] == "astral-strain" and s.astral.out and i == 200 then s.astral.tug = 0.25 end
+                    -- A tug past the limit: the cord snaps, and falls away.
+                    if m[4] == "astral-snap" and s.astral.out and i == 150 then s.astral.tug = 2 end
                 elseif s.phase == "lucid" then
                     Lucid.step(s.lucid, dt, m[4] == "climb" and dice or function() return 0.5 end)
                     -- The nightmare's dog, circling in behind the flock.

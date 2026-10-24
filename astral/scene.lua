@@ -212,7 +212,7 @@ local function cord(P)
         local shake = (AScene.reduced and 0 or fx.shake * 3 * sin(t * 40 + p * 20))
         local x = bx + (sx - bx) * p + sway + shake
         -- A snapped cord: the bottom of it gone, thinning upwards.
-        if fx.snap <= 0 or p > fx.snap or not G.dither(x, y, fx.snap) then
+        if fx.snap <= 0 or p > fx.snap or not G.dither(floor(x), floor(y), fx.snap) then
             local warm = strain > 0.6 and G.dither(floor(x), floor(y + t * 20), (strain - 0.6) * 2.4)
             G.plot(warm and hot or pts, x, y)
             if strain > 0.85 and not AScene.reduced and sin(t * 18 + p * 9) > 0.6 then G.plot(hot, x + 1, y) end
