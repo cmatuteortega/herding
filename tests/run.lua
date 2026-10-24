@@ -125,7 +125,7 @@ end
 -- points, then warp, in turn) and herds every nightmare in, in 35 seconds.
 -- Every two minutes it climbs with the bouncing sheep for half a minute (and
 -- all the time under Thin Air), grows the cheapest root it can when that's
--- under a tenth of its points, and opens the Gate of Horn as soon as it can.
+-- under a tenth of its points, and buys Sheep-OS, the Gate of Horn, as soon as it can.
 -- It prints each new thing as it comes, and runs a second minute by minute.
 local function lucidSim(minutes, dp, earned)
     local Lucid = require "lucid.game"
@@ -277,13 +277,12 @@ local function lucidSim(minutes, dp, earned)
             -- The roots: the cheapest one open, if it's under a third of the points.
             local rb, rp
             for _, r in ipairs(Lucid.ROOTS) do
-                if Lucid.rootState(L, r.id) == "open" and (r.kind == "up" or r.kind == "gate") then
+                if Lucid.rootState(L, r.id) == "open" and r.kind == "up" then
                     local pr = Lucid.rootPrice(L, r.id)
-                    if r.kind == "gate" then rb, rp = r.id, -1 break end
                     if not rp or pr < rp then rb, rp = r.id, pr end
                 end
             end
-            if rb and (rp < 0 or rp <= L.dp / (os.getenv("NOROOTS") and 1e99 or 10)) then Lucid.grow(L, rb) end
+            if not Lucid.openGate(L) and rb and rp <= L.dp / (os.getenv("NOROOTS") and 1e99 or 10) then Lucid.grow(L, rb) end
             for _, e in ipairs(Lucid.events) do
                 if e.type == "grew" and e.rank == 1 then new("root:" .. e.id) end
                 if e.type == "gate" then new("GATE") end
@@ -817,13 +816,22 @@ test("the upgrades: ranks, what they do, the gate", function()
     eq(Lucid.rootState(L, "lake"), "full"); eq(Lucid.rootState(L, "c.season"), "open")
     eq(Lucid.rootState(L, "c.stoppedClocks"), "shut")
     assert(not Lucid.grow(L, "c.season"), "a challenge is started, not grown")
-    for _, c in ipairs(Lucid.CHALLENGES) do L.done[c.id] = true end
-    L.dp = 1e12
+    -- The gate: Sheep-OS on the farm, once the last challenge is mastered.
+    L.dp, L.sheep = 1e12, 1e100
+    for _, c in ipairs(Lucid.CHALLENGES) do if c.id ~= "emptySquares" then L.done[c.id] = true end end
+    eq(Lucid.rootState(L, "gate"), "shut")
+    assert(not Lucid.canBuild(L, "lighthouse") and not Lucid.openGate(L), "not before Empty Squares")
+    L.done.emptySquares = true
     eq(Lucid.rootState(L, "gate"), "open")
+    assert(not Lucid.grow(L, "gate"), "the gate is bought on the farm")
+    assert(not Lucid.build(L, "lighthouse", Lucid.cell(3, 3)), "it takes no plot")
     Lucid.events = {}
-    assert(Lucid.grow(L, "gate") and L.gate)
+    local dp = L.dp
+    assert(Lucid.openGate(L) and L.gate)
+    eq(L.dp, dp - Lucid.BY.lighthouse.dp)
     eq(Lucid.events[#Lucid.events].type, "gate")
     eq(Lucid.rootState(L, "gate"), "full")
+    assert(not Lucid.openGate(L), "once")
     -- Kept in the save, through JSON.
     local json = require "lib.json"
     local back = Lucid.deserialize(json.decode(json.encode(Lucid.serialize(L))))
@@ -1037,7 +1045,10 @@ test("lucid saves", function()
     local json = require "lib.json"
     back = Lucid.deserialize(json.decode(json.encode(Lucid.serialize(L))))
     eq(back.grid[Lucid.cell(3, 3)], "mill")
-    eq(Lucid.deserialize({ grid = { ["1"] = "lighthouse", ["2"] = "nope" } }).built.lighthouse, 0)
+    back = Lucid.deserialize({ grid = { ["1"] = "lighthouse", ["2"] = "nope" } })
+    eq(back.built.lighthouse, 0); eq(back.grid[1], nil) -- Sheep-OS takes no plot
+    back = Lucid.deserialize(json.decode(json.encode({ gate = true })))
+    assert(back.gate and not Lucid.canBuild(back, "lighthouse"), "the gate stays open, and once is enough")
 end)
 print(("%d passed, %d failed"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)

@@ -163,18 +163,31 @@ end
 function Lucid.canBuild(L, id)
     local b = BY[id]
     if b.locked or (b.max and L.built[id] >= b.max) then return false end
+    if (b.after and not Lucid.met(L, b.after)) or (b.gate and L.gate) then return false end
     local p = Lucid.price(L, id)
     return N.gte(L.dp, p.dp) and N.gte(L.sheep, p.sheep)
 end
 
 -- Build `id` on the open, empty cell `c`.
 function Lucid.build(L, id, c)
-    if not L.open[c] or L.grid[c] or not Lucid.canBuild(L, id) then return false end
+    if BY[id].gate or not L.open[c] or L.grid[c] or not Lucid.canBuild(L, id) then return false end
     local p = Lucid.price(L, id)
     L.dp, L.sheep = N.sub(L.dp, p.dp), N.sub(L.sheep, p.sheep)
     L.grid[c], L.level[c] = id, 1
     L.built[id] = L.built[id] + 1
     emit({ type = "built", id = id, cell = c, first = L.built[id] == 1 })
+    return true
+end
+
+-- Sheep-OS, the Gate of Horn: no plot, it's the way out. Bought, the gate
+-- is open (`gate` is what's kept; the farm's count of it isn't saved).
+function Lucid.openGate(L)
+    if not Lucid.canBuild(L, "lighthouse") then return false end
+    local p = Lucid.price(L, "lighthouse")
+    L.dp, L.sheep = N.sub(L.dp, p.dp), N.sub(L.sheep, p.sheep)
+    L.built.lighthouse = L.built.lighthouse + 1
+    L.gate = true
+    emit({ type = "gate" })
     return true
 end
 
@@ -505,22 +518,21 @@ function Lucid.rootState(L, id)
         if L.challenge == r.challenge then return "on" end
         return (Lucid.ready(L, r) and Lucid.mirror(L)) and "open" or "shut"
     end
-    if r.kind == "gate" and L.gate then return "full" end
+    if r.kind == "gate" then
+        if L.gate then return "full" end
+        return Lucid.ready(L, r) and "open" or "shut"
+    end
     if r.kind == "up" and rank(L, id) >= r.max then return "full" end
     if not Lucid.ready(L, r) then return "shut" end
     return N.gte(L.dp, Lucid.rootPrice(L, id)) and "open" or "poor"
 end
 
--- A rank more of an upgrade, or the Gate of Horn opened.
+-- A rank more of an upgrade. (The Gate of Horn is bought on the farm:
+-- Sheep-OS, Lucid.openGate.)
 function Lucid.grow(L, id)
     local r = ROOT[id]
-    if not r or (r.kind ~= "up" and r.kind ~= "gate") or Lucid.rootState(L, id) ~= "open" then return false end
+    if not r or r.kind ~= "up" or Lucid.rootState(L, id) ~= "open" then return false end
     L.dp = N.sub(L.dp, Lucid.rootPrice(L, id))
-    if r.kind == "gate" then
-        L.gate = true
-        emit({ type = "gate" })
-        return true
-    end
     L.roots[id] = rank(L, id) + 1
     emit({ type = "grew", id = id, rank = L.roots[id] })
     return true
@@ -890,7 +902,7 @@ function Lucid.deserialize(o, s1)
     if type(o.grid) == "table" then
         for c, id in pairs(o.grid) do
             local n = tonumber(c)
-            if n and BY[id] and not BY[id].locked then
+            if n and BY[id] and not BY[id].locked and not BY[id].gate then
                 L.grid[n] = id
                 local lv = type(o.level) == "table" and tonumber(o.level[c]) or 1
                 L.level[n] = BY[id].autoDims and 1 or max(1, floor(lv or 1))

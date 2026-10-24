@@ -203,7 +203,7 @@ return {
         -- Every building is a piece of phase 1's farm, dreamt back: the fence,
         -- the dogs, the meadow, the pen, the mill, the drones, the barn.
         -- Districts: speed (gold), auto (lilac), park (mint: the pasture),
-        -- lucid (locked). The ids are the old town's, so saves keep their farm.
+        -- lucid (the way on). The ids are the old town's, so saves keep their farm.
         -- Price: dp and sheep, each times growth^built (levels count as
         -- built). `max` caps how many. Effects grow with S, the sum of every
         -- building of a kind's strength (its level, times its neighbours):
@@ -222,9 +222,11 @@ return {
             { id = "plaza", district = "park", name = "Haystack", desc = "+50% to every building beside it", dp = 1500, sheep = 2e4, growth = 3 },
             { id = "fountain", district = "park", name = "Wishing Well", desc = "Golden sheep come 50% more often", dp = 2500, sheep = 5e4, growth = 3, max = 2, goldenAdd = 0.5 },
             { id = "fold", district = "park", name = "Sheepfold", desc = "Nightmares: a wider pen, +50% reward", dp = 2000, sheep = 3e4, growth = 3, max = 3, penAdd = 0.2, rewardAdd = 0.5 },
-            -- Lucidity: the lake opens the dream challenges.
-            { id = "lighthouse", district = "lucid", name = "Sheep-OS", desc = "Coming: lucidity", locked = true },
+            -- Lucidity: the lake opens the dream challenges, and Sheep-OS, once
+            -- the last of them (`after`) is mastered, is the Gate of Horn. It
+            -- takes no plot: bought from its card, the dream ends in the void.
             { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Opens the dream challenges, on UPGRADES", dp = 4e5, sheep = 1e30, max = 1 },
+            { id = "lighthouse", district = "lucid", name = "Sheep-OS", desc = "The Gate of Horn: the way out of the dream. Past it, the void", dp = 3e8, sheep = 1e90, max = 1, after = "emptySquares", gate = true },
         },
 
         -- The upgrades, kept for good (in the code and the save still the
@@ -235,7 +237,7 @@ return {
         -- before it (`at`) has a rank. Then the dream challenges: the Mirror
         -- Lake (grown when the farm has one), a challenge each, opening once
         -- the one before it is mastered, and last the Gate of Horn, the way
-        -- out of the dream.
+        -- out of the dream: Sheep-OS, bought on the farm.
         sections = {
             { id = "sky", name = "THE BOUNCING SHEEP", how = "HOLD THE FIELD: IT CLIMBS" },
             { id = "count", name = "COUNTING SHEEP", how = "A FLOCK AT THE FENCE: TAP IT" },
@@ -280,7 +282,7 @@ return {
             { id = "c.shallow", at = "c.onlyOne", section = "dream", kind = "challenge", challenge = "shallow" },
             { id = "c.falling", at = "c.shallow", section = "dream", kind = "challenge", challenge = "falling" },
             { id = "c.emptySquares", at = "c.falling", section = "dream", kind = "challenge", challenge = "emptySquares" },
-            { id = "gate", at = "c.emptySquares", section = "dream", kind = "gate", name = "Gate of Horn", desc = "The way out of the dream. Past it: the void", dp = 3e8 },
+            { id = "gate", at = "c.emptySquares", section = "dream", kind = "gate", name = "Gate of Horn", desc = "Sheep-OS, on the farm: the way out of the dream" },
         },
 
         -- Dream challenges, once the Mirror Lake is built, on UPGRADES: a
@@ -360,7 +362,7 @@ return {
         },
     },
 
-    -- PHASE 3, THE VOID: past the Gate of Horn. Not built yet; the way in is.
+    -- PHASE 3, THE VOID: past the Gate of Horn (Sheep-OS). Not built yet; the way in is.
     void = { outro = 7 },
 
     offline = {

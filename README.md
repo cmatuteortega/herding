@@ -30,7 +30,8 @@ golden sheep offers one of three gifts, and now and then a nightmare scatters
 a flock for you to herd into the fold with the dog: herding, the prototype
 this repository began as. Upgrades kept for good come in sections, one for
 each of those games, then the layers and the farm, then seven dream
-challenges one after the other. Last of all is the Gate of Horn, and through it, the void: phase 3,
+challenges one after the other. Last of all is the Gate of Horn, Sheep-OS
+bought on the farm, and through it, the void: phase 3,
 from the field to the dream to nothing at all (its way in is built; the phase
 is a placeholder).
 
@@ -330,11 +331,15 @@ the same happens if the game sat frozen in the background for a while.
   gift, and the best height ever lifts every layer. While it climbs the field
   slides down behind it, the hill and the town go under, and higher still the
   dark thins towards the void.
-- **The way out:** the Gate of Horn costs 300M DP and needs the last
-  challenge mastered. Opened, the dream drains to ink from the edges, the
-  gate opens in the middle, a sheep drifts up into it, and the phase is
-  "void" (`Game.goVoid`). The void is a placeholder for phase 3; BACK TO THE
-  DREAM goes back through the gate, which stays open (GO THROUGH on its card).
+- **The way out:** the Gate of Horn is Sheep-OS, the last building in the
+  farm's Lucidity district (`gate = true`, `Lucid.openGate`). It costs 300M
+  DP and 1E90 dream sheep, needs the last challenge mastered (`after`), and
+  takes no plot: it's bought from its card, so a full farm can't keep you in.
+  Bought, the dream drains to ink from the edges, the gate opens in the
+  middle, a sheep drifts up into it, and the phase is "void"
+  (`Game.goVoid`). The void is a placeholder for phase 3; BACK TO THE DREAM
+  goes back through the gate, which stays open (GO THROUGH on Sheep-OS's card
+  and on the Gate of Horn's, at the end of UPGRADES).
 - **Dream challenges** (`challenges`): at the end of the upgrades, once the
   town's Mirror Lake stands (400K DP and 1E30 sheep), one after the other.
   Starting one sets the layers and dream sheep back to the start and, while it
@@ -491,8 +496,9 @@ their value comes from what they buy.
     Speed (gold): Better Fence, Dog Kennel, Meadow. Automation (lilac):
     Breeding Pen, Wool Mill, Counting Drones (two layers each), the Barn.
     Pasture (green): Haystack, Wishing Well, Sheepfold. Lucidity: the Mirror
-    Lake, and Sheep-OS to see, not to build yet. Everything built stands on
-    the dream's hill, rising out of the ground as it goes up.
+    Lake, and Sheep-OS, the Gate of Horn, bought from its card once the last
+    dream challenge is mastered. Everything built stands on the dream's
+    hill, rising out of the ground as it goes up.
   - *UPGRADES*: cards in sections like the farm's, each headed with its
     game and how to play it: the bouncing sheep, counting sheep, the
     nightmares, the golden sheep, then the layers and the farm. A card shows
@@ -519,7 +525,9 @@ their value comes from what they buy.
     to cloud and bleats. The counted, the combo and the music box climbing
     with it show over the field; at the end, Dream Points and a CAP chip
     while the tune lasts.
-  - *The Gate of Horn*, at the end of UPGRADES: the way out, into the void.
+  - *The Gate of Horn*: Sheep-OS on FARM (a rose mark there, and Lucidity
+    at the top, once it's in reach), the way out, into the void. Its card at
+    the end of UPGRADES says TO THE FARM.
   - *The lucid golden sheep* crosses the sky: tap it and choose ×7 for 30
     seconds, Dream Points now (4 minutes' worth), or time ×2 for a minute.
   - *Nightmares*, every four to seven minutes: the field turns to night grass,
@@ -556,9 +564,8 @@ their value comes from what they buy.
 - Achievements
 - A stats screen
 - Phase 3, the void: only its way in and a placeholder to stand in
-- Pending for phase 2: the second prestige layer (Sheep-OS on the farm, shown,
-  not built), nightmares that grow, a soft cap on Insomnia, surplus sheep
-  paying points
+- Pending for phase 2: nightmares that grow, a soft cap on Insomnia, surplus
+  sheep paying points
 - `ui.lua` hands over to `lucid/ui.lua` but they don't share widgets yet
   (cards, dialogs and banners are drawn in each)
 - Restless nights past the four, or doing one again

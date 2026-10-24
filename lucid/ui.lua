@@ -324,6 +324,12 @@ end
 local CARD_H = 30
 local GW, GH = D.grid.w, D.grid.h
 
+-- Something waiting in Lucidity: the Mirror Lake in reach and not built, or
+-- Sheep-OS, the way out, in reach.
+local function lucidWaits()
+    return (not Lucid.mirror(L) and Lucid.canBuild(L, "mirror")) or Lucid.canBuild(L, "lighthouse")
+end
+
 -- The town grid's size in the panel.
 local function gridGeom()
     local cs = min(30, floor((R.panel.w - 8) / GW))
@@ -370,8 +376,8 @@ local function layout()
         local districts = {
             { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PASTURE" }, { "lucid", "LUCIDITY" },
         }
-        -- The Mirror Lake in reach: lucidity goes first, where it's seen.
-        if not Lucid.mirror(L) and Lucid.canBuild(L, "mirror") then table.insert(districts, 1, table.remove(districts)) end
+        -- The Mirror Lake or Sheep-OS in reach: lucidity goes first, where it's seen.
+        if lucidWaits() then table.insert(districts, 1, table.remove(districts)) end
         for _, d in ipairs(districts) do
             rows[#rows + 1] = { header = d[2], y = y, h = 10 }
             y = y + 10
@@ -491,6 +497,12 @@ end
 
 --- the upgrades -------------------------------------------------------------------------
 
+-- Sheep-OS, the Gate of Horn: bought from its card, or gone through again.
+local function tapGate()
+    if L.gate then LUI.leave() return end
+    if Lucid.openGate(L) then cue("buy", { tier = 4, first = true }) else cue("nope") end
+end
+
 -- What tapping upgrade `r`'s card does, what its price box says, and
 -- whether it can be done now: label, ok, fn.
 local function upgradeAction(r)
@@ -509,7 +521,11 @@ local function upgradeAction(r)
         if st == "open" then return "START", true, function() tapChallenge(c) end end
         return "LOCKED", false
     end
-    if r.kind == "gate" and st == "full" then return "GO THROUGH", S.phase == "lucid", function() LUI.leave() end end
+    if r.kind == "gate" then
+        if st == "full" then return "GO THROUGH", S.phase == "lucid", function() LUI.leave() end end
+        if st == "open" then return "TO THE FARM", true, function() tab, scroll = "town", 0 end end
+        return "LOCKED", false
+    end
     if st == "full" then return "ALL GROWN", false end
     return N.format(Lucid.rootPrice(L, r.id)) .. " DP", st == "open", function()
         if Lucid.grow(L, r.id) then cue("buy", { tier = 4, first = Lucid.rank(L, r.id) == 1 }); LUI.save() else cue("nope") end
@@ -587,6 +603,7 @@ local function tapRow(row, x, y)
     elseif row.building then
         local b = row.building
         if b.locked then cue("nope") return end
+        if b.gate then tapGate() return end
         if b.max and L.built[b.id] >= b.max then cue("nope") return end
         place, moving, sel = b.id, nil, nil
         cue("click")
@@ -932,10 +949,10 @@ local function drawTabs()
         if on then G.rect("i", x + 1, r.y + r.h - 2, w - 2, 1) end
         centred(on and "u" or "l", b[1], x + w / 2, r.y + 4)
         -- Something to find there, a rose mark: on FARM while the Mirror Lake
-        -- is in reach and not built, on UPGRADES until you look at a dream
-        -- challenge waiting.
+        -- is in reach and not built, or Sheep-OS is, on UPGRADES until you
+        -- look at a dream challenge waiting.
         local wc = i == 3 and waitingChallenge()
-        local mark = (i == 2 and not Lucid.mirror(L) and Lucid.canBuild(L, "mirror"))
+        local mark = (i == 2 and lucidWaits())
             or (wc and not challengeSeen[wc.id])
         if not on and mark and (reduced or sin(t * 4) > -0.5) then
             G.art({ "r", "r", "r", ".", "r" }, x + 4, r.y + 3)
@@ -1059,6 +1076,22 @@ local function drawBuilding(row, x, y, w)
         G.text("s", b.desc:upper(), x + 37, y + 15)
         return
     end
+    if b.gate and L.gate then
+        -- The gate, open: go through it again.
+        G.box(x + 1, y + 1, w - 2, h - 2, "w")
+        G.rect(DISTRICT[b.district], x + 1, y + h - 3, w - 2, 2)
+        G.box(x + 4, y + 4, 28, h - 8, "l")
+        LScene.building(b.id, x + 18, y + h / 2)
+        local label = "GO THROUGH"
+        local pw = G.textWidth(label) + 8
+        local px = x + w - pw - 4
+        G.box(px, y + 4, pw, h - 8, "y")
+        G.text("o", label, px + 4, y + 10)
+        G.text("o", b.name:upper(), x + 37, y + 5)
+        local lines = G.wrap("THE GATE OF HORN STANDS OPEN.", px - x - 41)
+        for i = 1, min(2, #lines) do G.text("p", lines[i], x + 37, y + 8 + i * 6) end
+        return
+    end
     local full = b.max and L.built[b.id] >= b.max
     local ok = not full and Lucid.canBuild(L, b.id)
     local on = place == b.id
@@ -1079,7 +1112,9 @@ local function drawBuilding(row, x, y, w)
         local tx = x + 37
         G.text("o", b.name:upper(), tx, y + 5)
         if L.built[b.id] > 0 then G.text("p", "X" .. L.built[b.id], tx + G.textWidth(b.name) + 5, y + 5) end
-        local lines = G.wrap(b.desc:upper(), px - tx - 4)
+        local desc = b.desc
+        if b.after and not Lucid.met(L, b.after) then desc = "Master " .. Lucid.CH[b.after].name .. " first" end
+        local lines = G.wrap(desc:upper(), px - tx - 4)
         for i = 1, min(2, #lines) do G.text("p", lines[i], tx, y + 8 + i * 6) end
         return
     end

@@ -155,6 +155,14 @@ local MOMENTS = {
         s.lucid.best = 340
         return s
     end, 0, "climb" },
+    { "22b-sheep-os", function()
+        local s = lucidAt(8, true)
+        local L = s.lucid
+        L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
+        for _, c in ipairs(Lucid.CHALLENGES) do L.done[c.id] = true end
+        L.dp, L.sheep = 4e8, 1e95
+        return s
+    end, 0, "town" },
     { "23-gate", function()
         local s = lucidAt(8, true)
         s.lucid.gate = true
