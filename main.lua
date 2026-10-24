@@ -186,8 +186,9 @@ function love.update(dt)
     if autoplay and s.phase == "lucid" then
         -- Phase 2: catch the golden sheep (take the frenzy), buy layers top
         -- down, build the first thing it can on the first free plot, grow the
-        -- first root it can, and every minute hold the field for twenty
-        -- seconds, steering the bouncing sheep from cloud to cloud.
+        -- first upgrade it can, count every flock that comes to the fence,
+        -- and every minute hold the field for twenty seconds, steering the
+        -- bouncing sheep from cloud to cloud.
         local L = s.lucid
         UI.key("return") -- the word on the way in, or a golden gift: the first button
         local r = UI.sceneRect()
@@ -201,6 +202,9 @@ function love.update(dt)
         for _, root in ipairs(Lucid.ROOTS) do
             if Lucid.grow(L, root.id) then autoplay.firsts[#autoplay.firsts + 1] = ("%s@%ds"):format(root.id, L.time) end
         end
+        -- Counting sheep: start every flock, tap on every top.
+        if L.flock and L.flock.t > 2 then Lucid.startSong(L) end
+        if L.song then require("lucid.count").bot(L.song, 0) end
         if L.golden and L.golden.t > 2 then Lucid.catchGolden(L) end
         if L.choosing then Lucid.choose(L, "frenzy") end
         L.intro = false

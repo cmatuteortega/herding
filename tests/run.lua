@@ -192,6 +192,9 @@ local function lucidSim(minutes, dp, earned)
             Lucid.steer(L, require("lucid.bounce").bot(B))
             if t - climbFrom > 30 and L.challenge ~= "skyHigh" then require("lucid.bounce").stop(B) end
         end
+        -- Counting sheep: every flock, a little late on every top (NOCOUNT: never).
+        if L.flock and L.flock.t > 2 and not os.getenv("NOCOUNT") then Lucid.startSong(L) end
+        if L.song then require("lucid.count").bot(L.song, 0.05) end
         if L.golden and L.golden.t > 1.5 then Lucid.catchGolden(L) end
         if L.choosing then -- a golden sheep caught, or a moon
             g = g % 3 + 1
@@ -777,11 +780,19 @@ test("dream challenges", function()
     local back = Lucid.deserialize(require("lib.json").decode(require("lib.json").encode(Lucid.serialize(L))))
     eq(back.challenge, "stoppedClocks"); assert(back.done.season and back.done.onlyOne and not back.done.bogus)
 end)
-test("the roots: ranks, what they do, the gate", function()
+test("the upgrades: ranks, what they do, the gate", function()
     local L = Lucid.fresh()
     L.dp = 1e6
-    eq(Lucid.rootState(L, "dreamer"), "full")
-    eq(Lucid.rootState(L, "starbag"), "shut") -- grows from Springy Wool
+    -- Every upgrade is in a section, and has a picture; the first of each opens at once.
+    local secs = {}
+    for _, sec in ipairs(Lucid.SECTIONS) do secs[sec.id] = true end
+    for _, r in ipairs(Lucid.ROOTS) do
+        assert(secs[r.section], r.id .. " has no section")
+        assert(r.kind == "challenge" or require("lucid.upgrades").ICON[r.id] or r.kind ~= "up", r.id .. " has no picture")
+        if r.at then eq(Lucid.ROOT[r.at].section, r.section) end
+    end
+    for _, id in ipairs({ "spring", "bell", "quickdog", "totem", "architect", "surveyor" }) do eq(Lucid.rootState(L, id), "open") end
+    eq(Lucid.rootState(L, "starbag"), "shut") -- after Springy Wool
     assert(not Lucid.grow(L, "starbag"))
     local p = Lucid.rootPrice(L, "spring")
     assert(Lucid.grow(L, "spring"))
@@ -819,6 +830,95 @@ test("the roots: ranks, what they do, the gate", function()
     eq(back.roots.spring, Lucid.ROOT.spring.max); eq(back.roots.architect, 1); assert(back.gate)
     eq(Lucid.deserialize({ roots = { spring = 99, nope = 2, gate = 1 } }).roots.spring, Lucid.ROOT.spring.max)
     eq(Lucid.deserialize({ roots = { gate = 1 } }).roots.gate, nil)
+    -- The games' own: a quicker dog, a slower cloud, a slower golden sheep.
+    local G2 = Lucid.fresh()
+    G2.roots.quickdog, G2.roots.nightlight, G2.roots.slowgold = 2, 1, 1
+    close(Lucid.nightmareOpts(G2).dog, 1 + 2 * Lucid.ROOT.quickdog.dogAdd)
+    close(Lucid.nightmareOpts(G2).cloud, 1 / (1 + Lucid.ROOT.nightlight.cloudCut))
+    close(Lucid.crossTime(G2), D.golden.crossTime * (1 + Lucid.ROOT.slowgold.crossAdd))
+    local nm = Nightmare.new(4, 10, 1, math.random, Lucid.nightmareOpts(G2))
+    close(nm.dogSpeed, Nightmare.CONFIG.dogSpeed * Lucid.nightmareOpts(G2).dog)
+end)
+test("counting sheep: on the beat, off it, what it pays", function()
+    local Count = require "lucid.count"
+    local P = D.count
+    local dt = 1 / 120
+    -- On every top: all perfect, the combo the whole flock, full marks.
+    local song = Count.new()
+    local beats = 0
+    while not song.done do
+        Count.step(song, dt)
+        Count.bot(song, 0)
+        for _, e in ipairs(song.events) do if e.type == "beat" then beats = beats + 1 end end
+        song.events = {}
+    end
+    eq(song.perfect, P.sheep); eq(song.best, P.sheep); eq(Count.share(song), 1)
+    eq(beats, P.sheep + P.lead) -- a tick on every top, and the count-in
+    -- The beat quickens.
+    assert(song.sheep[P.sheep].at - song.sheep[P.sheep - 1].at < song.sheep[2].at - song.sheep[1].at)
+    -- A little late: good, not perfect. Too late: missed.
+    song = Count.new()
+    while not song.done do Count.step(song, dt); Count.bot(song, (P.perfect + P.good) / 2) end
+    eq(song.good, P.sheep); close(Count.share(song), P.goodScore)
+    song = Count.new()
+    while not song.done do Count.step(song, dt) end
+    eq(song.missed, P.sheep); eq(Count.share(song), 0)
+    -- A tap with no sheep near: off the beat, and the combo goes.
+    song = Count.new()
+    while song.t < 0 do Count.step(song, dt) end
+    Count.tap(song); eq(song.combo, 1)
+    while song.t < (song.sheep[1].at + song.sheep[2].at) / 2 do Count.step(song, dt) end
+    eq(Count.tap(song), "stray"); eq(song.combo, 0)
+    -- A wider window (Slow Song) takes what was a miss.
+    song = Count.new(2)
+    while song.t < 0 do Count.step(song, dt) end
+    while song.t < P.good * 1.5 do Count.step(song, dt) end
+    eq(Count.tap(song), "good")
+
+    -- In the dream: a flock comes, waits, and goes if left.
+    local L = Lucid.fresh()
+    L.intro = false
+    L.nightmareIn = 1e9
+    local function run(secs) for _ = 1, math.floor(secs * 30 + 0.5) do Lucid.step(L, 1 / 30) end end
+    run(P.firstDelay + 0.1)
+    assert(L.flock, "a flock at the fence")
+    -- Left alone, it goes; Sheep Bells bring the next one sooner.
+    L.roots.bell = 2
+    run(P.wait)
+    assert(not L.flock and not L.song, "left alone, it goes")
+    assert(L.flockIn <= P.maxDelay / (1 + 2 * Lucid.ROOT.bell.flockAdd) + 1e-9)
+    -- Tapped: the song, no climbing while it's on, then the pay and the tune.
+    L.flockIn = 0
+    run(0.1)
+    assert(L.flock)
+    Lucid.hold(L, 50); run(0.5)
+    assert(L.bounce.on)
+    local cap, value = Lucid.cap(L), Lucid.songValue(L)
+    assert(Lucid.startSong(L) and L.song and not L.flock)
+    assert(not L.bounce.on, "the climb stops for the song")
+    Lucid.hold(L, 50); assert(not L.bounce.held)
+    local dp = L.dp
+    Lucid.events = {}
+    while L.song do
+        Lucid.step(L, 1 / 120)
+        if L.song then Count.bot(L.song, 0) end
+    end
+    local over
+    for _, e in ipairs(Lucid.events) do if e.type == "songOver" then over = e end end
+    assert(over and over.share == 1)
+    close(L.dp - dp, value, 1e-6 + 0.01 * value) -- a little more from runs while it played
+    assert(L.dp - dp >= value)
+    close(Lucid.cap(L), cap * (1 + P.tune.cap))
+    eq(L.effects.tune, P.tune.seconds)
+    -- The tune passes.
+    run(P.tune.seconds + 1)
+    close(Lucid.cap(L), cap)
+    -- Kept in the save: the wait for the next flock, the tune; not the song.
+    L.effects.tune, L.tuneMult = 20, 1.5
+    L.flock = { t = 3 }
+    local json = require "lib.json"
+    local back = Lucid.deserialize(json.decode(json.encode(Lucid.serialize(L))))
+    eq(back.flock, nil); eq(back.song, nil); eq(back.effects.tune, 20); eq(back.tuneMult, 1.5)
 end)
 test("the bouncing sheep: hops, climbs, falls, pays", function()
     local Bounce = require "lucid.bounce"

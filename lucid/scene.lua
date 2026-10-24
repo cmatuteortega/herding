@@ -7,8 +7,10 @@
 -- the fence one by one until there are too many to see, and then they're one
 -- stream: the flow. A golden sheep crosses the sky. In front of it all, the
 -- bouncing sheep: on its cloud at the bottom, or climbing, with the sky
--- sliding down behind it. In a nightmare the field becomes herding's: the
--- dog, its pressure field, the flock, the fold, and the cloud.
+-- sliding down behind it. Now and then a flock waits at the fence to be
+-- counted, and counted, they jump it one by one on the beat. In a nightmare
+-- the field becomes herding's: the dog, its pressure field, the flock, the
+-- fold, and the cloud.
 --
 -- It only reads the rules' state; what only looks lives in `fx`.
 
@@ -18,6 +20,7 @@ local N = require "num"
 local C = require "config"
 local Nightmare = require "lucid.nightmare"
 local Bounce = require "lucid.bounce"
+local Count = require "lucid.count"
 
 local floor, min, max, sin, cos, sqrt, atan2 = math.floor, math.min, math.max, math.sin, math.cos, math.sqrt, math.atan2
 local TAU = 2 * math.pi
@@ -32,8 +35,11 @@ local t = 0
 local rng = love.math.newRandomGenerator(7)
 local function rand() return rng:random() end
 
-local fx = { hoppers = {}, floats = {}, stream = {}, puffs = {}, flash = 0, rise = {}, ring = {} }
+local fx = { hoppers = {}, floats = {}, stream = {}, puffs = {}, flash = 0, rise = {}, ring = {}, fence = 0, hit = nil }
 LScene.fx = fx
+
+-- Defined further down, used before.
+local slide, drawFlock, drawSong
 
 local function horizon() return floor(ch * 0.62) end
 local function fenceX() return floor(cw * 0.5) end
@@ -53,7 +59,7 @@ end
 
 function LScene.reset()
     fx.hoppers, fx.floats, fx.stream, fx.puffs, fx.flash = {}, {}, {}, {}, 0
-    fx.rise, fx.ring = {}, {}
+    fx.rise, fx.ring, fx.fence, fx.hit = {}, {}, 0, nil
 end
 
 local function blit(sp, x, y)
@@ -109,6 +115,12 @@ function LScene.float(text, x, y, k)
 end
 
 function LScene.flash() fx.flash = 1 end
+
+-- A count: the fence gives, and over it a word (PERFECT, GOOD, MISS).
+function LScene.counted(what)
+    if what == "perfect" or what == "good" then fx.fence = 1 end
+    fx.hit = { what = what, t = 0 }
+end
 
 -- A building put down on `cell`: it rises out of the ground. Levelled up: a ring.
 function LScene.built(cell) fx.rise[cell] = 0 end
@@ -203,6 +215,11 @@ function LScene.update(dt, L)
     for c, v in pairs(fx.rise) do
         fx.rise[c] = v + dt
         if fx.rise[c] > 1.4 then fx.rise[c] = nil end
+    end
+    fx.fence = max(0, fx.fence - dt * 6)
+    if fx.hit then
+        fx.hit.t = fx.hit.t + dt
+        if fx.hit.t > 0.6 then fx.hit = nil end
     end
     for c, v in pairs(fx.ring) do
         fx.ring[c] = v + dt
@@ -357,7 +374,7 @@ end
 
 -- How far the field has slid down behind a climb: the sky comes down past
 -- the hill as the sheep goes up, slower than the sheep.
-local function slide(L)
+function slide(L)
     local B = L.bounce
     if not B or B.cam <= 0 then return 0 end
     return floor(min(ch * 1.2, B.cam * bk() * 0.5))
@@ -395,7 +412,7 @@ local function drawField(L)
     farm(L)
     flock(L)
     local hz = horizon()
-    blit(Models.fence(1, 0), fenceX(), hz + 12)
+    if not L.song then blit(Models.fence(1, 0), fenceX(), hz + 12) end
     -- The flow: lines of wool, and now and then a sheep in it.
     for _, s in ipairs(fx.stream) do
         local y = floor(hz - 4 + s.y * 14)
@@ -411,6 +428,7 @@ local function drawField(L)
         local lift = d > -1 and d < 1 and (1 - d * d) * 16 or 0
         blit(Models.sheep(0, lift > 2 and -1 or 0, lift > 2 and 2 or (floor(h.x / 6) % 2), h.look), h.x, hz + 10 - lift)
     end
+    if L.song then drawSong(L, hz) elseif L.flock then drawFlock(L, hz) end
     love.graphics.pop()
     -- The golden sheep, sparkling.
     if L.golden then
@@ -420,7 +438,76 @@ local function drawField(L)
             G.rect("y", gx - 9, gy - 12, 1, 1); G.rect("w", gx + 8, gy - 3, 1, 1); G.rect("y", gx + 2, gy - 15, 1, 1)
         end
     end
-    drawBounce(L)
+    if not L.song then drawBounce(L) end
+end
+
+--- counting sheep ---------------------------------------------------------------------
+
+-- The flock waiting at the fence, on the hill: tap round here.
+function LScene.hitFlock(L, x, y)
+    if not L.flock then return false end
+    local fx0, hz = fenceX(), horizon() + slide(L)
+    return x >= fx0 - 60 and x <= fx0 + 16 and y >= hz - 22 and y <= hz + 26
+end
+
+-- Waiting: a few sheep in a line on the near side of the fence, looking at
+-- it, and a ring round them that comes and goes.
+function drawFlock(L, hz)
+    local x0 = fenceX()
+    local left = D.count.wait - L.flock.t
+    for i = 1, 5 do
+        local x = x0 - 16 - i * 9
+        local hop = (not LScene.reduced and floor(t * 3 + i) % 4 == 0) and 1 or 0
+        blit(Models.sheep(0, 0, 0, i % 2 == 0 and "cloud" or "plain", i == 3, 0.8), x, hz + 10 - hop)
+    end
+    if LScene.reduced or sin(t * 5) > -0.3 then
+        local pts = {}
+        for a = 0, 31 do G.plot(pts, x0 - 40 + cos(a / 32 * TAU) * 30, hz + 6 + sin(a / 32 * TAU) * 10) end
+        G.points(left < 5 and "r" or "y", pts)
+    end
+end
+
+-- The song: the line comes up to the fence and each one jumps it, at the
+-- top of its jump on its beat; a light over the fence where the tops are,
+-- bright on the beat.
+function drawSong(L, hz)
+    local song = L.song
+    local x0, top = fenceX(), hz + 10 - 18
+    -- The light over the fence, by the nearest top.
+    local near = 0
+    for _, sh in ipairs(song.sheep) do
+        if not sh.judged then near = max(near, 1 - math.abs(song.t - sh.at) / 0.25) end
+    end
+    if song.t < 0 then near = max(near, 1 - (song.t % D.count.beat) / 0.2 * 1) end
+    local r = 6 + floor(near * 3)
+    local pts = {}
+    for a = 0, 23 do G.plot(pts, x0 + cos(a / 24 * TAU) * r, top - 2 + sin(a / 24 * TAU) * r) end
+    G.points(near > 0.6 and "w" or "i", pts)
+    -- The flock, last in line first so the front one is on top.
+    for i = #song.sheep, 1, -1 do
+        local sh = song.sheep[i]
+        local p = Count.phase(song, sh)
+        local x, lift, sq, leg = 0, 0, 0, 0
+        if p < -1 then
+            x = x0 - 30 - (-p - 1) * 12
+            leg = (not LScene.reduced and floor(t * 4 + i) % 2) or 0
+        elseif p <= 1 then
+            x, lift = x0 + p * 30, (1 - p * p) * 18
+            sq, leg = lift > 2 and -1 or 0, 2
+        else
+            x = x0 + 30 + (p - 1) * 50
+        end
+        if x > -12 and x < cw + 12 then
+            local look = sh.judged == "miss" and "cloud" or (sh.judged == "perfect" and "gold" or "plain")
+            blit(Models.sheep(0, sq, leg, look), x, hz + 10 - lift)
+        end
+    end
+    blit(Models.fence(1, floor(fx.fence * 2 + 0.5)), x0, hz + 12)
+    if fx.hit then
+        local word = ({ perfect = "PERFECT", good = "GOOD", miss = "MISS", stray = "OFF BEAT" })[fx.hit.what]
+        local k = ({ perfect = "y", good = "c", miss = "r", stray = "r" })[fx.hit.what]
+        G.label(k, word, floor(x0 - G.textWidth(word) / 2), floor(top - 18 - fx.hit.t * 10))
+    end
 end
 
 -- herding's field, for a nightmare.

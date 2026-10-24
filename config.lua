@@ -150,7 +150,8 @@ return {
     -- layers each dream the one above them (a dream within a dream), and Dream
     -- Points build a town on a grid (a city builder: where a building stands
     -- matters): phase 1's farm, the barn and the field, rebuilt piece by piece
-    -- on the dream's hill. Dream Points grow the roots under it too.
+    -- on the dream's hill. Dream Points buy upgrades kept for good too, a section
+    -- for each of the dream's games.
     -- Every amount in here is a plain number; lucid/game.lua turns them into Num.
     dream = {
         -- What you start with: one sleeper on the Hill, so the first run comes
@@ -221,50 +222,68 @@ return {
             { id = "plaza", district = "park", name = "Haystack", desc = "+50% to every building beside it", dp = 1500, sheep = 2e4, growth = 3 },
             { id = "fountain", district = "park", name = "Wishing Well", desc = "Golden sheep come 50% more often", dp = 2500, sheep = 5e4, growth = 3, max = 2, goldenAdd = 0.5 },
             { id = "fold", district = "park", name = "Sheepfold", desc = "Nightmares: a wider pen, +50% reward", dp = 2000, sheep = 3e4, growth = 3, max = 3, penAdd = 0.2, rewardAdd = 0.5 },
-            -- Lucidity: the lake opens the roots' dream challenges.
+            -- Lucidity: the lake opens the dream challenges.
             { id = "lighthouse", district = "lucid", name = "Sheep-OS", desc = "Coming: lucidity", locked = true },
-            { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Opens the dream challenges, down in the roots", dp = 4e5, sheep = 1e30, max = 1 },
+            { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Opens the dream challenges, on UPGRADES", dp = 4e5, sheep = 1e30, max = 1 },
         },
 
-        -- The roots: what the dream grows under the field, underroot's
-        -- network. Every node grows from the one above it (`at`), a rank at a
-        -- time for Dream Points (dp * growth^rank, up to `max`), and keeps
-        -- for good. `x` (-2 to 2) and `depth` place it. Four branches hang off
-        -- the dreamer, and down the middle the taproot: the Mirror Lake
-        -- (grown when the town has one), a dream challenge a node, each
-        -- opening once the one above it is mastered, and at the bottom the
-        -- Gate of Horn, the way out of the dream.
+        -- The upgrades, kept for good (in the code and the save still the
+        -- `roots`): a rank at a time for Dream Points (dp * growth^rank, up to
+        -- `max`). Each is in the section of what it helps, a game first: the
+        -- bouncing sheep, counting sheep, the nightmares, the golden sheep,
+        -- then the layers and the farm. In a section each opens once the one
+        -- before it (`at`) has a rank. Then the dream challenges: the Mirror
+        -- Lake (grown when the farm has one), a challenge each, opening once
+        -- the one before it is mastered, and last the Gate of Horn, the way
+        -- out of the dream.
+        sections = {
+            { id = "sky", name = "THE BOUNCING SHEEP", how = "HOLD THE FIELD: IT CLIMBS" },
+            { id = "count", name = "COUNTING SHEEP", how = "A FLOCK AT THE FENCE: TAP IT" },
+            { id = "nightmare", name = "NIGHTMARES", how = "DRAG THE DOG: HERD THEM HOME" },
+            { id = "gold", name = "THE GOLDEN SHEEP", how = "TAP IT AS IT CROSSES" },
+            { id = "layers", name = "THE LAYERS" },
+            { id = "town", name = "THE FARM" },
+            { id = "dream", name = "DREAM CHALLENGES", how = "A DREAM UNDER A RULE" },
+        },
         roots = {
-            { id = "dreamer", name = "The Dreamer", desc = "You, asleep. Everything grows from here", x = 0, depth = 0, kind = "root" },
-            -- The sky: the bouncing sheep.
-            { id = "spring", at = "dreamer", branch = "sky", name = "Springy Wool", desc = "The sheep bounces 8% higher", x = -2, depth = 1, dp = 300, growth = 3, max = 5, jumpAdd = 0.08 },
-            { id = "starbag", at = "spring", branch = "sky", name = "Star Bag", desc = "Stars in the sky pay +50%", x = -2, depth = 2, dp = 2500, growth = 3, max = 5, starAdd = 0.5 },
-            { id = "steps", at = "starbag", branch = "sky", name = "Cloud Steps", desc = "Clouds to bounce on are 15% wider", x = -2, depth = 3, dp = 2e4, growth = 4, max = 3, widthAdd = 0.15 },
-            { id = "moonpull", at = "steps", branch = "sky", name = "Moon Pull", desc = "Your best height lifts the layers 50% more", x = -2, depth = 4, dp = 2e5, growth = 4, max = 3, recordAdd = 0.5 },
+            -- The bouncing sheep.
+            { id = "spring", section = "sky", name = "Springy Wool", desc = "The sheep bounces 8% higher", dp = 300, growth = 3, max = 5, jumpAdd = 0.08 },
+            { id = "starbag", at = "spring", section = "sky", name = "Star Bag", desc = "Stars in the sky pay +50%", dp = 2500, growth = 3, max = 5, starAdd = 0.5 },
+            { id = "steps", at = "starbag", section = "sky", name = "Cloud Steps", desc = "Clouds to bounce on are 15% wider", dp = 2e4, growth = 4, max = 3, widthAdd = 0.15 },
+            { id = "moonpull", at = "steps", section = "sky", name = "Moon Pull", desc = "Your best height lifts the layers 50% more", dp = 2e5, growth = 4, max = 3, recordAdd = 0.5 },
+            -- Counting sheep.
+            { id = "bell", section = "count", name = "Sheep Bell", desc = "A flock comes to the fence 25% more often", dp = 400, growth = 3, max = 4, flockAdd = 0.25 },
+            { id = "slowsong", at = "bell", section = "count", name = "Slow Song", desc = "The beat is 15% easier to hit", dp = 3000, growth = 4, max = 3, windowAdd = 0.15 },
+            { id = "lullaby", at = "slowsong", section = "count", name = "Lullaby", desc = "A song pays +50%", dp = 2e4, growth = 3, max = 5, songAdd = 0.5 },
+            { id = "encore", at = "lullaby", section = "count", name = "Encore", desc = "The tune after a song lasts 50% longer", dp = 2e5, growth = 4, max = 3, tuneAdd = 0.5 },
+            -- The nightmares.
+            { id = "quickdog", section = "nightmare", name = "Quick Dog", desc = "The dog runs 15% faster", dp = 1500, growth = 3, max = 3, dogAdd = 0.15 },
+            { id = "dog", at = "quickdog", section = "nightmare", name = "Good Dog", desc = "A flock brought home pays 25% more", dp = 1e4, growth = 3, max = 4, herdAdd = 0.25 },
+            { id = "nightlight", at = "dog", section = "nightmare", name = "Night Light", desc = "The dark cloud is 20% slower", dp = 6e4, growth = 4, max = 3, cloudCut = 0.25 },
+            -- The golden sheep.
+            { id = "totem", section = "gold", name = "Spinning Top", desc = "A golden gift lasts 25% longer", dp = 1000, growth = 3, max = 4, giftAdd = 0.25 },
+            { id = "slowgold", at = "totem", section = "gold", name = "Slow Gold", desc = "The golden sheep takes 30% longer to cross", dp = 5000, growth = 3, max = 3, crossAdd = 0.3 },
             -- The layers.
-            { id = "architect", at = "dreamer", branch = "layers", name = "The Architect", desc = "Every sleeper costs a third less", x = -1, depth = 1, dp = 800, growth = 4, max = 5, costCut = 0.5 },
-            { id = "well", at = "architect", branch = "layers", name = "Deep Well", desc = "Your points lift the layers 50% more", x = -1, depth = 2, dp = 8000, growth = 4, max = 5, wellAdd = 0.5 },
-            { id = "dilation", at = "well", branch = "layers", name = "Time Dilation", desc = "Every ten sleepers: time x0.1 faster again", x = -1, depth = 3, dp = 9e4, growth = 5, max = 5, bonusAdd = 0.1 },
-            -- The town.
-            { id = "surveyor", at = "dreamer", branch = "town", name = "Surveyor", desc = "Land costs 20% less", x = 1, depth = 1, dp = 600, growth = 3, max = 3, landCut = 0.8 },
-            { id = "market", at = "surveyor", branch = "town", name = "Night Market", desc = "Buildings cost half the wool", x = 1, depth = 2, dp = 6000, growth = 4, max = 3, woolCut = 0.5 },
-            { id = "bellows", at = "market", branch = "town", name = "Bellows", desc = "Auto-buyers spend 10% more of the wool", x = 1, depth = 3, dp = 6e4, growth = 4, max = 3, shareAdd = 0.1 },
-            -- The golden sheep and the nightmares.
-            { id = "totem", at = "dreamer", branch = "gold", name = "Spinning Top", desc = "A golden gift lasts 25% longer", x = 2, depth = 1, dp = 1000, growth = 3, max = 4, giftAdd = 0.25 },
-            { id = "dog", at = "totem", branch = "gold", name = "Good Dog", desc = "A flock brought home pays 25% more", x = 2, depth = 2, dp = 1e4, growth = 3, max = 4, herdAdd = 0.25 },
-            -- The taproot.
-            { id = "lake", at = "dreamer", kind = "lake", name = "Mirror Lake", desc = "Build it in town: the dream challenges open under it", x = 0, depth = 1 },
-            { id = "c.season", at = "lake", kind = "challenge", challenge = "season", x = 0, depth = 2 },
-            { id = "c.stoppedClocks", at = "c.season", kind = "challenge", challenge = "stoppedClocks", x = 0, depth = 3 },
-            { id = "c.skyHigh", at = "c.stoppedClocks", kind = "challenge", challenge = "skyHigh", x = 0, depth = 4 },
-            { id = "c.onlyOne", at = "c.skyHigh", kind = "challenge", challenge = "onlyOne", x = 0, depth = 5 },
-            { id = "c.shallow", at = "c.onlyOne", kind = "challenge", challenge = "shallow", x = 0, depth = 6 },
-            { id = "c.falling", at = "c.shallow", kind = "challenge", challenge = "falling", x = 0, depth = 7 },
-            { id = "c.emptySquares", at = "c.falling", kind = "challenge", challenge = "emptySquares", x = 0, depth = 8 },
-            { id = "gate", at = "c.emptySquares", kind = "gate", name = "Gate of Horn", desc = "The way out of the dream. Past it: the void", x = 0, depth = 9, dp = 3e8 },
+            { id = "architect", section = "layers", name = "The Architect", desc = "Every sleeper costs a third less", dp = 800, growth = 4, max = 5, costCut = 0.5 },
+            { id = "well", at = "architect", section = "layers", name = "Deep Well", desc = "Your points lift the layers 50% more", dp = 8000, growth = 4, max = 5, wellAdd = 0.5 },
+            { id = "dilation", at = "well", section = "layers", name = "Time Dilation", desc = "Every ten sleepers: time x0.1 faster again", dp = 9e4, growth = 5, max = 5, bonusAdd = 0.1 },
+            -- The farm.
+            { id = "surveyor", section = "town", name = "Surveyor", desc = "Land costs 20% less", dp = 600, growth = 3, max = 3, landCut = 0.8 },
+            { id = "market", at = "surveyor", section = "town", name = "Night Market", desc = "Buildings cost half the wool", dp = 6000, growth = 4, max = 3, woolCut = 0.5 },
+            { id = "bellows", at = "market", section = "town", name = "Bellows", desc = "Auto-buyers spend 10% more of the wool", dp = 6e4, growth = 4, max = 3, shareAdd = 0.1 },
+            -- The dream challenges, one after the other, and the way out.
+            { id = "lake", section = "dream", kind = "lake", name = "Mirror Lake", desc = "Build it on the farm: the dream challenges open" },
+            { id = "c.season", at = "lake", section = "dream", kind = "challenge", challenge = "season" },
+            { id = "c.stoppedClocks", at = "c.season", section = "dream", kind = "challenge", challenge = "stoppedClocks" },
+            { id = "c.skyHigh", at = "c.stoppedClocks", section = "dream", kind = "challenge", challenge = "skyHigh" },
+            { id = "c.onlyOne", at = "c.skyHigh", section = "dream", kind = "challenge", challenge = "onlyOne" },
+            { id = "c.shallow", at = "c.onlyOne", section = "dream", kind = "challenge", challenge = "shallow" },
+            { id = "c.falling", at = "c.shallow", section = "dream", kind = "challenge", challenge = "falling" },
+            { id = "c.emptySquares", at = "c.falling", section = "dream", kind = "challenge", challenge = "emptySquares" },
+            { id = "gate", at = "c.emptySquares", section = "dream", kind = "gate", name = "Gate of Horn", desc = "The way out of the dream. Past it: the void", dp = 3e8 },
         },
 
-        -- Dream challenges, once the Mirror Lake is built, down the roots: a
+        -- Dream challenges, once the Mirror Lake is built, on UPGRADES: a
         -- dream under a rule. Starting one wakes the flock (the layers and
         -- dream sheep back to the start; the town and the points stay), and
         -- while it lasts the dream forgets your points: they don't lift the
@@ -320,6 +339,24 @@ return {
             springChance = 0.08, darkChance = 0.12, darkFrom = 80, moveFrom = 160,
             starChance = 0.35, moonEvery = 400,
             starSeconds = 4, starLeast = 3, recordPer = 0.06,
+        },
+
+        -- Counting sheep, the rhythm game: now and then (minDelay..maxDelay,
+        -- less with Sheep Bells) a flock lines up at the fence and waits
+        -- `wait` seconds for you to tap it. Then `sheep` of them jump it, a
+        -- beat apart, from `beat` seconds down to `beatEnd`, after a count-in
+        -- of `lead` beats. Tap on each one's top: within `perfect` seconds is
+        -- perfect (1), within `good` is good (`goodScore`), and a sheep let
+        -- past or a tap with none near breaks the count. Over, it pays
+        -- `rewardSeconds` of Dream Points (at least `least`) by the share
+        -- counted, and leaves a tune: the most runs a second x(1 + tune.cap *
+        -- share) for tune.seconds.
+        count = {
+            firstDelay = 75, minDelay = 150, maxDelay = 260, wait = 20,
+            sheep = 16, beat = 0.75, beatEnd = 0.45, lead = 2,
+            perfect = 0.08, good = 0.17, goodScore = 0.5,
+            rewardSeconds = 45, least = 30,
+            tune = { cap = 0.5, seconds = 40 },
         },
     },
 

@@ -166,6 +166,10 @@ local DEFS = {
         chime(0, midi(86), 3, 0.3), chime(0.5, midi(79), 3, 0.35), chime(1.0, midi(71), 3.2, 0.4),
         chime(1.6, midi(64), 3.5, 0.45, "tri"), chime(2.3, midi(55), 4, 0.5, "tri"), chime(3.0, midi(43), 5, 0.5, "tri"),
         { dur = 5, wave = "noise", lp = { 900, 120 }, vol = 0.06, curve = 1 } },
+    -- Counting sheep's beat: a soft woodblock, a tick on every top (the hits
+    -- are the taps' music box, climbing with the count).
+    beat = { vol = 0.22, gap = 0.1, wob = 0.01,
+        { dur = 0.05, wave = "tri", f0 = 880, f1 = 620, curve = 3 }, { dur = 0.03, wave = "noise", hp = { 2500 }, vol = 0.2, curve = 2 } },
     bleat = { vol = 0.18, gap = 0.25, wob = 0.12, { dur = 0.22, wave = "tri", f0 = 420, f1 = 380, vib = { 18, 0.06 }, lp = { 1600 }, curve = 1.5 } },
 }
 for i, n in ipairs(PENTA) do

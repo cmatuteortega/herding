@@ -6,12 +6,14 @@
 -- in batches, never one reset a frame: a step adds runs a second * dt to a
 -- fraction and pays for the whole runs in it. Dream Points rebuild phase 1's
 -- farm, a grid where a building does more beside its own district and beside
--- a Haystack, and grow the roots, a network of upgrades kept for good with the
--- dream challenges down its middle and the Gate of Horn at the bottom; dream
--- sheep buy sleepers for the layers and the town's materials. A golden sheep
--- offers a choice of three, now and then a nightmare scatters a flock for the
--- dog to herd (nightmare.lua), and the bouncing sheep climbs when you hold
--- the field (bounce.lua).
+-- a Haystack, and buy the upgrades kept for good (in the code still the
+-- "roots"), a section for each of the dream's games, the dream challenges
+-- after them and the Gate of Horn last; dream sheep buy sleepers for the
+-- layers and the town's materials. A golden sheep offers a choice of three,
+-- now and then a nightmare scatters a flock for the dog to herd
+-- (nightmare.lua), a flock waits at the fence to be counted on the beat
+-- (count.lua), and the bouncing sheep climbs when you hold the field
+-- (bounce.lua).
 --
 -- In the code a layer is still a "dim": `L.dims[k]` is layer k, its
 -- sleepers bought and its amount.
@@ -24,6 +26,7 @@ local C = require "config"
 local N = require "num"
 local Nightmare = require "lucid.nightmare"
 local Bounce = require "lucid.bounce"
+local Count = require "lucid.count"
 
 local D = C.dream
 local floor, min, max = math.floor, math.min, math.max
@@ -39,7 +42,7 @@ for i, b in ipairs(D.buildings) do
 end
 Lucid.BUILD, Lucid.BY = BUILD, BY
 
--- The roots, by id and in order.
+-- The upgrades (the roots), by id and in order, and their sections.
 local ROOTS, ROOT = {}, {}
 for i, r in ipairs(D.roots) do
     local it = { index = i, growth = 1, max = 1, kind = "up" }
@@ -47,6 +50,7 @@ for i, r in ipairs(D.roots) do
     ROOTS[i], ROOT[it.id] = it, it
 end
 Lucid.ROOTS, Lucid.ROOT = ROOTS, ROOT
+Lucid.SECTIONS = D.sections
 
 -- Dream challenges, by id too.
 local CH = {}
@@ -92,6 +96,9 @@ function Lucid.fresh(s1)
         gate = false, -- the Gate of Horn grown: the way out is open
         best = 0, -- the highest the bouncing sheep has climbed, ever
         bounce = Bounce.new(), -- not kept: a climb passes
+        flock = nil, flockIn = D.count.firstDelay, -- a flock waiting at the fence: { t }
+        song = nil, -- counting it: count.lua's song, not kept
+        tuneMult = 1, -- what the last song's tune does to the run cap, while effects.tune lasts
     }
     for k = 1, #D.dims do
         L.dims[k] = { amount = N.from(D.startDims[k] or 0), bought = D.startDims[k] or 0 }
@@ -276,10 +283,11 @@ function Lucid.need(L)
     return N.from(D.sheepPerRun / (1 + BY.inn.needDiv * Lucid.sum(L, "inn")))
 end
 
--- The most runs a second, after Better Fences.
+-- The most runs a second, after Better Fences (and a song's tune).
 function Lucid.cap(L)
     local power = BY.clock.capPower + (Lucid.met(L, "stoppedClocks") and CH.stoppedClocks.rewardCapPower or 0)
-    return D.runCap * (1 + Lucid.sum(L, "clock") * (under(L, "clockMult") or 1)) ^ power
+    local tune = effect(L, "tune") and L.tuneMult or 1
+    return D.runCap * (1 + Lucid.sum(L, "clock") * (under(L, "clockMult") or 1)) ^ power * tune
 end
 
 -- Runs a second: what the sheep pay for, no more than the cap, half while a
@@ -352,6 +360,9 @@ function Lucid.toggleAuto(L, k) if Lucid.autoHas(L, k) then L.autoOff[k] = not L
 
 local function goldenWait(L, d) return d / (1 + BY.fountain.goldenAdd * Lucid.sum(L, "fountain")) end
 
+-- How long the golden sheep takes to cross, after Slow Gold.
+function Lucid.crossTime(L) return D.golden.crossTime * (1 + ROOT.slowgold.crossAdd * rank(L, "slowgold")) end
+
 -- Caught: the game keeps going while you choose.
 function Lucid.catchGolden(L)
     if not L.golden or L.choosing then return false end
@@ -380,6 +391,11 @@ end
 
 function Lucid.penScale(L)
     return 1 + BY.fold.penAdd * Lucid.sum(L, "fold") + (Lucid.met(L, "season") and CH.season.rewardPen or 0)
+end
+
+-- What the upgrades do to the dog and the cloud.
+function Lucid.nightmareOpts(L)
+    return { dog = 1 + ROOT.quickdog.dogAdd * rank(L, "quickdog"), cloud = 1 / (1 + ROOT.nightlight.cloudCut * rank(L, "nightlight")) }
 end
 
 -- Where the dog goes (field units), or nil when let go.
@@ -432,6 +448,7 @@ function Lucid.startChallenge(L, id)
         d.amount, d.bought = N.from(D.startDims[k] or 0), D.startDims[k] or 0
     end
     L.effects, L.golden, L.choosing, L.nightmare = {}, nil, false, nil
+    L.flock, L.song = nil, nil
     L.challenge, L.herded, L.counted, L.climbed = id, 0, N.zero(), 0
     if L.bounce.on then Bounce.stop(L.bounce) end
     L.nightmareIn = CH[id].nightmareEvery or L.nightmareIn
@@ -455,14 +472,12 @@ local function checkChallenge(L)
     end
 end
 
---- the roots --------------------------------------------------------------------------
+--- the upgrades (the roots) -------------------------------------------------------------
 
--- Whether what a root grows from is there: the dreamer always is; the lake
--- once the town has a Mirror Lake; a challenge once mastered; anything else
--- once it has a rank.
+-- Whether what an upgrade opens after is there: the lake once the town has a
+-- Mirror Lake; a challenge once mastered; anything else once it has a rank.
 local function there(L, id)
     local r = ROOT[id]
-    if r.kind == "root" then return true end
     if r.kind == "lake" then return Lucid.mirror(L) end
     if r.kind == "challenge" then return Lucid.met(L, r.challenge) end
     if r.kind == "gate" then return L.gate end
@@ -470,7 +485,8 @@ local function there(L, id)
 end
 Lucid.there = there
 
--- Whether a root can be grown (or its challenge started): what it grows from is there.
+-- Whether an upgrade can be grown (or its challenge started): the first of
+-- its section always, any other once the one before it is there.
 function Lucid.ready(L, r) return r ~= nil and (not r.at or there(L, r.at)) end
 
 function Lucid.rootPrice(L, id)
@@ -478,12 +494,11 @@ function Lucid.rootPrice(L, id)
     return N.from((r.dp or 0) * r.growth ^ rank(L, id))
 end
 
--- Where a root stands: "full" (grown all the way, or mastered), "on" (its
--- challenge under way), "open" (it can grow now), "poor" (not the points
--- for it), "shut" (what it grows from isn't there yet).
+-- Where an upgrade stands: "full" (grown all the way, or mastered), "on"
+-- (its challenge under way), "open" (it can grow now), "poor" (not the
+-- points for it), "shut" (the one before it isn't there yet).
 function Lucid.rootState(L, id)
     local r = ROOT[id]
-    if r.kind == "root" then return "full" end
     if r.kind == "lake" then return Lucid.mirror(L) and "full" or "shut" end
     if r.kind == "challenge" then
         if Lucid.met(L, r.challenge) then return "full" end
@@ -520,6 +535,78 @@ function Lucid.rootsGrown(L)
     return grown, all
 end
 
+--- counting sheep ------------------------------------------------------------------------
+
+local CT = D.count
+
+local function flockWait(L, d) return d / (1 + ROOT.bell.flockAdd * rank(L, "bell")) end
+
+-- The flock at the fence, tapped: the song starts.
+function Lucid.startSong(L)
+    if not L.flock or L.song or L.nightmare then return false end
+    L.flock = nil
+    L.song = Count.new(1 + ROOT.slowsong.windowAdd * rank(L, "slowsong"))
+    L.golden = nil
+    if L.bounce.on then Bounce.stop(L.bounce) end
+    emit({ type = "songStart" })
+    return true
+end
+
+-- A tap on the beat. What it was: "perfect", "good" or "stray".
+function Lucid.countTap(L)
+    if not L.song then return nil end
+    return Count.tap(L.song)
+end
+
+-- What a song pays at full marks.
+function Lucid.songValue(L)
+    return N.mul(N.max(N.mul(Lucid.dpPerSecond(L), N.from(CT.rewardSeconds)), N.from(CT.least)),
+        N.from(1 + ROOT.lullaby.songAdd * rank(L, "lullaby")))
+end
+
+local function endSong(L)
+    local song = L.song
+    local share = Count.share(song)
+    -- Paid before the tune lifts the cap, so the tune doesn't pay for itself.
+    local v = N.mul(Lucid.songValue(L), N.from(share))
+    L.dp, L.dpEarned = N.add(L.dp, v), N.add(L.dpEarned, v)
+    L.song = nil
+    L.flockIn = flockWait(L, CT.minDelay + (CT.maxDelay - CT.minDelay) * 0.5)
+    if share > 0 then
+        L.tuneMult = 1 + CT.tune.cap * share
+        L.effects.tune = CT.tune.seconds * (1 + ROOT.encore.tuneAdd * rank(L, "encore"))
+    end
+    emit({ type = "songOver", share = share, value = v, best = song.best, perfect = song.perfect, n = #song.sheep })
+end
+
+local function counting(L, dt, rand)
+    if L.song then
+        Count.step(L.song, dt)
+        local ev = L.song.events
+        L.song.events = {}
+        for _, e in ipairs(ev) do
+            if e.type ~= "songOver" then emit({ type = "count", what = e.type, i = e.i, combo = e.combo }) end
+        end
+        if L.song.done then endSong(L) end
+        return
+    end
+    if L.flock then
+        L.flock.t = L.flock.t + dt
+        if L.flock.t >= CT.wait or L.nightmare then
+            L.flock = nil
+            L.flockIn = flockWait(L, CT.minDelay + rand() * (CT.maxDelay - CT.minDelay))
+            emit({ type = "flockGone" })
+        end
+        return
+    end
+    if L.intro or L.nightmare then return end
+    L.flockIn = L.flockIn - dt
+    if L.flockIn <= 0 then
+        L.flock = { t = 0 }
+        emit({ type = "flock" })
+    end
+end
+
 --- the bouncing sheep -------------------------------------------------------------------
 
 -- What the roots and the rule do to the climb.
@@ -539,14 +626,14 @@ end
 
 -- The finger on the field, in field units across (0..bounce.w); nil when lifted.
 function Lucid.hold(L, x)
-    if L.nightmare then return end
+    if L.nightmare or L.song then return end
     if x then Bounce.press(L.bounce, x) else Bounce.release(L.bounce) end
 end
 function Lucid.steer(L, x) Bounce.move(L.bounce, x) end
 
 local function bounce(L, dt, rand)
     local B = L.bounce
-    if L.nightmare then
+    if L.nightmare or L.song then
         if B.on then Bounce.stop(B) end
         B.events = {}
         return
@@ -625,8 +712,8 @@ function Lucid.step(L, dt, rand)
     -- The golden sheep crosses, unless a nightmare is on.
     if L.golden then
         L.golden.t = L.golden.t + dt
-        if L.golden.t >= D.golden.crossTime then L.golden = nil end
-    elseif not L.nightmare and not L.choosing then
+        if L.golden.t >= Lucid.crossTime(L) then L.golden = nil end
+    elseif not L.nightmare and not L.song and not L.choosing then
         L.goldenIn = L.goldenIn - dt
         if L.goldenIn <= 0 then
             L.golden = { t = 0, lane = rand() }
@@ -638,16 +725,17 @@ function Lucid.step(L, dt, rand)
     if L.nightmare then
         Nightmare.update(L.nightmare, dt, rand)
         if L.nightmare.done then endNightmare(L) end
-    elseif not L.intro then
+    elseif not L.intro and not L.song and not L.flock then
         L.nightmareIn = L.nightmareIn - dt
         if L.nightmareIn <= 0 then
             local M = D.nightmare
-            L.nightmare = Nightmare.new(M.sheep, M.seconds, Lucid.penScale(L), rand)
+            L.nightmare = Nightmare.new(M.sheep, M.seconds, Lucid.penScale(L), rand, Lucid.nightmareOpts(L))
             L.golden = nil
             L.nightmareIn = M.minDelay + rand() * (M.maxDelay - M.minDelay)
             emit({ type = "nightmare" })
         end
     end
+    counting(L, dt, rand)
     bounce(L, dt, rand)
     if L.challenge then checkChallenge(L) end
 end
@@ -765,6 +853,7 @@ function Lucid.serialize(L)
     o.nightmare = nil -- a nightmare in progress isn't kept: it passes while you're away
     o.choosing = nil
     o.bounce = nil -- nor a climb
+    o.flock, o.song = nil, nil -- nor a song, or a flock waiting
     o.roots = {}
     for id, n in pairs(L.roots) do o.roots[id] = n end
     return o
@@ -775,7 +864,7 @@ function Lucid.deserialize(o, s1)
     local L = Lucid.fresh(s1)
     if type(o) ~= "table" then return L end
     for _, k in ipairs(NUMS) do if o[k] ~= nil then L[k] = N.deserialize(o[k]) end end
-    for _, k in ipairs({ "runAcc", "legacy", "plots", "time", "goldenIn", "nightmareIn", "herded", "best", "climbed" }) do
+    for _, k in ipairs({ "runAcc", "legacy", "plots", "time", "goldenIn", "nightmareIn", "herded", "best", "climbed", "flockIn", "tuneMult" }) do
         if type(o[k]) == "number" then L[k] = o[k] end
     end
     if type(o.roots) == "table" then
@@ -819,7 +908,7 @@ function Lucid.deserialize(o, s1)
     end
     if type(o.effects) == "table" then
         for id, left in pairs(o.effects) do
-            if D.golden[id] and type(left) == "number" then L.effects[id] = left end
+            if (D.golden[id] or id == "tune") and type(left) == "number" then L.effects[id] = left end
         end
     end
     return L

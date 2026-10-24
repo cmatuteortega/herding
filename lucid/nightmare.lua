@@ -49,11 +49,14 @@ function Nightmare.pressure(d)
 end
 
 -- A nightmare of `n` sheep and `seconds`; `penScale` widens the fold.
--- `rand` gives 0..1 (the tests pass seeded dice).
-function Nightmare.new(n, seconds, penScale, rand)
+-- `rand` gives 0..1 (the tests pass seeded dice). `opts`: dog (its speed,
+-- a multiplier), cloud (the cloud's, a multiplier).
+function Nightmare.new(n, seconds, penScale, rand, opts)
+    opts = opts or {}
     local W, H = Nightmare.W, Nightmare.H
     local nm = {
         t = 0, seconds = seconds, done = false, won = false,
+        dogSpeed = CONFIG.dogSpeed * (opts.dog or 1), cloudSpeed = CONFIG.cloudSpeed * (opts.cloud or 1),
         pen = { x = W - 34, y = H / 2, r = CONFIG.penR * (penScale or 1) },
         dog = { x = 30, y = H / 2, vx = 0, vy = 0 },
         cloud = { x = 18, y = 18 },
@@ -109,7 +112,7 @@ function Nightmare.update(nm, dt, rand)
         local dx, dy = nm.target.x - d.x, nm.target.y - d.y
         local l = sqrt(dx * dx + dy * dy)
         if l > 1.5 then
-            local sp = min(C.dogSpeed, l * C.dogFollow)
+            local sp = min(nm.dogSpeed or C.dogSpeed, l * C.dogFollow)
             tx, ty = dx / l * sp, dy / l * sp
         end
     end
@@ -128,7 +131,8 @@ function Nightmare.update(nm, dt, rand)
     if best then
         local dx, dy = best.x - c.x, best.y - c.y
         local l = sqrt(dx * dx + dy * dy) + 1e-6
-        c.x, c.y = c.x + dx / l * C.cloudSpeed * dt, c.y + dy / l * C.cloudSpeed * dt
+        local cs = nm.cloudSpeed or C.cloudSpeed
+        c.x, c.y = c.x + dx / l * cs * dt, c.y + dy / l * cs * dt
     end
     -- It can't come into the fold.
     local p = nm.pen

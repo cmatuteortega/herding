@@ -122,17 +122,34 @@ local MOMENTS = {
         L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
         return s
     end, 0, "challenge-ask" },
-    { "21-roots", function()
+    { "21-upgrades", function()
         local s = lucidAt(8, true)
         local L = s.lucid
         L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
-        L.roots = { spring = 3, starbag = 1, architect = 2, well = 1, surveyor = 1, totem = 1 }
+        L.roots = { spring = 3, starbag = 1, bell = 2, architect = 2, well = 1, surveyor = 1, totem = 1, quickdog = 1 }
         L.done.season, L.done.stoppedClocks = true, true
         L.dp = 2e4
-        local Roots = require "lucid.roots"
-        Roots.grew.well = -0.3 -- its thread still growing down
         return s
-    end, 0, "roots" },
+    end, 0, "upgrades" },
+    { "21b-upgrades-dreams", function()
+        local s = lucidAt(8, true)
+        local L = s.lucid
+        L.grid[Lucid.cell(3, 1)], L.level[Lucid.cell(3, 1)], L.built.mirror = "mirror", 1, 1
+        L.done.season, L.done.stoppedClocks = true, true
+        L.dp = 2e4
+        return s
+    end, 0, "upgrades-end" },
+    { "25-flock", function()
+        local s = lucidAt(5, false)
+        s.lucid.flockIn = 0.01
+        return s
+    end, 0, "lucid" },
+    { "26-counting", function()
+        local s = lucidAt(5, false)
+        s.lucid.flock = { t = 0 }
+        Lucid.startSong(s.lucid)
+        return s
+    end, 0, "count" },
     { "22-climb", function()
         local s = lucidAt(5, false)
         s.lucid.best = 340
@@ -177,13 +194,15 @@ function Shots.run(UI, fit)
             if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
             if s.phase == "void" then UI.showVoid() end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end
-            if m[4] == "roots" then LUI.show("roots", "well") end
+            if m[4] == "upgrades" then LUI.show("upgrades") end
+            if m[4] == "upgrades-end" then LUI.show("upgrades", nil, 1e9) end
             if m[4] == "climb" then Lucid.hold(s.lucid, 50) end
             if m[4] == "gate" then LUI.leave() end
             if m[4] == "challenge-ask" then LUI.askChallenge("season") end
             local r = UI.sceneRect()
             local frames = (m[4] == "sleep" or m[4] == "nightmare") and 400 or (m[4] == "enter" and 170 or 70)
             if m[4] == "climb" then frames = 360 end
+            if m[4] == "count" then frames = 250 end
             if m[4] == "gate" then frames = 290 end
             if m[4] == "void" then frames = 300 end
             for i = 1, frames do
@@ -193,6 +212,13 @@ function Shots.run(UI, fit)
                     -- The nightmare's dog, circling in behind the flock.
                     if m[4] == "nightmare" and s.lucid.nightmare then
                         Lucid.point(s.lucid, 60 + math.sin(i * 0.05) * 20, 70 + math.cos(i * 0.05) * 30)
+                    end
+                    -- Counting: on the beat, but for the fourth sheep, let past.
+                    local song = s.lucid.song
+                    if m[4] == "count" and song then
+                        local nxt
+                        for _, sh in ipairs(song.sheep) do if not sh.judged then nxt = sh break end end
+                        if nxt ~= song.sheep[4] then require("lucid.count").bot(song, 0.03) end
                     end
                     if m[4] == "climb" and s.lucid.bounce.on then
                         Lucid.steer(s.lucid, require("lucid.bounce").bot(s.lucid.bounce))

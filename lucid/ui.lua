@@ -6,12 +6,13 @@
 -- runs itself, until it runs too fast to see. Then three tabs: LAYERS (the
 -- six dream layers, a dream within a dream), FARM (the city builder: a grid
 -- of land, buildings placed, moved and levelled up, the next plot bought; it
--- rebuilds phase 1's barn and field on the dream's hill) and ROOTS (the network of upgrades
--- kept for good, with the dream challenges down its middle and the Gate of
--- Horn at the bottom; lucid/roots.lua draws it). The field also holds the
--- bouncing sheep: hold it and it climbs. The golden sheep's choice, the
--- nightmares, the way in, the way out and the time away are dialogs and
--- banners.
+-- rebuilds phase 1's barn and field on the dream's hill) and UPGRADES (kept
+-- for good, in sections like the farm's: one for each of the dream's games,
+-- then the layers and the farm, then the dream challenges and the Gate of
+-- Horn). The field also holds the dream's games: hold it and the bouncing
+-- sheep climbs; tap a flock waiting at the fence and count it over on the
+-- beat. The golden sheep's choice, the nightmares, the way in, the way out
+-- and the time away are dialogs and banners.
 --
 -- ui.lua hands everything over to this once `phase` is "lucid".
 
@@ -21,7 +22,7 @@ local C = require "config"
 local Lucid = require "lucid.game"
 local LScene = require "lucid.scene"
 local Models = require "models"
-local Roots = require "lucid.roots"
+local Upgrades = require "lucid.upgrades"
 local Audio = require "audio"
 local flux = require "lib.flux"
 local lume = require "lib.lume"
@@ -40,7 +41,7 @@ local t = 0
 local reduced = false
 local portrait = true
 
-local tab = "layers" -- or "town", "roots"
+local tab = "layers" -- or "town", "upgrades"
 local buyMax = false
 local rows, contentH, scroll, scrollV = {}, 0, 0, 0
 local press = nil
@@ -51,14 +52,12 @@ local modal = nil -- { title, lines, big, buttons = { { label, fn } }, night, y 
 local sel, place, moving = nil, nil, nil -- the town: a cell picked, a building to put down, one being moved
 local intro = nil -- the way in: { t }
 local outro = nil -- the way out, through the Gate of Horn: { t }
-local root = nil -- the root picked on the ROOTS tab
-local challengeSeen = {} -- dream challenges looked at on ROOTS, so the tab's mark goes
-local ROOT_CARD = 43 -- its card, along the bottom of the panel
+local challengeSeen = {} -- dream challenges looked at on UPGRADES, so the tab's mark goes
 local runQuiet = 0 -- the run chime: not again until then, so it isn't constant
 
 function LUI.setState(s)
     S, L = s, s.lucid
-    modal, banner.text, scroll, sel, place, moving, intro, outro, root = nil, nil, 0, nil, nil, nil, nil, nil, nil
+    modal, banner.text, scroll, sel, place, moving, intro, outro = nil, nil, 0, nil, nil, nil, nil, nil
     dogHeld, bounceHeld = nil, nil
     challengeSeen = {}
     tab = "layers"
@@ -167,9 +166,9 @@ local function explain()
             "",
             "LAYERS: A DREAM WITHIN A DREAM, SIX DEEP. EACH LAYER DREAMS UP THE SLEEPERS OF THE ONE ABOVE IT, AND DEEPER DOWN TIME RUNS FASTER.",
             "",
-            "FARM: REBUILD THE FIELD AND THE BARN YOU DREAMT OF, WITH YOUR DREAM POINTS. WHERE EACH PIECE STANDS MATTERS. ROOTS: GROW WHAT YOU KEEP FOR GOOD.",
+            "FARM: REBUILD THE FIELD AND THE BARN YOU DREAMT OF, WITH YOUR DREAM POINTS. WHERE EACH PIECE STANDS MATTERS. UPGRADES: WHAT YOU KEEP FOR GOOD.",
             "",
-            "HOLD THE FIELD AND THE SHEEP IN FRONT CLIMBS. AND IF A NIGHTMARE COMES, THE DOG KNOWS WHAT TO DO.",
+            "HOLD THE FIELD AND THE SHEEP IN FRONT CLIMBS. WHEN A FLOCK WAITS AT THE FENCE, TAP IT AND COUNT THEM OVER ON THE BEAT. AND IF A NIGHTMARE COMES, THE DOG KNOWS WHAT TO DO.",
         },
         big = "YOU DREAM THEM",
         buttons = { { label = "DREAM", fn = function() L.intro = false; LUI.save() end } },
@@ -180,7 +179,7 @@ end
 -- Then ui.lua hands over (LUI.toVoid).
 function LUI.leave()
     if outro or S.phase ~= "lucid" then return end
-    modal, root, dogHeld, bounceHeld = nil, nil, nil, nil
+    modal, dogHeld, bounceHeld = nil, nil, nil
     Lucid.hold(L, nil)
     outro = { t = reduced and C.void.outro - 2.5 or 0 }
     cue("void")
@@ -216,8 +215,11 @@ function LUI.drain()
     Lucid.events = {}
     for _, e in ipairs(ev) do
         if e.type == "runs" then
-            LScene.runs(e.n, e.value, L.flow)
-            if not L.flow and t >= runQuiet then cue("run"); runQuiet = t + RUN_GAP end
+            -- While a song is on, the fence is the song's.
+            if not L.song then
+                LScene.runs(e.n, e.value, L.flow)
+                if not L.flow and t >= runQuiet then cue("run"); runQuiet = t + RUN_GAP end
+            end
         elseif e.type == "flow" then
             LUI.banner("NO NIGHT. ONLY DREAM.", "THE RUNS ARE TOO QUICK TO SEE")
             cue("stage")
@@ -227,7 +229,7 @@ function LUI.drain()
         elseif e.type == "built" then
             LScene.built(e.cell)
             if e.id == "mirror" then
-                LUI.banner("THE DREAM CHALLENGES OPEN", "DOWN THE ROOTS: TAP ROOTS")
+                LUI.banner("THE DREAM CHALLENGES OPEN", "ON UPGRADES, AT THE BOTTOM")
             elseif e.first then
                 local b = Lucid.BY[e.id]
                 LUI.banner("NEW: " .. b.name:upper(), b.desc:upper())
@@ -235,13 +237,11 @@ function LUI.drain()
         elseif e.type == "upgraded" then
             LScene.upgraded(e.cell)
         elseif e.type == "grew" then
-            Roots.grew[e.id] = t
             if e.rank == 1 then
                 local r = Lucid.ROOT[e.id]
-                LUI.banner("ROOTS: " .. r.name:upper(), r.desc:upper())
+                LUI.banner(r.name:upper(), r.desc:upper())
             end
         elseif e.type == "gate" then
-            Roots.grew.gate = t
             LUI.leave()
         elseif e.type == "star" then
             local x, y = LScene.bounceAt(L)
@@ -276,6 +276,32 @@ function LUI.drain()
             LUI.banner("MASTERED: " .. c.name:upper(), c.reward:upper())
             cue("safe")
             LScene.flash()
+        elseif e.type == "flock" then
+            LUI.banner("SHEEP AT THE FENCE", "TAP THEM: COUNT THEM OVER")
+            cue("bleat")
+        elseif e.type == "songStart" then
+            bounceHeld = nil
+            LScene.fx.hoppers = {}
+            LUI.banner("COUNTING SHEEP", "TAP AS EACH ONE TOPS THE FENCE")
+        elseif e.type == "count" then
+            if e.what == "beat" then cue("beat")
+            elseif e.what == "perfect" or e.what == "good" then
+                cue("tap" .. min(10, e.combo))
+                LScene.counted(e.what)
+            else
+                cue("bleat")
+                LScene.counted(e.what)
+            end
+        elseif e.type == "songOver" then
+            local T = D.count.tune
+            if e.share > 0 then
+                LUI.banner(("COUNTED: %d%%"):format(floor(e.share * 100 + 0.5)),
+                    "+" .. N.format(e.value) .. " DP. RUNS CAP X" .. N.format(L.tuneMult, true) .. " FOR A WHILE")
+                cue("safe")
+                LScene.flash()
+            else
+                LUI.banner("THEY WANDERED OFF", "NONE COUNTED. THEY'LL BE BACK")
+            end
         elseif e.type == "nightmare" then
             LUI.banner("A NIGHTMARE!", "DRAG THE DOG: HERD THEM INTO THE FOLD")
             cue("nightmare")
@@ -321,10 +347,18 @@ local function layout()
                 break
             end
         end
-    elseif tab == "roots" then
-        local h = Roots.height()
-        rows[#rows + 1] = { roots = true, y = y, h = h }
-        y = y + h + (root and ROOT_CARD + 4 or 0)
+    elseif tab == "upgrades" then
+        for _, sec in ipairs(Lucid.SECTIONS) do
+            rows[#rows + 1] = { header = sec.name .. (sec.how and (": " .. sec.how) or ""), y = y, h = 10 }
+            y = y + 10
+            for _, r in ipairs(Lucid.ROOTS) do
+                if r.section == sec.id then
+                    rows[#rows + 1] = { upgrade = r, y = y, h = CARD_H }
+                    y = y + CARD_H + 4
+                end
+            end
+            y = y + 2
+        end
     else
         local cs = gridGeom()
         rows[#rows + 1] = { grid = true, y = y, h = cs * GH + 2 }
@@ -453,12 +487,12 @@ function LUI.goal(c)
     return "REACH " .. c.runs .. " RUNS/S"
 end
 
---- the roots' card -------------------------------------------------------------------------
+--- the upgrades -------------------------------------------------------------------------
 
--- What the card's button says for root `r`, whether it can be pressed, and what it does.
-local function rootButton(r)
+-- What tapping upgrade `r`'s card does, what its price box says, and
+-- whether it can be done now: label, ok, fn.
+local function upgradeAction(r)
     local st = Lucid.rootState(L, r.id)
-    if r.kind == "root" then return nil end
     if r.kind == "lake" then
         if st == "full" then return "BUILT", false end
         return "TO THE FARM", true, function()
@@ -475,36 +509,32 @@ local function rootButton(r)
     end
     if r.kind == "gate" and st == "full" then return "GO THROUGH", S.phase == "lucid", function() LUI.leave() end end
     if st == "full" then return "ALL GROWN", false end
-    local verb = r.kind == "gate" and "OPEN " or "GROW "
-    return verb .. N.format(Lucid.rootPrice(L, r.id)) .. " DP", st == "open", function()
+    return N.format(Lucid.rootPrice(L, r.id)) .. " DP", st == "open", function()
         if Lucid.grow(L, r.id) then cue("buy", { tier = 4, first = Lucid.rank(L, r.id) == 1 }); LUI.save() else cue("nope") end
     end
 end
 
--- What the card says: a few lines under the name.
-local function rootSay(r)
+-- What the card says under the name.
+local function upgradeSay(r)
     local st = Lucid.rootState(L, r.id)
-    if r.kind == "root" then
-        local grown, all = Lucid.rootsGrown(L)
-        return r.desc:upper() .. ". ROOTS GROWN: " .. grown .. "/" .. all
-    end
     local from = r.at and Lucid.ROOT[r.at]
     if r.kind == "challenge" then
         local c = Lucid.CH[r.challenge]
         if st == "full" then return "YOURS FOR GOOD: " .. c.reward:upper() end
-        local s = c.rule:upper() .. ". " .. LUI.goal(c) .. ". THEN, FOR GOOD: " .. c.reward:upper()
+        if st == "on" then return "UNDER WAY. " .. LUI.goal(c) end
         if st == "shut" then
-            s = (Lucid.mirror(L) and ("MASTER " .. Roots.name(from):upper() .. " FIRST. ")
-                or "BUILD THE MIRROR LAKE ON THE FARM FIRST. ") .. s
+            return Lucid.mirror(L) and ("MASTER " .. Upgrades.name(from):upper() .. " FIRST") or "BUILD THE MIRROR LAKE FIRST"
         end
-        return s
+        return c.rule:upper() .. ". " .. LUI.goal(c)
     end
-    local s = r.desc:upper()
-    if st == "shut" and from then s = s .. ". GROWS FROM " .. Roots.name(from):upper() .. ": GET THAT FIRST" end
-    return s
+    if st == "shut" and from then
+        if from.kind == "challenge" then return "MASTER " .. Upgrades.name(from):upper() .. " FIRST" end
+        return "AFTER " .. Upgrades.name(from):upper()
+    end
+    return r.desc:upper()
 end
 
--- The first dream challenge down the taproot that can be started now.
+-- The first dream challenge that can be started now.
 local function waitingChallenge()
     if not Lucid.mirror(L) then return nil end
     for _, rt in ipairs(Lucid.ROOTS) do
@@ -512,45 +542,26 @@ local function waitingChallenge()
     end
 end
 
--- To the ROOTS tab. A dream challenge waiting that you haven't looked at is
--- picked, and scrolled to.
-local function openRoots()
-    tab = "roots"
+-- To the UPGRADES tab. A dream challenge waiting that you haven't looked at
+-- is scrolled to.
+local function openUpgrades()
+    tab, scroll = "upgrades", 0
     local w = waitingChallenge()
     if w and not challengeSeen[w.id] then
-        challengeSeen[w.id], root = true, w.id
-        local _, ny = Roots.at(w, R.panel.w)
-        scroll = max(0, ny - floor(R.panel.h / 3))
+        challengeSeen[w.id] = true
+        layout()
+        for _, row in ipairs(rows) do
+            if row.upgrade == w then scroll = max(0, row.y - floor(R.panel.h / 3)) end
+        end
     end
-end
-
-local function tapRoots(x, y)
-    local id = Roots.hit(x, y, R.panel.w)
-    if not id then root = nil; cue("click") return end
-    if id == root then
-        -- Tapped again: grow it (or start it).
-        local _, ok, fn = rootButton(Lucid.ROOT[id])
-        if ok and fn then fn() else cue("nope") end
-        return
-    end
-    root = id
-    cue("click")
-end
-
--- The card's button, in screen pixels.
-local function rootCard()
-    local r = R.panel
-    local c = { x = r.x, y = r.y + r.h - ROOT_CARD, w = r.w, h = ROOT_CARD }
-    local label = root and rootButton(Lucid.ROOT[root])
-    if label then
-        local bw = G.textWidth(label) + 10
-        c.button = { x = c.x + c.w - bw - 4, y = c.y + c.h - 17, w = bw, h = 13 }
-    end
-    return c
 end
 
 local function tapRow(row, x, y)
-    if row.roots then tapRoots(x, y) return end
+    if row.upgrade then
+        local _, ok, fn = upgradeAction(row.upgrade)
+        if ok and fn then fn() else cue("nope") end
+        return
+    end
     if row.dim and not row.teaser then
         local k = row.dim
         -- The AUTO pill toggles the auto-buyer; the rest of the card buys.
@@ -618,11 +629,9 @@ function LUI.pressed(x, y, id)
         local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 4)) + 1, 1, 4)
         if k == 4 then buyMax = not buyMax
         else
-            local was = tab
-            tab = ({ "layers", "town", "roots" })[k]
-            if tab ~= was then
-                scroll = 0
-                if tab == "roots" then openRoots() end
+            local was, want = tab, ({ "layers", "town", "upgrades" })[k]
+            if want ~= was then
+                if want == "upgrades" then openUpgrades() else tab, scroll = want, 0 end
             end
         end
         cue("click")
@@ -633,24 +642,19 @@ function LUI.pressed(x, y, id)
         if L.nightmare then
             dogHeld = id
             Lucid.point(L, LScene.toField(sx, sy))
+        elseif L.song then
+            -- Counting: anywhere on the field is a tap on the beat.
+            Lucid.countTap(L)
         elseif LScene.hitGolden(L, sx, sy) and Lucid.catchGolden(L) then
             cue("golden")
+        elseif LScene.hitFlock(L, sx, sy) and Lucid.startSong(L) then
+            cue("click")
         else
             -- The bouncing sheep: held, it climbs after the finger.
             bounceHeld = id
             Lucid.hold(L, LScene.toBounce(sx))
         end
         return
-    end
-    if tab == "roots" and root then
-        local c = rootCard()
-        if inside(c, x, y) then
-            local _, ok, fn = rootButton(Lucid.ROOT[root])
-            if c.button and inside(c.button, x, y) then
-                if ok and fn then cue("click"); fn() else cue("nope") end
-            end
-            return
-        end
     end
     if inside(R.panel, x, y) then
         press = { id = id, y0 = y, scroll0 = scroll, moved = false, last = y }
@@ -711,10 +715,12 @@ function LUI.key(key)
     elseif key == "1" then tab, scroll = "layers", 0
     elseif key == "2" then tab, scroll = "town", 0
     elseif key == "3" then
-        if tab ~= "roots" then scroll = 0; openRoots() end
+        if tab ~= "upgrades" then openUpgrades() end
     elseif key == "4" then buyMax = not buyMax
-    elseif key == "escape" or key == "backspace" then sel, place, moving, root = nil, nil, nil, nil
+    elseif key == "escape" or key == "backspace" then sel, place, moving = nil, nil, nil
+    elseif key == "space" and L.song then Lucid.countTap(L)
     elseif key == "space" and L.golden and Lucid.catchGolden(L) then cue("golden")
+    elseif (key == "space" or key == "c") and L.flock and Lucid.startSong(L) then cue("click")
     elseif key == "down" or key == "pagedown" then LUI.wheel(-2)
     elseif key == "up" or key == "pageup" then LUI.wheel(2) end
 end
@@ -795,6 +801,14 @@ local function drawHud()
             y = y + 8
             centred("y", ("NIGHTMARE SEASON: %d/%d FLOCKS HOME"):format(L.herded, Lucid.CH.season.herd), cx, y, 1, "o")
         end
+    elseif L.song then
+        local song = L.song
+        local counted = song.perfect + song.good
+        centred("w", "COUNTING SHEEP", cx, y, 2, "o")
+        y = y + 14
+        centred("c", song.t < 0 and "READY..." or "TAP ANYWHERE AS EACH ONE TOPS THE FENCE", cx, y, 1, "o")
+        y = y + 8
+        centred("l", ("COUNTED %d/%d   COMBO %d"):format(counted, #song.sheep, song.combo), cx, y, 1, "o")
     else
         local z = (portrait and r.w >= 200) and 3 or 2
         centred("w", N.format(L.sheep), cx, y, z, "o")
@@ -816,7 +830,9 @@ local function drawHud()
         local chips = {}
         for id, left in pairs(L.effects) do
             local G0 = D.golden[id]
-            chips[#chips + 1] = (id == "frenzy" and ("X" .. G0.mult) or ("TIME X" .. G0.mult)) .. " " .. math.ceil(left) .. "S"
+            local what = id == "tune" and ("CAP X" .. N.format(L.tuneMult, true))
+                or (id == "frenzy" and ("X" .. G0.mult) or ("TIME X" .. G0.mult))
+            chips[#chips + 1] = what .. " " .. math.ceil(left) .. "S"
         end
         table.sort(chips)
         y = y + 9
@@ -829,7 +845,12 @@ local function drawHud()
     end
     -- The bouncing sheep: how high, while it climbs; how to, before the first.
     local B = L.bounce
-    if not L.nightmare then
+    if L.flock and not L.nightmare then
+        -- A flock waiting: what to do, and how long it waits.
+        local s = ("TAP THE FLOCK AT THE FENCE: COUNT THEM (%dS)"):format(math.ceil(D.count.wait - L.flock.t))
+        if G.textWidth(s) > r.w - 8 then s = ("TAP THE FLOCK: COUNT THEM (%dS)"):format(math.ceil(D.count.wait - L.flock.t)) end
+        if reduced or floor(t * 2) % 3 ~= 0 then G.label("y", s, floor(cx - G.textWidth(s) / 2), r.y + r.h - 9) end
+    elseif not L.nightmare and not L.song then
         local by = r.y + r.h - 9
         if B.on then
             local s = ("HEIGHT %d   BEST %d"):format(floor(B.height), floor(L.best))
@@ -890,7 +911,7 @@ end
 
 local function drawTabs()
     local r = R.tabs
-    local buttons = { { "LAYERS", tab == "layers" }, { "FARM", tab == "town" }, { "ROOTS", tab == "roots" },
+    local buttons = { { "LAYERS", tab == "layers" }, { "FARM", tab == "town" }, { "UPGRADES", tab == "upgrades" },
         { buyMax and "MAX" or "X1", buyMax } }
     local w = floor((r.w - 4) / 4)
     for i, b in ipairs(buttons) do
@@ -900,7 +921,7 @@ local function drawTabs()
         if on then G.rect("i", x + 1, r.y + r.h - 2, w - 2, 1) end
         centred(on and "u" or "l", b[1], x + w / 2, r.y + 4)
         -- Something to find there, a rose mark: on FARM while the Mirror Lake
-        -- is in reach and not built, on ROOTS until you look at a dream
+        -- is in reach and not built, on UPGRADES until you look at a dream
         -- challenge waiting.
         local wc = i == 3 and waitingChallenge()
         local mark = (i == 2 and not Lucid.mirror(L) and Lucid.canBuild(L, "mirror"))
@@ -1055,26 +1076,29 @@ local function drawBuilding(row, x, y, w)
     G.text("p", "ALL BUILT. " .. b.desc:upper(), x + 37, y + 14)
 end
 
--- The root picked, on a card along the bottom of the panel.
-local function drawRootCard()
-    local c = rootCard()
-    local r = Lucid.ROOT[root]
-    G.box(c.x + 1, c.y + 1, c.w - 2, c.h - 2, "u", "c")
-    G.rect("i", c.x + 1, c.y + c.h - 2, c.w - 2, 1)
-    G.text("y", Roots.name(r):upper(), c.x + 5, c.y + 4)
+-- An upgrade's card: its picture, its name and rank, what it does (or what
+-- it waits on), and its price or what tapping does.
+local function drawUpgrade(row, x, y, w)
+    local r, h = row.upgrade, row.h
+    local st = Lucid.rootState(L, r.id)
+    local label, ok = upgradeAction(r)
+    local shut, full = st == "shut", st == "full"
+    if ok and not reduced and sin(t * 3.4 + row.y * 0.05) > 0 then G.box(x, y, w, h, "c", "c") end
+    G.box(x + 1, y + 1, w - 2, h - 2, shut and "u" or (st == "on" and "y" or (ok and "w" or (full and "l" or "s"))), shut and "p" or nil)
+    G.box(x + 4, y + 4, 28, h - 8, shut and "n" or (ok and "l" or "i"), shut and "p" or nil)
+    Upgrades.icon(r.id, x + 18, y + h / 2, shut and "p" or Upgrades.tint(r), shut and "p" or "w")
+    local pw = G.textWidth(label) + 8
+    local px = x + w - pw - 4
+    G.box(px, y + 4, pw, h - 8, ok and "y" or "b")
+    G.text("o", label, px + pw - 4 - G.textWidth(label), y + 7)
     if r.kind == "up" then
         local s = Lucid.rank(L, r.id) .. "/" .. r.max
-        G.text("c", s, c.x + c.w - 5 - G.textWidth(s), c.y + 4)
+        G.text(ok and "h" or "p", s, px + pw - 4 - G.textWidth(s), y + 15)
     end
-    local right = c.button and c.button.x - c.x - 4 or c.w - 6
-    local lines = G.wrap(rootSay(r), right - 5)
-    for i = 1, min(4, #lines) do G.text("l", lines[i], c.x + 5, c.y + 5 + i * 7) end
-    if c.button then
-        local label, ok = rootButton(r)
-        local b = c.button
-        G.box(b.x, b.y, b.w, b.h, ok and "y" or "s", "o")
-        centred("o", label, b.x + b.w / 2, b.y + 4)
-    end
+    local tx = x + 37
+    G.text(shut and "s" or "o", Upgrades.name(r):upper(), tx, y + 5)
+    local lines = G.wrap(upgradeSay(r), px - tx - 4)
+    for i = 1, min(2, #lines) do G.text(shut and "s" or "p", lines[i], tx, y + 8 + i * 6) end
 end
 
 local function drawPanel()
@@ -1091,11 +1115,10 @@ local function drawPanel()
             elseif row.grid then drawGrid(r.x, y)
             elseif row.info then drawInfo(r.x, y, r.w)
             elseif row.building then drawBuilding(row, r.x, y, r.w)
-            elseif row.roots then Roots.draw(L, r.x, y, r.w, root, t, reduced) end
+            elseif row.upgrade then drawUpgrade(row, r.x, y, r.w) end
         end
     end
     love.graphics.pop()
-    if tab == "roots" and root then drawRootCard() end
     if maxScroll() > 0 then
         local th = max(10, floor(r.h * r.h / contentH))
         local ty = r.y + floor((r.h - th) * scroll / maxScroll())
@@ -1268,7 +1291,7 @@ LUI.setReducedAll = function(v) LUI.setReduced(v) end
 -- For the shots: a dream challenge's card tapped.
 function LUI.askChallenge(id) tapChallenge(Lucid.CH[id]) end
 
--- For the shots: open a tab, pick a cell (or a root).
-function LUI.show(which, cell) tab = which or tab; if tab == "roots" then root = cell else sel = cell end end
+-- For the shots: open a tab, pick a cell; or scroll the panel.
+function LUI.show(which, cell, at) tab = which or tab; sel = cell; scroll = at or 0 end
 
 return LUI

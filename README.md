@@ -21,14 +21,16 @@ farm on a grid, a city builder where a building does more beside its own
 district and beside a Haystack: the fence, the dog kennel, the meadow, the
 pen, the mill, the drones and the barn come back one by one, each rising out
 of the dream's hill where it was placed, the dream of the first nights built
-again. Under the field grow the roots, a
-mycelium network of upgrades kept for good (Mycelio's, from underroot), with
-seven dream challenges down its taproot. In front of it all a sheep bounces on
+again. In front of it all a sheep bounces on
 a cloud: hold the field and it climbs, doodle-jump style, for stars, moons and
-a best height that lifts every layer. A golden sheep offers one of three
-gifts, and now and then a nightmare scatters a flock for you to herd into the
-fold with the dog: herding, the prototype this repository began as. At the
-bottom of the roots is the Gate of Horn, and through it, the void: phase 3,
+a best height that lifts every layer. Now and then a flock lines up at the
+fence: tap it and count them over, one jump on each beat of a quickening
+song, for Dream Points and a tune that raises the run cap for a while. A
+golden sheep offers one of three gifts, and now and then a nightmare scatters
+a flock for you to herd into the fold with the dog: herding, the prototype
+this repository began as. Upgrades kept for good come in sections, one for
+each of those games, then the layers and the farm, then seven dream
+challenges one after the other. Last of all is the Gate of Horn, and through it, the void: phase 3,
 from the field to the dream to nothing at all (its way in is built; the phase
 is a placeholder).
 
@@ -64,11 +66,12 @@ folder's contents: `zip -9 -r counting-sheep.love . -x '.git/*' 'tests/*'`.
 **Controls:** tap or click the field to count a sheep (Space or Enter too). Tap a
 card to buy. Drag or use the wheel to scroll the shop. 1 / 2 / 3 picks ×1 / ×10 /
 Max, D (or the DREAMS button) opens the Dream shop, M mutes, R reduces motion, F11 or Alt+Enter toggles fullscreen, and Esc quits on a computer.
-In phase 2, 1 / 2 / 3 pick LAYERS / FARM / ROOTS and 4 toggles ×1 / MAX; Space
+In phase 2, 1 / 2 / 3 pick LAYERS / FARM / UPGRADES and 4 toggles ×1 / MAX; Space
 catches the golden sheep, and 1 / 2 / 3 choose its gift; hold the field and
-drag to steer the bouncing sheep up; in a nightmare, hold and drag on the field
-to move the dog. On ROOTS, tap a root to read it and again (or its button) to
-grow it. In the void, tap the dark. The arrow coming round in the top bar
+drag to steer the bouncing sheep up; when a flock waits at the fence, tap it
+(or C, or Space) to count it, then tap anywhere on the field (or Space) as
+each sheep tops the fence; in a nightmare, hold and drag on the field to move
+the dog. On UPGRADES, tap a card to grow it, or start its dream challenge. In the void, tap the dark. The arrow coming round in the top bar
 (every phase) resets everything and starts a new game from scratch, after
 asking.
 
@@ -114,12 +117,13 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `gfx.lua`, `tracer.lua`, `models.lua` | the palette and pixel font, the tracer, the bodies |
 | `shots.lua` | the `--shots` script |
 | `tests/run.lua` | tests and the balance sims (phase 1 and phase 2) |
-| `lucid/game.lua` | phase 2's rules: auto-wake in batches, the layers, the town, the roots, the golden choice, time away in closed form. Pure Lua |
+| `lucid/game.lua` | phase 2's rules: auto-wake in batches, the layers, the town, the upgrades, the golden choice, counting sheep's flock and pay, time away in closed form. Pure Lua |
 | `lucid/nightmare.lua` | the nightmare: herding's flock, dog and pressure field, the fold, the cloud. Pure Lua |
 | `lucid/bounce.lua` | the bouncing sheep: its cloud, the climb, clouds, stars and moons, and a bot that climbs. Pure Lua |
-| `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, FARM and ROOTS tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
-| `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the nightmare |
-| `lucid/roots.lua` | the roots drawn: underroot's network, hyphae growing down from the dreamer |
+| `lucid/count.lua` | counting sheep, the rhythm game: the song's beats, taps judged perfect, good or off, and a bot that counts. Pure Lua |
+| `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, FARM and UPGRADES tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
+| `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the flock counted over the fence, the nightmare |
+| `lucid/upgrades.lua` | the upgrades' pictures, for their cards |
 | `void/ui.lua` | phase 3, the void: a placeholder to stand in. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
 | `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
@@ -168,7 +172,9 @@ lucid = {
   golden, goldenIn, choosing, effects, -- the golden sheep, its gift on offer, gifts running
   nightmare, nightmareIn,         -- herding, while it's on (not saved: it passes)
   challenge, done, herded, counted, climbed, -- the dream challenge under way, the ones met, its progress
-  roots,                          -- id = ranks grown
+  roots,                          -- the upgrades: id = ranks grown
+  flock, flockIn, song,           -- a flock waiting at the fence, when the next comes, counting it (not saved)
+  tuneMult,                       -- the last song's run cap multiplier, while effects.tune lasts
   gate,                           -- the Gate of Horn is open
   best, bounce,                   -- the best height ever; the climb (not saved: it passes)
   flow, intro, time,
@@ -279,16 +285,29 @@ the same happens if the game sat frozen in the background for a while.
   tilled earth; a building rises out of the ground when it's put down, a
   level up rings out, and its levels show as gold pips. Moving one moves it
   on the hill too.
-- **The roots** (`roots`): underroot's Spore Bank network, under the dream.
-  Each root grows from the one above it (`at`), a rank at a time, for
-  `dp * growth^rank` Dream Points, up to `max`, kept for good. Four branches
-  hang off the dreamer: the sky (Springy Wool, Star Bag, Cloud Steps, Moon
-  Pull: the bouncing sheep), the layers (the Architect, Deep Well, Time
-  Dilation), the town (Surveyor, Night Market, Bellows) and the golden sheep
-  (Spinning Top, Good Dog). Down the middle, the taproot: the Mirror Lake
-  (grown once the town has one), the seven dream challenges one under the
-  other, each opening once the one above it is mastered, and the Gate of Horn.
-  Every effect is a polynomial in its rank, like the town's.
+- **The upgrades** (`sections` and `roots`: in the code and the save they're
+  still the roots): a rank at a time, for `dp * growth^rank` Dream Points, up
+  to `max`, kept for good, as cards in sections like the farm's. In a section
+  each opens once the one before it (`at`) has a rank. The games first: the
+  bouncing sheep (Springy Wool, Star Bag, Cloud Steps, Moon Pull), counting
+  sheep (Sheep Bell, Slow Song, Lullaby, Encore), the nightmares (Quick Dog,
+  Good Dog, Night Light) and the golden sheep (Spinning Top, Slow Gold); then
+  the layers (the Architect, Deep Well, Time Dilation) and the farm
+  (Surveyor, Night Market, Bellows). Last, the dream challenges: the Mirror
+  Lake (grown once the farm has one), the seven challenges one after the
+  other, each opening once the one before it is mastered, and the Gate of
+  Horn. Every effect is a polynomial in its rank, like the town's.
+- **Counting sheep** (`count`, `lucid/count.lua`): every 150 to 260 seconds
+  (÷ `1 + 0.25` a Sheep Bell; the first at 75) a flock lines up at the fence
+  and waits 20 seconds. Tapped, 16 sheep jump it, a beat apart from 0.75
+  seconds down to 0.45, after a count-in of two ticks; a tick sounds on every
+  top. A tap within 0.08 s of a top is perfect (1), within 0.17 good (0.5),
+  both ×(1 + 0.15 a Slow Song); a sheep let past, or a tap with none near,
+  breaks the count. Over, it pays 45 seconds of Dream Points (at least 30, +50%
+  a Lullaby) by the share counted, and leaves a tune: the run cap ×(1 + 0.5 ×
+  share) for 40 seconds (+50% an Encore). While a song is on the bouncing
+  sheep rests, no golden sheep comes, and no nightmare: the field is the
+  fence's.
 - **The bouncing sheep** (`bounce`, `lucid/bounce.lua`): in field units 100
   across. Left alone it hops on its cloud. Held, it's launched and drifts
   after the finger (`follow`, at most `maxVx`); a cloud it falls onto throws
@@ -304,12 +323,12 @@ the same happens if the game sat frozen in the background for a while.
   challenge mastered. Opened, the dream drains to ink from the edges, the
   gate opens in the middle, a sheep drifts up into it, and the phase is
   "void" (`Game.goVoid`). The void is a placeholder for phase 3; BACK TO THE
-  DREAM goes back through the gate, which stays open (GO THROUGH on its root).
-- **Dream challenges** (`challenges`): down the roots' taproot, once the
+  DREAM goes back through the gate, which stays open (GO THROUGH on its card).
+- **Dream challenges** (`challenges`): at the end of the upgrades, once the
   town's Mirror Lake stands (400K DP and 1E30 sheep), one after the other.
   Starting one sets the layers and dream sheep back to the start and, while it
   lasts, the points earned don't lift the layers (only the town does), or the
-  old multiplier would carry any rule. The town, the roots and the points
+  old multiplier would carry any rule. The town, the upgrades and the points
   stay. Goals are `runs` (runs a second under the rule), `sheep` (dream sheep
   counted under it), `herd` (flocks brought home) or `height` (a climb that
   high). Giving up just lifts the rule.
@@ -327,20 +346,24 @@ the same happens if the game sat frozen in the background for a while.
   The sim gives a challenge up after six minutes and tries it again ten later.
 
 From `luajit tests/run.lua lucid 120` (a greedy player bringing 750 DP and
-7,000 earned, catching every golden sheep, herding every nightmare in, growing
-the cheapest root under a tenth of its points, and climbing for thirty
-seconds every two minutes with the bot, which climbs far better than a
-person: its best is 570 on the first climb and about 1,000 later):
+7,000 earned, catching every golden sheep, herding every nightmare in,
+counting every flock with every sheep perfect, growing the cheapest upgrade
+under a tenth of its points, and climbing for thirty seconds every two
+minutes with the bot, which climbs far better than a person: its best is 560
+on the first climb and about 950 later):
 
-| minute | 1 | 2 | 3 | 6 | 8 | 10 | 20 | 30 | 45 | 60 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| runs a second | 1 | 4.8 | 16.8 | 27 | 54 | 71 | 130 | 238 | 279 | 415 |
+| minute | 1 | 2 | 3 | 6 | 8 | 10 | 20 | 30 | 45 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| runs a second | 1 | 6.9 | 16.8 | 40 | 71 | 37 | 99 | 536 | 622 |
 
-The Mirror Lake comes at 10.5 minutes, every root but one by 16, the
-challenges from 11 to 52 minutes (Stopped Clocks and Falling given up once
-each), and the Gate of Horn at 72. In the first ten minutes there's
-something new 44 times, at most 53 seconds apart, and never more than 48
-seconds without something to buy in town. The flow comes at 6.5 minutes.
+(Minute 10 is under Broken Fences and minute 20 under Empty Squares: a
+challenge starts the layers over.) The Mirror Lake comes at 8.4 minutes, a
+first rank of every upgrade by 8.6, the challenges from 9 to 21 minutes, and
+the Gate of Horn at 47. Counting matters: with `NOCOUNT=1` (never counting) the
+gate comes at 60 minutes; a person who misses some sheep lands between. In
+the first ten minutes there's something new 58 times, at most 63 seconds
+apart, and never more than 61 seconds without something to buy in town. The
+flow comes at 5.6 minutes.
 
 ### Pacing as shipped
 
@@ -459,24 +482,33 @@ their value comes from what they buy.
     Pasture (green): Haystack, Wishing Well, Sheepfold. Lucidity: the Mirror
     Lake, and Sheep-OS to see, not to build yet. Everything built stands on
     the dream's hill, rising out of the ground as it goes up.
-  - *ROOTS*: the network under the dreamer, drawn as Mycelio's: hyphae
-    dotted where they could grow, lit once grown with nutrients running down
-    them, a white tip running down a thread as it grows, rings out of a node
-    and a pip a rank. Tap a root for its card (what it does, its rank, its
-    price, or why it's shut) and again, or GROW, to grow it.
-  - *Dream challenges*, down the roots' taproot once the Mirror Lake stands,
-    one opening under the other. Once the Mirror Lake can be bought, a rose
-    mark blinks on FARM and Lucidity moves to the top of the list (TO THE
-    FARM on the lake's root picks it up to place). Built, a banner points
-    down the roots; a challenge waiting puts the mark on ROOTS, and tapping
-    ROOTS picks it and scrolls to it. START asks first; then the rule and how far
+  - *UPGRADES*: cards in sections like the farm's, each headed with its
+    game and how to play it: the bouncing sheep, counting sheep, the
+    nightmares, the golden sheep, then the layers and the farm. A card shows
+    what it does, its rank and its price; one waiting on the one before it
+    is dimmed and says so. Tap it to grow it.
+  - *Dream challenges*, the last section of UPGRADES once the Mirror Lake
+    stands, one opening after the other. Once the Mirror Lake can be bought,
+    a rose mark blinks on FARM and Lucidity moves to the top of the list (TO
+    THE FARM on the lake's card picks it up to place). Built, a banner points
+    to UPGRADES; a challenge waiting puts the mark on UPGRADES, and opening it
+    scrolls to the challenge. START asks first; then the rule and how far
     you've got show in gold over the field, the card says GIVE UP, and a
-    challenge met is MASTERED, its node lit, its reward kept.
+    challenge met is MASTERED, its reward kept.
   - *The bouncing sheep*, in front of the field: it hops on its cloud; hold
     the field and it climbs after your finger, cloud to cloud, while the field
     slides away under it. Stars pay Dream Points, a moon is a golden gift, and
     a new best height says how much it lifts every layer.
-  - *The Gate of Horn*, at the bottom of the roots: the way out, into the void.
+  - *Counting sheep*: now and then a flock lines up on the near side of the
+    fence with a gold ring round it, and a line under the field says to tap
+    it and how long it waits. Tapped, the climb stops and the field is the
+    fence's: the flock comes up to it and each sheep jumps it on the beat, a
+    light over the fence brightest at the top. Tap anywhere on the field as
+    each one tops it: PERFECT turns it gold, GOOD counts it, a miss turns it
+    to cloud and bleats. The counted, the combo and the music box climbing
+    with it show over the field; at the end, Dream Points and a CAP chip
+    while the tune lasts.
+  - *The Gate of Horn*, at the end of UPGRADES: the way out, into the void.
   - *The lucid golden sheep* crosses the sky: tap it and choose ×7 for 30
     seconds, Dream Points now (4 minutes' worth), or time ×2 for a minute.
   - *Nightmares*, every four to seven minutes: the field turns to night grass,
