@@ -281,10 +281,14 @@ the same happens if the game sat frozen in the background for a while.
 
 - **The farm on the hill:** each plot of the 5×5 grid has a place on the
   dream's hill (the back row on the skyline, the front row at the bottom of
-  the field, the columns wider apart as they come forward). An empty plot is
-  tilled earth; a building rises out of the ground when it's put down, a
-  level up rings out, and its levels show as gold pips. Moving one moves it
-  on the hill too.
+  the field, the columns wider apart as they come forward). Buildings on the
+  hill are drawn from shapes (`SHAPES` in `lucid/scene.lua`), not the small
+  pictures the FARM grid uses: in perspective, a pixel a unit on the skyline
+  up to 2.8 at the front, inked round as one, with a shadow thrown left and
+  grass at the foot, and the back two rows dithered into the horizon's lilac.
+  An empty plot is turned earth; a building rises out of the ground when it's
+  put down, a level up rings out, and its levels show as gold pips. Moving
+  one moves it on the hill too.
 - **The upgrades** (`sections` and `roots`: in the code and the save they're
   still the roots): a rank at a time, for `dp * growth^rank` Dream Points, up
   to `max`, kept for good, as cards in sections like the farm's. In a section

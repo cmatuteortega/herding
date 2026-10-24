@@ -468,7 +468,7 @@ local function tapChallenge(c)
     showModal({
         title = "DREAM CHALLENGE: " .. c.name:upper(),
         lines = { c.rule:upper() .. ". GOAL: " .. LUI.goal(c) .. ". MEET IT AND, FOREVER:", "",
-            "THE FLOCK WAKES: THE LAYERS AND DREAM SHEEP START OVER. THE FARM, THE ROOTS AND YOUR POINTS STAY, BUT WHILE IT LASTS YOUR POINTS DON'T LIFT THE LAYERS." },
+            "THE FLOCK WAKES: THE LAYERS AND DREAM SHEEP START OVER. THE FARM, THE UPGRADES AND YOUR POINTS STAY, BUT WHILE IT LASTS YOUR POINTS DON'T LIFT THE LAYERS." },
         big = c.reward:upper(),
         buttons = {
             { label = L.challenge and "SWITCH TO IT" or "START", fn = function()

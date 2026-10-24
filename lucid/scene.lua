@@ -321,51 +321,267 @@ local function plotAt(c)
     local gx, gy = (c - 1) % GW + 1, floor((c - 1) / GW) + 1
     local back, front = horizon() + 3, groundY() - 6
     local d = (gy - 1) / (GH - 1)
-    local spread = cw * (0.15 + 0.06 * d)
+    local spread = cw * (0.11 + 0.11 * d)
     return floor(cw / 2 + (gx - (GW + 1) / 2) * spread), floor(back + d * (front - back))
 end
 
--- The farm, back row first: an empty plot is a patch of tilled earth, a
--- building stands on its own patch of grass, rising out of it when new, its
--- levels as gold pips.
+--- the farm on the hill ---------------------------------------------------------------
+
+-- A building on the hill is drawn from shapes in its own units (about 16
+-- across, its foot at 0, up is up), scaled by how far forward its plot is:
+-- small on the skyline, big at your feet. Every shape is inked round first,
+-- then filled, so the whole building has one outline; the far rows are
+-- dithered into the lilac of the horizon, so the farm sits in the dusk
+-- rather than on it. The shapes, by id (the old town's ids, as ART's):
+-- r rect (x, y, w, h), g gable (middle x, foot y, w, h), d disc (x, y, r),
+-- e ellipse (x, y, rx, ry), x a dot (one pixel wherever it lands), s a
+-- sprite (a function drawing at the pixel position given).
+local ops
+local function R(k, x, y, w, h) ops[#ops + 1] = { "r", k, x, y, w, h } end
+local function Gab(k, x, y, w, h) ops[#ops + 1] = { "g", k, x, y, w, h } end
+local function Disc(k, x, y, r) ops[#ops + 1] = { "e", k, x, y, r, r } end
+local function Ell(k, x, y, rx, ry) ops[#ops + 1] = { "e", k, x, y, rx, ry } end
+local function Dot(k, x, y) ops[#ops + 1] = { "x", k, x, y } end
+local function Sprite(x, y, f) ops[#ops + 1] = { "s", nil, x, y, f } end
+
+local SHAPES = {
+    -- Better Fence: a run of white pickets, gold caps.
+    clock = function()
+        for _, x in ipairs({ -7, -2.4, 2.4, 7 }) do R("w", x - 0.7, 0, 1.4, 6.4) end
+        R("b", -8, 1.8, 16, 1); R("w", -8, 4.2, 16, 1)
+        for _, x in ipairs({ -7, -2.4, 2.4, 7 }) do R("y", x - 0.7, 6.4, 1.4, 0.8) end
+    end,
+    -- Dog Kennel: a wooden kennel under a rose roof, its dark door, a bowl.
+    inn = function()
+        R("s", -4.5, 0, 9, 5.5); R("b", -4.5, 4.6, 9, 0.9)
+        Gab("r", 0, 5.5, 11, 4.5); Gab("i", 1.8, 5.5, 4, 1.6)
+        R("o", -1.6, 0, 3.2, 3); Disc("o", 0, 3, 1.6)
+        Dot("y", 0, 7)
+        R("i", 5.5, 0, 2, 0.8)
+    end,
+    -- Meadow: a round tree, and flowers in the grass.
+    bakery = function()
+        R("h", 3, 0, 1.4, 4.5)
+        Disc("t", 3.6, 7, 3.6); Disc("g", 3.1, 7.6, 2.9); Disc("m", 2.3, 8.6, 1.3)
+        R("g", -7.5, 0, 9, 0.9)
+        local keys = { "y", "r", "w", "c", "y", "r", "w" }
+        for i = 0, 6 do Dot(keys[i + 1], -7 + i * 1.3, 1 + (i % 3) * 0.7) end
+    end,
+    -- Breeding Pen: a little fold of posts, a lamb bouncing in it, a heart.
+    hut = function()
+        for _, x in ipairs({ -6, -2, 2, 6 }) do R("s", x - 0.5, 0, 1, 3.6) end
+        R("b", -6.5, 1.2, 13, 0.7)
+        Sprite(-1.5, 1, function(px, py)
+            local b = LScene.reduced and 0 or math.abs(sin(t * 3)) * 3
+            blit(Models.sheep(0.4, 0, b > 1.5 and 2 or 0, "plain", false, 0.55), px, py - b)
+        end)
+        R("b", -6.5, 2.8, 13, 0.7)
+        if LScene.reduced or floor(t * 1.5) % 3 == 0 then Dot("r", 2, 7); Dot("r", 3, 7); Dot("r", 2.5, 6.3) end
+    end,
+    -- Wool Mill: a workshop with a lit window, and a spinning wheel turning.
+    workshop = function()
+        R("l", -7, 0, 9, 7); R("i", -0.5, 0, 2.5, 7)
+        Gab("p", -2.5, 7, 11, 3.6)
+        R("y", -5.5, 3, 2.2, 2); R("p", -2.2, 0, 2.2, 3.8)
+        R("s", 5.2, 0, 1, 2.2)
+        local a0 = LScene.reduced and 0 or t * 2
+        for i = 0, 11 do Dot("b", 5.7 + cos(i / 12 * TAU) * 3, 5 + sin(i / 12 * TAU) * 3) end
+        for i = 0, 3 do
+            local a = a0 + i * TAU / 4
+            for r = 1, 2 do Dot("w", 5.7 + cos(a) * r, 5 + sin(a) * r) end
+        end
+        Dot("y", 5.7, 5)
+    end,
+    -- Counting Drones: a mast with a dish, a blinking light, a drone at work.
+    observatory = function()
+        R("p", -2.5, 0, 5, 1.4); R("s", -0.5, 0, 1, 9.5)
+        Ell("w", 0, 10, 2.4, 1); Dot("o", 0, 10)
+        Dot((LScene.reduced or floor(t * 2) % 2 == 0) and "r" or "p", 0, 11.6)
+        Sprite(4, 11, function(px, py)
+            local bob = LScene.reduced and 0 or sin(t * 2.3) * 1.5
+            blit(Models.drone(0.3 * sin(t)), px, py + bob)
+        end)
+    end,
+    -- Barn: rose boards, a cream-trimmed door with its brace, the hayloft lit.
+    mill = function()
+        R("r", -7, 0, 14, 8); R("i", 3.5, 0, 3.5, 8)
+        Gab("p", 0, 8, 16.5, 5.5); Gab("u", 0, 8, 6, 1.2)
+        R("w", -3, 0, 6, 6); R("r", -2.3, 0, 4.6, 5.3)
+        for i = 0, 8 do Dot("w", -2.3 + i * 0.57, 5.3 - i * 0.59); Dot("w", -2.3 + i * 0.57, i * 0.59) end
+        R("y", -1, 9.2, 2, 1.8)
+    end,
+    -- Haystack: a gold dome, straws sticking out.
+    plaza = function()
+        Ell("h", 0, 0, 5.5, 6.5); Ell("y", -0.8, 0.6, 4.4, 5.6)
+        Dot("w", -2, 4); Dot("h", 1, 3); Dot("h", -3, 2); Dot("h", 2.5, 1.5); Dot("y", 4.5, 4.5); Dot("y", -5, 3)
+    end,
+    -- Wishing Well: a stone ring, two posts and a roof, a glint in the water.
+    fountain = function()
+        R("s", -4, 0, 8, 3); R("b", -4.6, 2.6, 9.2, 1)
+        for i = 0, 3 do Dot("p", -3 + i * 2, 1.2) end
+        R("h", -3.6, 3.6, 0.9, 4.5); R("h", 2.7, 3.6, 0.9, 4.5)
+        Gab("p", 0, 8, 10, 3); R("h", -3, 7.4, 6, 0.6)
+        R("s", -0.6, 4.6, 1.2, 1.2)
+        Dot((LScene.reduced or floor(t * 3) % 3 ~= 0) and "a" or "c", 0.5, 3.1)
+    end,
+    -- Sheepfold: a low stone wall, a sheep looking over it.
+    fold = function()
+        Sprite(-2, 2.5, function(px, py) blit(Models.sheep(0.3, 0, 0, "plain", false, 0.6), px, py) end)
+        R("s", -7.5, 0, 15, 2.6)
+        for i = 0, 5 do Dot("b", -6.5 + i * 2.5, 1.7); Dot("p", -5.3 + i * 2.5, 0.6) end
+    end,
+    -- Mirror Lake: flat water lying in the grass, the aurora in it.
+    mirror = function()
+        Ell("l", 0, 2.2, 8.5, 2.2); Ell("c", 0.3, 2.4, 7.3, 1.6)
+        local sh = LScene.reduced and 0 or floor(t * 2) % 3
+        Dot("a", -4 + sh, 2.7); Dot("a", -3 + sh, 2.7); Dot("w", 2 - sh, 1.9); Dot("r", 4, 2.8)
+    end,
+}
+
+-- Each row's scale: pixels a unit, the back row first.
+local function plotScale(c)
+    local d = (floor((c - 1) / D.grid.w)) / (D.grid.h - 1)
+    return 1 + d * 1.8, d
+end
+
+-- The shapes in `ops`, at (x, foot) `s` pixels a unit: inked round, then
+-- filled. `haze` (0..1) dithers them into lilac; nothing above `top` or
+-- below the foot is drawn (a building rising out of the ground).
+local function paint(x, foot, s, haze, top)
+    local buf = {}
+    local function px(k, a, b)
+        if b < top or b > foot then return end
+        if haze > 0 and k ~= "o" and G.dither(a, b, haze) then k = "i" end
+        buf[k] = buf[k] or {}
+        G.plot(buf[k], a, b)
+    end
+    local function span(k, x0, x1, y)
+        for a = x0, x1 - 1 do px(k, a, y) end
+    end
+    local function shape(op, k, ox, oy)
+        local kind = op[1]
+        if kind == "r" then
+            local x0, x1 = floor(x + op[3] * s + 0.5), floor(x + (op[3] + op[5]) * s + 0.5)
+            local y1, y0 = floor(foot - op[4] * s + 0.5), floor(foot - (op[4] + op[6]) * s + 0.5)
+            x1, y0 = max(x1, x0 + 1), min(y0, y1 - 1)
+            for b = y0, y1 - 1 do span(k, x0 + ox, x1 + ox, b + oy) end
+        elseif kind == "g" then
+            local hw, hh = op[5] * s / 2, max(1, floor(op[6] * s + 0.5))
+            local cx, base = x + op[3] * s, floor(foot - op[4] * s + 0.5)
+            for j = 0, hh - 1 do
+                local w = hw * (1 - j / hh)
+                span(k, floor(cx - w + 0.5) + ox, max(floor(cx - w + 0.5) + 1, floor(cx + w + 0.5)) + ox, base - 1 - j + oy)
+            end
+        elseif kind == "e" then
+            local cx, cy = x + op[3] * s, foot - op[4] * s
+            local rx, ry = max(1, op[5] * s), max(1, op[6] * s)
+            for b = floor(cy - ry + 0.5), floor(cy + ry + 0.5) do
+                local f = 1 - ((b - cy) / ry) ^ 2
+                if f >= 0 then
+                    local w = rx * math.sqrt(f)
+                    span(k, floor(cx - w + 0.5) + ox, floor(cx + w + 0.5) + 1 + ox, b + oy)
+                end
+            end
+        elseif kind == "x" then
+            px(k, floor(x + op[3] * s + 0.5) + ox, floor(foot - op[4] * s + 0.5) + oy)
+        end
+    end
+    for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 } }) do
+        for _, op in ipairs(ops) do if op[1] ~= "x" and op[1] ~= "s" then shape(op, "o", d[1], d[2]) end end
+    end
+    -- Filled in order; a sprite flushes what's under it first.
+    local function flush()
+        for k, pts in pairs(buf) do G.points(k, pts) end
+        buf = {}
+    end
+    flush()
+    for _, op in ipairs(ops) do
+        if op[1] == "s" then
+            flush()
+            if top <= foot - op[4] * s then op[5](floor(x + op[3] * s + 0.5), floor(foot - op[4] * s + 0.5)) end
+        else
+            shape(op, op[2], 0, 0)
+        end
+    end
+    flush()
+end
+
+-- Its shadow on the hill, thrown left (the moon is on the right), and a
+-- few tufts of grass round its foot.
+local function grounded(x, foot, s, w)
+    x, foot = floor(x), floor(foot)
+    local pts, grass = {}, {}
+    local rx, ry = w * s * 0.55, max(1, s * 1.3)
+    for b = -floor(ry), floor(ry) do
+        local f = 1 - (b / ry) ^ 2
+        local hw = rx * math.sqrt(math.max(0, f))
+        for a = floor(x - s * 1.5 - hw), floor(x - s * 1.5 + hw) do
+            if G.dither(a, foot + b, 0.5) then G.plot(pts, a, foot + b) end
+        end
+    end
+    G.points("o", pts)
+    for i = -1, 1, 2 do
+        local gx = floor(x + i * (w * s * 0.5 + 1))
+        G.plot(grass, gx, foot); G.plot(grass, gx + i, foot - 1); G.plot(grass, gx - i, foot)
+    end
+    G.points("t", grass)
+end
+
+-- How wide each building's footprint is, in units.
+local WIDE = { clock = 16, inn = 11, bakery = 16, hut = 13, workshop = 15, observatory = 7, mill = 16, plaza = 11,
+    fountain = 10, fold = 15, mirror = 17 }
+
+-- The farm, back row first: an empty plot is a patch of turned earth; a
+-- building stands on the hill with its shadow, rising out of the ground when
+-- new, its levels as gold pips at its foot.
 local function farm(L)
     local cells = {}
     for c in pairs(L.open) do cells[#cells + 1] = c end
     table.sort(cells)
     for _, c in ipairs(cells) do
         local x, y = plotAt(c)
+        local s, d = plotScale(c)
+        local haze = max(0, 0.5 - d) * 0.5
         local id = L.grid[c]
-        if not id then
-            local pts = {}
-            for dy = -1, 1 do
-                for dx = -5, 5 do if G.dither(x + dx, y + dy, 0.5) then G.plot(pts, x + dx, y + dy) end end
+        if not id or not SHAPES[id] then
+            -- Turned earth: a dithered patch, a furrow or two.
+            local pts, fur = {}, {}
+            local rx, ry = 5 * s, max(1, 1.4 * s)
+            for b = floor(-ry), floor(ry) do
+                local hw = rx * math.sqrt(math.max(0, 1 - (b / ry) ^ 2))
+                for a = floor(x - hw), floor(x + hw) do
+                    if G.dither(a, y + b, 0.35) then G.plot(pts, a, y + b) end
+                    if b % 2 == 0 and a % 3 ~= 0 and math.abs(a - x) < hw - 1 then G.plot(fur, a, y + b) end
+                end
             end
-            G.points("t", pts)
+            G.points("u", pts)
+            G.points(haze > 0.3 and "u" or "p", fur)
         else
-            G.rect("g", x - 6, y - 1, 13, 2)
-            G.rect("t", x - 5, y + 1, 11, 1)
+            ops = {}
+            SHAPES[id]()
+            -- How tall it is, for rising out of the ground.
+            local tall = 0
+            for _, op in ipairs(ops) do
+                local up = op[1] == "r" and (op[4] + op[6]) or (op[1] == "g" and (op[4] + op[6])) or
+                    (op[1] == "e" and (op[4] + op[6])) or op[4]
+                tall = max(tall, up)
+            end
             local rise = fx.rise[c]
-            local art = LScene.ART[id]
-            if art then
-                local h = #art
-                local shown = rise and min(h, floor(h * rise / 1.0)) or h
-                if shown > 0 then
-                    local part = {}
-                    for i = 1, shown do part[#part + 1] = art[i] end
-                    G.art(part, x - floor(#art[1] / 2), y - shown)
-                end
-                if rise and shown < h and floor(t * 12) % 2 == 0 then
-                    G.rect("w", x - 4 + floor(rise * 37) % 9, y - 1, 1, 1)
-                    G.rect("m", x + 3 - floor(rise * 23) % 7, y - 2, 1, 1)
-                end
+            local shown = rise and min(1, rise / 1.0) or 1
+            local top = floor(y - tall * s * shown - 1.5)
+            grounded(x, y, s, WIDE[id] or 12)
+            paint(x, y, s, haze, top)
+            if rise and shown < 1 and floor(t * 12) % 2 == 0 then
+                G.rect("w", x - 4 * s + floor(rise * 37) % max(1, floor(8 * s)), y - 1, 1, 1)
+                G.rect("m", x + 3 * s - floor(rise * 23) % max(1, floor(6 * s)), y - 2, 1, 1)
             end
             local lv = L.level[c] or 1
-            for i = 2, min(lv, 6) do G.rect("y", x - 6 + (i - 2) * 2, y + 2, 1, 1) end
+            for i = 2, min(lv, 6) do G.rect("y", floor(x - 5 * s) + (i - 2) * 2, y + 2, 1, 1) end
             local ring = fx.ring[c]
             if ring and not LScene.reduced then
-                local rr = floor(4 + ring * 18)
+                local rr = floor((4 + ring * 18) * s)
                 local pts = {}
-                for a = 0, 23 do G.plot(pts, x + cos(a / 24 * TAU) * rr, y - 5 + sin(a / 24 * TAU) * rr * 0.7) end
+                for a = 0, 23 do G.plot(pts, x + cos(a / 24 * TAU) * rr, y - tall * s / 2 + sin(a / 24 * TAU) * rr * 0.7) end
                 G.points("y", pts)
             end
         end
