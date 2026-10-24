@@ -41,6 +41,7 @@ local rows, contentH = {}, 0
 local scroll, scrollV = 0, 0
 local fxCards = {} -- per item: { pop, shake, reveal } tweened
 local seen = {} -- items shown before, so a new one slides in
+local restlessSeen = {} -- restless nights looked at in the Dream shop, so the DREAMS mark goes
 local bits = {} -- confetti in screen pixels
 
 local press = nil -- the pointer down: { x, y, id, inShop, moved, y0, scroll0 }
@@ -84,7 +85,7 @@ function UI.setState(s)
     shown = N.toNumber(S.sheep)
     modal, endingWaits, UI.endingIn, banner.text, scroll = nil, false, nil, nil, 0
     tab, expanded = "night", {}
-    seen = {}
+    seen, restlessSeen = {}, {}
     for _, it in ipairs(Game.ITEMS) do if Game.visible(S, it.id) then seen[it.id] = true end end
 end
 function UI.state() return S end
@@ -139,10 +140,21 @@ local function dreamAffordable()
     return false
 end
 
+-- The first restless night that's open and not slept through, and not the
+-- one you're under: one waiting to be tried.
+local function waitingRestless()
+    if S.asleep then return nil end
+    for _, c in ipairs(Game.CHALLENGES) do
+        if Game.challengeOpen(S, c.id) and not Game.done(S, c.id) and S.challenge ~= c.id then return c end
+    end
+end
+
 local function layoutShop()
     rows = {}
     local y = 0
     if tab == "dream" and not dreamsOpen() then tab = "night" end
+    local waiting = waitingRestless()
+    if tab == "dream" and waiting then restlessSeen[waiting.id] = true end
     local sections = {
         { kind = "tap", title = "TAPPING" },
         { kind = "gen", title = "HELPERS" },
@@ -155,6 +167,8 @@ local function layoutShop()
             { group = "path", title = "WAY OF SLEEPING: ONE OR THE OTHER" },
             { restless = true, title = "RESTLESS NIGHTS" },
         }
+        -- One waiting to be tried: the restless nights go first, not last.
+        if waiting then table.insert(sections, 1, table.remove(sections)) end
     end
     local tease = Game.teaser(S)
     for _, sec in ipairs(sections) do
@@ -303,7 +317,15 @@ function UI.showEnding()
             Audio.cue("dream")
             UI.newNight()
             UI.save()
-            if dreamAffordable() then
+            -- A restless night opened with this one: say so, and show it.
+            local opened
+            for _, c in ipairs(Game.CHALLENGES) do
+                if c.opens == S.dreams and not Game.done(S, c.id) then opened = c end
+            end
+            if opened then
+                tab = "dream"
+                UI.banner("A RESTLESS NIGHT OPENS", opened.name:upper() .. ", IN THE DREAM SHOP")
+            elseif dreamAffordable() then
                 tab = "dream"
                 UI.banner("A NEW NIGHT", "SPEND YOUR DREAM POINTS")
             else
@@ -760,6 +782,11 @@ local function drawMode()
             -- Something to buy with Dream Points: a gold star in the corner.
             if not on and dreamAffordable() and (reduced or sin(t * 3.4) > -0.3) then
                 G.art({ ".y.", "yyy", ".y." }, x + w - 6, r.y + 2)
+            end
+            -- A restless night waiting that you haven't looked at: a rose mark.
+            local waiting = waitingRestless()
+            if not on and waiting and not restlessSeen[waiting.id] and (reduced or sin(t * 4) > -0.5) then
+                G.art({ "r", "r", "r", ".", "r" }, x + 4, r.y + 3)
             end
         else
             G.box(x + 1, r.y + 1, w - 2, r.h - 2, on and "l" or "v", on and "o" or "p")

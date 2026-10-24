@@ -414,7 +414,10 @@ their value comes from what they buy.
     ×1.4 per level, and you sleep through every golden sheep. The other's card
     says TURN OVER, and turning over gives back what the first cost.
   - *Restless nights*, one more each night from the third, the next one dashed
-    with the night it opens. START asks first (the night you're in ends,
+    with the night it opens. The night one opens, a banner says so and the
+    Dream shop opens on it; while one waits to be tried the section sits at
+    the top of the Dream shop, and until you look a rose mark blinks on
+    DREAMS. START asks first (the night you're in ends,
     nothing kept), then the rule replaces the narrator in gold; GIVE UP goes
     back to a plain night. **Insomnia** (4× the sheep) halves every night's
     sheep after; **Sheep Shortage** (helpers ×1.3 dearer each) makes them ×1.13
@@ -449,7 +452,11 @@ their value comes from what they buy.
     and a pip a rank. Tap a root for its card (what it does, its rank, its
     price, or why it's shut) and again, or GROW, to grow it.
   - *Dream challenges*, down the roots' taproot once the Mirror Lake stands,
-    one opening under the other. START asks first; then the rule and how far
+    one opening under the other. Once the Mirror Lake can be bought, a rose
+    mark blinks on FARM and Lucidity moves to the top of the list (TO THE
+    FARM on the lake's root picks it up to place). Built, a banner points
+    down the roots; a challenge waiting puts the mark on ROOTS, and tapping
+    ROOTS picks it and scrolls to it. START asks first; then the rule and how far
     you've got show in gold over the field, the card says GIVE UP, and a
     challenge met is MASTERED, its node lit, its reward kept.
   - *The bouncing sheep*, in front of the field: it hops on its cloud; hold

@@ -52,6 +52,7 @@ local sel, place, moving = nil, nil, nil -- the town: a cell picked, a building 
 local intro = nil -- the way in: { t }
 local outro = nil -- the way out, through the Gate of Horn: { t }
 local root = nil -- the root picked on the ROOTS tab
+local challengeSeen = {} -- dream challenges looked at on ROOTS, so the tab's mark goes
 local ROOT_CARD = 43 -- its card, along the bottom of the panel
 local runQuiet = 0 -- the run chime: not again until then, so it isn't constant
 
@@ -59,6 +60,7 @@ function LUI.setState(s)
     S, L = s, s.lucid
     modal, banner.text, scroll, sel, place, moving, intro, outro, root = nil, nil, 0, nil, nil, nil, nil, nil, nil
     dogHeld, bounceHeld = nil, nil
+    challengeSeen = {}
     tab = "layers"
     LScene.reset()
 end
@@ -224,7 +226,9 @@ function LUI.drain()
             cue("buy", { tier = e.k, first = true })
         elseif e.type == "built" then
             LScene.built(e.cell)
-            if e.first then
+            if e.id == "mirror" then
+                LUI.banner("THE DREAM CHALLENGES OPEN", "DOWN THE ROOTS: TAP ROOTS")
+            elseif e.first then
                 local b = Lucid.BY[e.id]
                 LUI.banner("NEW: " .. b.name:upper(), b.desc:upper())
             end
@@ -330,6 +334,8 @@ local function layout()
         local districts = {
             { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PASTURE" }, { "lucid", "LUCIDITY" },
         }
+        -- The Mirror Lake in reach: lucidity goes first, where it's seen.
+        if not Lucid.mirror(L) and Lucid.canBuild(L, "mirror") then table.insert(districts, 1, table.remove(districts)) end
         for _, d in ipairs(districts) do
             rows[#rows + 1] = { header = d[2], y = y, h = 10 }
             y = y + 10
@@ -455,7 +461,10 @@ local function rootButton(r)
     if r.kind == "root" then return nil end
     if r.kind == "lake" then
         if st == "full" then return "BUILT", false end
-        return "TO THE FARM", true, function() tab, scroll = "town", 0 end
+        return "TO THE FARM", true, function()
+            tab, scroll = "town", 0
+            if Lucid.canBuild(L, "mirror") then place = "mirror" end
+        end
     end
     if r.kind == "challenge" then
         local c = Lucid.CH[r.challenge]
@@ -493,6 +502,26 @@ local function rootSay(r)
     local s = r.desc:upper()
     if st == "shut" and from then s = s .. ". GROWS FROM " .. Roots.name(from):upper() .. ": GET THAT FIRST" end
     return s
+end
+
+-- The first dream challenge down the taproot that can be started now.
+local function waitingChallenge()
+    if not Lucid.mirror(L) then return nil end
+    for _, rt in ipairs(Lucid.ROOTS) do
+        if rt.kind == "challenge" and Lucid.rootState(L, rt.id) == "open" then return rt end
+    end
+end
+
+-- To the ROOTS tab. A dream challenge waiting that you haven't looked at is
+-- picked, and scrolled to.
+local function openRoots()
+    tab = "roots"
+    local w = waitingChallenge()
+    if w and not challengeSeen[w.id] then
+        challengeSeen[w.id], root = true, w.id
+        local _, ny = Roots.at(w, R.panel.w)
+        scroll = max(0, ny - floor(R.panel.h / 3))
+    end
 end
 
 local function tapRoots(x, y)
@@ -591,7 +620,10 @@ function LUI.pressed(x, y, id)
         else
             local was = tab
             tab = ({ "layers", "town", "roots" })[k]
-            if tab ~= was then scroll = 0 end
+            if tab ~= was then
+                scroll = 0
+                if tab == "roots" then openRoots() end
+            end
         end
         cue("click")
         return
@@ -678,7 +710,8 @@ function LUI.key(key)
     elseif key == "r" then LUI.pressed(R.motion.x + 1, R.motion.y + 1, "key")
     elseif key == "1" then tab, scroll = "layers", 0
     elseif key == "2" then tab, scroll = "town", 0
-    elseif key == "3" then tab, scroll = "roots", 0
+    elseif key == "3" then
+        if tab ~= "roots" then scroll = 0; openRoots() end
     elseif key == "4" then buyMax = not buyMax
     elseif key == "escape" or key == "backspace" then sel, place, moving, root = nil, nil, nil, nil
     elseif key == "space" and L.golden and Lucid.catchGolden(L) then cue("golden")
@@ -866,6 +899,15 @@ local function drawTabs()
         G.box(x + 1, r.y + 1, w - 2, r.h - 2, on and "c" or "u", on and "o" or "i")
         if on then G.rect("i", x + 1, r.y + r.h - 2, w - 2, 1) end
         centred(on and "u" or "l", b[1], x + w / 2, r.y + 4)
+        -- Something to find there, a rose mark: on FARM while the Mirror Lake
+        -- is in reach and not built, on ROOTS until you look at a dream
+        -- challenge waiting.
+        local wc = i == 3 and waitingChallenge()
+        local mark = (i == 2 and not Lucid.mirror(L) and Lucid.canBuild(L, "mirror"))
+            or (wc and not challengeSeen[wc.id])
+        if not on and mark and (reduced or sin(t * 4) > -0.5) then
+            G.art({ "r", "r", "r", ".", "r" }, x + 4, r.y + 3)
+        end
     end
 end
 
