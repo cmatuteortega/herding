@@ -149,7 +149,8 @@ return {
     -- PHASE 2, LUCID DREAMING. The night runs itself (auto-wake), six dream
     -- layers each dream the one above them (a dream within a dream), and Dream
     -- Points build a town on a grid (a city builder: where a building stands
-    -- matters) that rises in the field's sky, and grow the roots under it.
+    -- matters): phase 1's farm, the barn and the field, rebuilt piece by piece
+    -- on the dream's hill. Dream Points grow the roots under it too.
     -- Every amount in here is a plain number; lucid/game.lua turns them into Num.
     dream = {
         -- What you start with: one sleeper on the Hill, so the first run comes
@@ -157,7 +158,7 @@ return {
         startDims = { 1, 0, 0, 0, 0, 0 },
         -- Auto-wake: a run is over once the layers have counted this many
         -- dream sheep, so runs a second = sheep a second / sheepPerRun, and
-        -- never more than runCap (Clock Towers raise it).
+        -- never more than runCap (Better Fences raise it).
         sheepPerRun = 60,
         runCap = 1,
         -- Dream Points a run pays, times the legacy of phase 1:
@@ -196,29 +197,32 @@ return {
         -- must touch land you have.
         grid = { w = 5, h = 5, start = 3, plotBase = 400, plotGrowth = 1.7 },
         -- A building does more for each neighbour (up, down, left, right):
-        -- +sameDistrict for one of its own district, +plaza for a Plaza.
+        -- +sameDistrict for one of its own district, +plaza for a Haystack.
         adjacency = { sameDistrict = 0.25, plaza = 0.5 },
-        -- Districts: speed (gold), auto (lilac), park (mint), lucid (locked).
+        -- Every building is a piece of phase 1's farm, dreamt back: the fence,
+        -- the dogs, the meadow, the pen, the mill, the drones, the barn.
+        -- Districts: speed (gold), auto (lilac), park (mint: the pasture),
+        -- lucid (locked). The ids are the old town's, so saves keep their farm.
         -- Price: dp and sheep, each times growth^built (levels count as
         -- built). `max` caps how many. Effects grow with S, the sum of every
         -- building of a kind's strength (its level, times its neighbours):
         -- run cap * (1 + S)^capPower, sheep a run / (1 + needDiv * S),
         -- layers * (1 + dimAdd * S), points a run * (1 + dpAdd * S). Never
         -- an exponential in S: prices are, and the effect has to lose to them.
-        -- Each one built rises in the field's sky, on its own cloud.
+        -- Each one built rises out of the dream's hill, where its plot is.
         buildings = {
-            { id = "clock", district = "speed", name = "Clock Tower", desc = "Raises the most runs a second", dp = 250, sheep = 400, growth = 3, capPower = 1.7 },
-            { id = "inn", district = "speed", name = "Dream Inn", desc = "Runs start with helpers: fewer sheep a run", dp = 150, sheep = 100, growth = 2.5, needDiv = 1 },
-            { id = "bakery", district = "speed", name = "Pillow Bakery", desc = "+50% Dream Points a run", dp = 600, sheep = 3000, growth = 2.5, dpAdd = 0.5 },
-            { id = "hut", district = "auto", name = "Shepherd's Hut", desc = "Auto-buys sleepers for the Hill and the Clouds", dp = 500, sheep = 2000, max = 1, autoDims = { 1, 2 } },
-            { id = "workshop", district = "auto", name = "Wool Workshop", desc = "Auto-buys sleepers for the Sky Meadow and the Moon", dp = 8000, sheep = 5e5, max = 1, autoDims = { 3, 4 } },
-            { id = "observatory", district = "auto", name = "Observatory", desc = "Auto-buys sleepers for the Stars and the Aurora", dp = 2e5, sheep = 2e9, max = 1, autoDims = { 5, 6 } },
-            { id = "mill", district = "auto", name = "Dream Mill", desc = "Every layer +100%", dp = 900, sheep = 1e4, growth = 4, dimAdd = 1 },
-            { id = "plaza", district = "park", name = "Plaza", desc = "+50% to every building beside it", dp = 1500, sheep = 2e4, growth = 3 },
-            { id = "fountain", district = "park", name = "Wishing Fountain", desc = "Golden sheep come 50% more often", dp = 2500, sheep = 5e4, growth = 3, max = 2, goldenAdd = 0.5 },
+            { id = "clock", district = "speed", name = "Better Fence", desc = "A wider fence: raises the most runs a second", dp = 250, sheep = 400, growth = 3, capPower = 1.7 },
+            { id = "inn", district = "speed", name = "Dog Kennel", desc = "Sheepdogs bring the flock: fewer sheep a run", dp = 150, sheep = 100, growth = 2.5, needDiv = 1 },
+            { id = "bakery", district = "speed", name = "Meadow", desc = "+50% Dream Points a run", dp = 600, sheep = 3000, growth = 2.5, dpAdd = 0.5 },
+            { id = "hut", district = "auto", name = "Breeding Pen", desc = "Auto-buys sleepers for the Hill and the Clouds", dp = 500, sheep = 2000, max = 1, autoDims = { 1, 2 } },
+            { id = "workshop", district = "auto", name = "Wool Mill", desc = "Auto-buys sleepers for the Sky Meadow and the Moon", dp = 8000, sheep = 5e5, max = 1, autoDims = { 3, 4 } },
+            { id = "observatory", district = "auto", name = "Counting Drones", desc = "Auto-buys sleepers for the Stars and the Aurora", dp = 2e5, sheep = 2e9, max = 1, autoDims = { 5, 6 } },
+            { id = "mill", district = "auto", name = "Barn", desc = "Every layer +100%", dp = 900, sheep = 1e4, growth = 4, dimAdd = 1 },
+            { id = "plaza", district = "park", name = "Haystack", desc = "+50% to every building beside it", dp = 1500, sheep = 2e4, growth = 3 },
+            { id = "fountain", district = "park", name = "Wishing Well", desc = "Golden sheep come 50% more often", dp = 2500, sheep = 5e4, growth = 3, max = 2, goldenAdd = 0.5 },
             { id = "fold", district = "park", name = "Sheepfold", desc = "Nightmares: a wider pen, +50% reward", dp = 2000, sheep = 3e4, growth = 3, max = 3, penAdd = 0.2, rewardAdd = 0.5 },
             -- Lucidity: the lake opens the roots' dream challenges.
-            { id = "lighthouse", district = "lucid", name = "Lucid Lighthouse", desc = "Coming: lucidity", locked = true },
+            { id = "lighthouse", district = "lucid", name = "Sheep-OS", desc = "Coming: lucidity", locked = true },
             { id = "mirror", district = "lucid", name = "Mirror Lake", desc = "Opens the dream challenges, down in the roots", dp = 4e5, sheep = 1e30, max = 1 },
         },
 
@@ -272,8 +276,8 @@ return {
         challenges = {
             { id = "season", name = "Nightmare Season", rule = "Nightmares come one after another", goal = "herd", herd = 3,
                 reward = "A wider fold, and nightmares pay double", nightmareEvery = 8, rewardPen = 0.5, rewardPay = 2 },
-            { id = "stoppedClocks", name = "Stopped Clocks", rule = "Clock Towers work at half strength", goal = "runs", runs = 40,
-                reward = "Clock Towers raise the cap faster", clockMult = 0.5, rewardCapPower = 0.15 },
+            { id = "stoppedClocks", name = "Broken Fences", rule = "Better Fences work at half strength", goal = "runs", runs = 40,
+                reward = "Better Fences raise the cap faster", clockMult = 0.5, rewardCapPower = 0.15 },
             { id = "skyHigh", name = "Thin Air", rule = "The clouds are half as wide", goal = "height", height = 300,
                 reward = "Stars pay double, and so does your best height", widthMult = 0.5, rewardStars = 2, rewardRecord = 2 },
             { id = "onlyOne", name = "Only One", rule = "One sleeper a layer, no more", goal = "sheep", sheep = 1e18,

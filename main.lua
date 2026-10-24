@@ -56,14 +56,16 @@ local function jumpToLucid(s)
     require("lucid.ui").enter()
 end
 
--- Dev: the reset button. Everything gone, saved over, and a new game from
--- the first night (the sound and motion settings stay as they were).
+-- The reset button (in every phase's top bar): everything gone, saved over,
+-- and a new game from the first night, from scratch (the sound and motion
+-- settings stay as they were).
 local function resetAll()
     local old = UI.state()
     local s = Game.fresh()
     s.muted, s.reducedMotion = old.muted, old.reducedMotion
     Game.events, Lucid.events = {}, {}
     Audio.setLucid(false)
+    Audio.setVoid(false)
     Audio.setAsleep(false)
     Audio.setLullabies(s.owned.lullaby)
     UI.setState(s)

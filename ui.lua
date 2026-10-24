@@ -73,6 +73,7 @@ VUI.back = function()
     UI.showLucid()
 end
 LUI.resetAll = function() UI.resetAll() end
+VUI.resetAll = function() UI.resetAll() end
 UI.resetAll = function() end -- set by main: wipe the save, a new game
 
 function UI.setState(s)
@@ -525,7 +526,7 @@ function UI.pressed(x, y, id)
         UI.cue("click")
         UI.showModal({
             title = "RESET EVERYTHING?",
-            lines = { "DEV: THE SAVE IS WIPED, AND A NEW GAME STARTS FROM THE FIRST NIGHT." },
+            lines = { "THE SAVE IS WIPED, AND A NEW GAME STARTS FROM THE FIRST NIGHT, FROM SCRATCH." },
             big = "ALL OF IT",
             button = "RESET", cancel = "KEEP COUNTING",
             onClose = function() UI.resetAll() end,
@@ -673,7 +674,7 @@ local function drawTop()
     G.box(mo.x + 1, mo.y + 1, mo.w - 2, mo.h - 2, "v", "i")
     if S.reducedMotion then G.rect("l", mo.x + 4, mo.y + 6, 9, 1)
     else G.art({ ".ll...ll.", "l..l.l..l", "....l...." }, mo.x + 4, mo.y + 5) end
-    -- The reset button (dev): an arrow coming round.
+    -- The reset button: an arrow coming round.
     local re = R.reset
     G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "v", "i")
     G.art({ "..lll.l", ".l...ll", "l...lll", "l......", "l.....l", ".l...l.", "..lll.." }, re.x + 5, re.y + 3)

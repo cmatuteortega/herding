@@ -1,13 +1,14 @@
 -- The lucid dream's field, drawn into its own low-res canvas like scene.lua:
--- a violet sky with an aurora, the moon, the town floating in the sky (each
--- building rising on its own cloud as it's built, where its plot is), and
--- the flock turning to cloud the deeper the layer (the Hill's sheep graze,
--- Auroras drift up top). Runs hop the fence one by one until there are too
--- many to see, and then they're one stream: the flow. A golden sheep crosses
--- the sky. In front of it all, the bouncing sheep: on its cloud at the
--- bottom, or climbing, with the sky sliding down behind it. In a nightmare
--- the field becomes herding's: the dog, its pressure field, the flock, the
--- fold, and the cloud.
+-- a violet sky with an aurora, the moon, phase 1's farm rebuilt on the
+-- dream's hill (the fence, the barn, the meadow and the rest, each rising out
+-- of the ground as it's built, where its plot is: the back row on the
+-- skyline, the front row at your feet), and the flock turning to cloud the
+-- deeper the layer (the Hill's sheep graze, Auroras drift up top). Runs hop
+-- the fence one by one until there are too many to see, and then they're one
+-- stream: the flow. A golden sheep crosses the sky. In front of it all, the
+-- bouncing sheep: on its cloud at the bottom, or climbing, with the sky
+-- sliding down behind it. In a nightmare the field becomes herding's: the
+-- dog, its pressure field, the flock, the fold, and the cloud.
 --
 -- It only reads the rules' state; what only looks lives in `fx`.
 
@@ -109,7 +110,7 @@ end
 
 function LScene.flash() fx.flash = 1 end
 
--- A building put down on `cell`: it rises on its cloud. Levelled up: a ring.
+-- A building put down on `cell`: it rises out of the ground. Levelled up: a ring.
 function LScene.built(cell) fx.rise[cell] = 0 end
 function LScene.upgraded(cell) fx.ring[cell] = 0 end
 
@@ -295,30 +296,37 @@ local function drawBounce(L)
     blit(Models.sheep(h, sq, leg, "plain", false, 1), B.x * k, heightY(B, B.y) + 1)
 end
 
--- Where a plot of the town floats in the sky: its column across, its row
--- down the sky over the hill, every other column a little lower.
+-- Where a plot of the farm stands on the hill, its foot: rows from the
+-- skyline (the back) down to the bottom of the field (the front), the
+-- columns spreading wider as they come forward.
 local function plotAt(c)
     local GW, GH = D.grid.w, D.grid.h
     local gx, gy = (c - 1) % GW + 1, floor((c - 1) / GW) + 1
-    local top, bottom = floor(ch * 0.14), horizon() - 12
-    local x = floor(cw * (gx - 0.5) / GW)
-    local y = floor(top + (gy - 1) * (bottom - top) / (GH - 1) + (gx % 2) * 3)
-    local bob = LScene.reduced and 0 or floor(sin(t * 0.9 + c * 1.7) * 1.5 + 0.5)
-    return x, y + bob
+    local back, front = horizon() + 3, groundY() - 6
+    local d = (gy - 1) / (GH - 1)
+    local spread = cw * (0.15 + 0.06 * d)
+    return floor(cw / 2 + (gx - (GW + 1) / 2) * spread), floor(back + d * (front - back))
 end
 
--- The town, in the sky: an empty plot is a wisp of cloud, a building stands
--- on its own puff, rising out of it when new, its levels as gold pips.
-local function skyTown(L)
-    for c in pairs(L.open) do
+-- The farm, back row first: an empty plot is a patch of tilled earth, a
+-- building stands on its own patch of grass, rising out of it when new, its
+-- levels as gold pips.
+local function farm(L)
+    local cells = {}
+    for c in pairs(L.open) do cells[#cells + 1] = c end
+    table.sort(cells)
+    for _, c in ipairs(cells) do
         local x, y = plotAt(c)
         local id = L.grid[c]
         if not id then
             local pts = {}
-            for dx = -5, 5 do if G.dither(x + dx, y, 0.4) then G.plot(pts, x + dx, y) end end
-            G.points("i", pts)
+            for dy = -1, 1 do
+                for dx = -5, 5 do if G.dither(x + dx, y + dy, 0.5) then G.plot(pts, x + dx, y + dy) end end
+            end
+            G.points("t", pts)
         else
-            cloud(x, y + 1, 16, "c", "l")
+            G.rect("g", x - 6, y - 1, 13, 2)
+            G.rect("t", x - 5, y + 1, 11, 1)
             local rise = fx.rise[c]
             local art = LScene.ART[id]
             if art then
@@ -326,21 +334,21 @@ local function skyTown(L)
                 local shown = rise and min(h, floor(h * rise / 1.0)) or h
                 if shown > 0 then
                     local part = {}
-                    for i = h - shown + 1, h do part[#part + 1] = art[i] end
+                    for i = 1, shown do part[#part + 1] = art[i] end
                     G.art(part, x - floor(#art[1] / 2), y - shown)
                 end
                 if rise and shown < h and floor(t * 12) % 2 == 0 then
-                    G.rect("w", x - 4 + floor(rise * 37) % 9, y - shown - 1, 1, 1)
-                    G.rect("y", x + 3 - floor(rise * 23) % 7, y - shown - 2, 1, 1)
+                    G.rect("w", x - 4 + floor(rise * 37) % 9, y - 1, 1, 1)
+                    G.rect("m", x + 3 - floor(rise * 23) % 7, y - 2, 1, 1)
                 end
             end
             local lv = L.level[c] or 1
-            for i = 2, min(lv, 6) do G.rect("y", x - 6 + (i - 2) * 2, y + 4, 1, 1) end
+            for i = 2, min(lv, 6) do G.rect("y", x - 6 + (i - 2) * 2, y + 2, 1, 1) end
             local ring = fx.ring[c]
             if ring and not LScene.reduced then
-                local r = floor(4 + ring * 18)
+                local rr = floor(4 + ring * 18)
                 local pts = {}
-                for a = 0, 23 do G.plot(pts, x + cos(a / 24 * TAU) * r, y - 5 + sin(a / 24 * TAU) * r * 0.7) end
+                for a = 0, 23 do G.plot(pts, x + cos(a / 24 * TAU) * rr, y - 5 + sin(a / 24 * TAU) * rr * 0.7) end
                 G.points("y", pts)
             end
         end
@@ -384,7 +392,7 @@ local function drawField(L)
     love.graphics.translate(0, off)
     aurora()
     blit(Models.moon(9), cw - max(18, cw * 0.15), floor(ch * 0.3))
-    skyTown(L)
+    farm(L)
     flock(L)
     local hz = horizon()
     blit(Models.fence(1, 0), fenceX(), hz + 12)
@@ -505,31 +513,34 @@ function LScene.draw(L)
     return canvas
 end
 
---- the town's buildings, small ---------------------------------------------------------
+--- the farm's buildings, small: phase 1's field and barn, dreamt back ----------
 
+-- Keyed by the old town's ids (saves keep them): clock is the Better Fence,
+-- inn the Dog Kennel, bakery the Meadow, hut the Breeding Pen, workshop the
+-- Wool Mill, observatory the Counting Drones, mill the Barn, plaza the
+-- Haystack, fountain the Wishing Well, lighthouse Sheep-OS.
 local ART = {
-    clock = { "...ooo...", "..owwwo..", ".owywiwo.", ".owwywwo.", ".owwwwwo.", "..owwwo..", "...ooo...",
-        "..oyyyo..", "..oyyyo..", "..oyyyo..", ".ooooooo." },
-    inn = { "....o....", "...oro...", "..orrro..", ".orrrrro.", "ooooooooo", ".olcllco.", ".olylllo.",
-        ".ollllyo.", ".olcolco.", ".olloolo.", "ooooooooo" },
-    bakery = { "..ooooo..", ".owwwwwo.", "owwcwcwwo", "owwwwwwwo", ".ooooooo.", ".ohhyhho.", ".ohyyyho.",
-        ".ohhhhho.", ".ohoooho.", ".ohoyoho.", "ooooooooo" },
-    hut = { "....o....", "...oio...", "..oiiio..", ".oiiiiio.", "ooooooooo", ".obbbbbo.", ".obobbbo.",
-        ".obobwbo.", ".obbbbbo.", "ooooooooo" },
-    workshop = { "o..o.....", "oo.oo....", "ooooooooo", "oiiiiiiio", "oiwwiwwio", "oiwwiwwio", "oiiiiiiio",
-        "oiicciiio", "oiicciiio", "ooooooooo" },
-    observatory = { "...ooo...", "..ouuuo..", ".ouuyuuo.", ".ouuuuuo.", "ooooooooo", ".oiiiiio.", ".oiiciio.",
-        ".oiiiiio.", ".oiiiiio.", "ooooooooo" },
-    mill = { "o...o...o", ".o..o..o.", "..o.o.o..", "...ooo...", "oooo.oooo", "...ooo...", "..oiiio..",
-        ".oiiiiio.", ".oiicciio", ".oiicciio", "ooooooooo" },
-    plaza = { ".........", ".aaaaaaa.", ".a.....a.", ".a.ooo.a.", ".a.oco.a.", ".a.ooo.a.", ".a.....a.",
-        ".aaaaaaa.", "........." },
-    fountain = { "....c....", "...c.c...", "..c.c.c..", "...ccc...", "....o....", "ooooooooo", "occcaccco",
-        "ooooooooo", ".ooooooo." },
+    clock = { "o...o...o", "s...s...s", "ooooooooo", "sssssssss", "s...s...s", "ooooooooo", "sssssssss",
+        "s...s...s" },
+    inn = { "....o....", "...oro...", "..orrro..", ".orrrrro.", "ooooooooo", ".obbbbbo.", ".obooobo.",
+        ".obooobo.", "ooooooooo" },
+    bakery = { "....ooo..", "...owwwo.", "..owwwwpo", "..owwwwo.", "...o..o..", "m.g.y.g.m", "gmgmgmgmg",
+        "ggggggggg" },
+    hut = { "..r.r....", ".rrrrr...", "..rrr....", "...r.....", "s..owo..s", "ooowwwooo", "s.owwwo.s",
+        "ooooooooo" },
+    workshop = { ".......o.", ".......s.", "o..o..os.", "oo.oo.oso", "ooooooooo", "opppppppo", "opypypypo",
+        "opppppppo", "oppoooppo", "ooooooooo" },
+    observatory = { "ooo...ooo", "..o...o..", ".ooooooo.", ".osssyso.", ".ooooooo.", "...o.o...", ".........",
+        ".yyyyyyy.", "ooooooooo" },
+    mill = { "....o....", "...oio...", "..oiiio..", ".oiiwiio.", "ooooooooo", ".opppppo.", ".opwwwpo.",
+        ".opwowpo.", ".opowopo.", ".opwowpo.", "ooooooooo" },
+    plaza = { "...ooo...", "..oyyyo..", ".oyhyyyo.", ".oyyyhyo.", "oyhyyyyho", "oyyyhyyyo", "ooooooooo" },
+    fountain = { "ooooooooo", ".oiiiiio.", "..s...s..", "..s.y.s..", "..s...s..", ".ooooooo.", ".ossssso.",
+        ".ooooooo." },
     fold = { "o.o.o.o.o", "ooooooooo", "o.......o", "o..ww...o", "o.wwwo..o", "o..w.w..o", "ooooooooo",
         "o.o.o.o.o" },
-    lighthouse = { "...oyo...", "...ooo...", "...olo...", "...owo...", "...olo...", "..owwwo..", "..olllo..",
-        "..owwwo..", ".ooooooo." },
+    lighthouse = { "ooooooooo", "ossssssso", "osnnnnnso", "osnmmnnso", "osnyynnso", "osnnnnnso", "ossssssso",
+        "ooooooooo", "...ooo...", "..ooooo.." },
     mirror = { ".........", "..ooooo..", ".occccco.", "occacccco", "occcccaco", ".occccco.", "..ooooo..",
         "........." },
     gate = { "ooooooooo", "o.o...o.o", "o.o...o.o", "o.o...o.o", "o.o...o.o", "o.o...o.o", "ooooooooo" },

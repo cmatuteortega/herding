@@ -3,6 +3,8 @@
 -- dream; what's left is the dark, a few far motes falling slowly in towards
 -- the middle, and one sheep floating there, turning. A tap rings out over
 -- the dark. BACK TO THE DREAM goes back through the gate (it stays open).
+-- The reset button, top right, starts everything over from the first night:
+-- tap it, then tap it again while it asks.
 --
 -- ui.lua hands everything over to this once `phase` is "void".
 
@@ -16,13 +18,16 @@ local floor, sin, cos, sqrt = math.floor, math.sin, math.cos, math.sqrt
 local VUI = {}
 VUI.save = function() end -- set by ui.lua
 VUI.back = function() end -- set by ui.lua: back through the gate
+VUI.resetAll = function() end -- set by ui.lua: wipe the save, a new game
 
 local S
 local vw, vh = 320, 240
 local t, since = 0, 0 -- the clock, and time since coming in
 local reduced = false
 local motes, rings = {}, {}
-local button
+local button, reset
+local confirm = 0 -- until when the reset button waits for its second tap
+local RESET_ART = { "..lll.l", ".l...ll", "l...lll", "l......", "l.....l", ".l...l.", "..lll.." }
 
 function VUI.setState(s) S = s end
 function VUI.setReduced(v) reduced = v end
@@ -31,6 +36,7 @@ function VUI.fit(w, h, inset)
     vw, vh = w, h
     local bw = G.textWidth("BACK TO THE DREAM") + 24
     button = { x = floor(vw / 2 - bw / 2), y = vh - inset.b - 26, w = bw, h = 14 }
+    reset = { x = vw - inset.r - 3 - 17, y = inset.t + 2, w = 17, h = 13 }
     local r = love.math.newRandomGenerator(5)
     motes = {}
     for _ = 1, floor(vw * vh / 260) do
@@ -40,7 +46,7 @@ end
 
 -- Coming in: the pad goes down to its sub bass, and the words come up again.
 function VUI.enter()
-    since = 0
+    since, confirm = 0, 0
     rings = {}
     Audio.setLucid(false)
     Audio.setVoid(true)
@@ -54,6 +60,17 @@ function VUI.pressed(x, y)
         Audio.cue("click")
         Audio.setVoid(false)
         VUI.back()
+        return
+    end
+    if inside(reset, x, y) then
+        Audio.cue("click")
+        if confirm > t then
+            confirm = 0
+            Audio.setVoid(false)
+            VUI.resetAll()
+        else
+            confirm = t + 3
+        end
         return
     end
     if #rings < 6 then rings[#rings + 1] = { x = x, y = y, t = 0 } end
@@ -128,7 +145,14 @@ function VUI.draw()
         local s = "BACK TO THE DREAM"
         G.text("l", s, floor(b.x + b.w / 2 - G.textWidth(s) / 2), b.y + 4)
     end
-    if S and S.muted then G.text("i", "MUTED", vw - 26, 4) end
+    -- The reset button: an arrow coming round, and its question while it waits.
+    G.box(reset.x + 1, reset.y + 1, reset.w - 2, reset.h - 2, "v", confirm > t and "y" or "i")
+    G.art(RESET_ART, reset.x + 5, reset.y + 3)
+    if confirm > t then
+        local q = "TAP AGAIN TO RESET ALL"
+        G.label("y", q, floor(math.max(4, reset.x + reset.w - G.textWidth(q))), reset.y + reset.h + 3, 1, 1, "o")
+    end
+    if S and S.muted then G.text("i", "MUTED", 4, 4) end
 end
 
 return VUI

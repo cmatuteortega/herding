@@ -23,7 +23,7 @@ local function preset(total, owned, extra)
     return s
 end
 
--- Phase 2, `minutes` in: dimensions bought, a town built round a Plaza.
+-- Phase 2, `minutes` in: dimensions bought, a farm built round a Haystack.
 local function lucidAt(minutes, flow)
     local s = preset(0, {}, { dreams = 19, dreamPoints = 750, dreamEarned = 7000 })
     s.phase = "lucid"

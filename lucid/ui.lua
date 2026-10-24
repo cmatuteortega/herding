@@ -4,9 +4,9 @@
 --
 -- On top, the Dream Points; under the field, auto-wake: how fast the night
 -- runs itself, until it runs too fast to see. Then three tabs: LAYERS (the
--- six dream layers, a dream within a dream), TOWN (the city builder: a grid
--- of land, buildings placed, moved and levelled up, the next plot bought; the
--- town itself floats in the field's sky) and ROOTS (the network of upgrades
+-- six dream layers, a dream within a dream), FARM (the city builder: a grid
+-- of land, buildings placed, moved and levelled up, the next plot bought; it
+-- rebuilds phase 1's barn and field on the dream's hill) and ROOTS (the network of upgrades
 -- kept for good, with the dream challenges down its middle and the Gate of
 -- Horn at the bottom; lucid/roots.lua draws it). The field also holds the
 -- bouncing sheep: hold it and it climbs. The golden sheep's choice, the
@@ -165,7 +165,7 @@ local function explain()
             "",
             "LAYERS: A DREAM WITHIN A DREAM, SIX DEEP. EACH LAYER DREAMS UP THE SLEEPERS OF THE ONE ABOVE IT, AND DEEPER DOWN TIME RUNS FASTER.",
             "",
-            "TOWN: BUILD IN THE SKY WITH YOUR DREAM POINTS. WHERE A BUILDING STANDS MATTERS. ROOTS: GROW WHAT YOU KEEP FOR GOOD.",
+            "FARM: REBUILD THE FIELD AND THE BARN YOU DREAMT OF, WITH YOUR DREAM POINTS. WHERE EACH PIECE STANDS MATTERS. ROOTS: GROW WHAT YOU KEEP FOR GOOD.",
             "",
             "HOLD THE FIELD AND THE SHEEP IN FRONT CLIMBS. AND IF A NIGHTMARE COMES, THE DOG KNOWS WHAT TO DO.",
         },
@@ -328,7 +328,7 @@ local function layout()
         rows[#rows + 1] = { info = true, y = y, h = 24 }
         y = y + 28
         local districts = {
-            { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PARKS" }, { "lucid", "LUCIDITY" },
+            { "speed", "SPEED: THE RUNS" }, { "auto", "AUTOMATION" }, { "park", "PASTURE" }, { "lucid", "LUCIDITY" },
         }
         for _, d in ipairs(districts) do
             rows[#rows + 1] = { header = d[2], y = y, h = 10 }
@@ -387,7 +387,7 @@ local function infoText()
         return b.name:upper() .. " LV " .. L.level[sel] .. ". WORKS X" .. (("%.2f"):format(Lucid.strength(L, sel)):gsub("%.?0+$", ""))
     end
     if sel and Lucid.canOpen(L, sel) then return "NEW LAND, BESIDE YOURS" end
-    return "PICK A BUILDING BELOW, OR TAP ONE IN TOWN"
+    return "PICK A BUILDING BELOW, OR TAP ONE ON THE FARM"
 end
 
 --- input -------------------------------------------------------------------------------
@@ -428,7 +428,7 @@ local function tapChallenge(c)
     showModal({
         title = "DREAM CHALLENGE: " .. c.name:upper(),
         lines = { c.rule:upper() .. ". GOAL: " .. LUI.goal(c) .. ". MEET IT AND, FOREVER:", "",
-            "THE FLOCK WAKES: THE LAYERS AND DREAM SHEEP START OVER. THE TOWN, THE ROOTS AND YOUR POINTS STAY, BUT WHILE IT LASTS YOUR POINTS DON'T LIFT THE LAYERS." },
+            "THE FLOCK WAKES: THE LAYERS AND DREAM SHEEP START OVER. THE FARM, THE ROOTS AND YOUR POINTS STAY, BUT WHILE IT LASTS YOUR POINTS DON'T LIFT THE LAYERS." },
         big = c.reward:upper(),
         buttons = {
             { label = L.challenge and "SWITCH TO IT" or "START", fn = function()
@@ -455,7 +455,7 @@ local function rootButton(r)
     if r.kind == "root" then return nil end
     if r.kind == "lake" then
         if st == "full" then return "BUILT", false end
-        return "TO TOWN", true, function() tab, scroll = "town", 0 end
+        return "TO THE FARM", true, function() tab, scroll = "town", 0 end
     end
     if r.kind == "challenge" then
         local c = Lucid.CH[r.challenge]
@@ -486,7 +486,7 @@ local function rootSay(r)
         local s = c.rule:upper() .. ". " .. LUI.goal(c) .. ". THEN, FOR GOOD: " .. c.reward:upper()
         if st == "shut" then
             s = (Lucid.mirror(L) and ("MASTER " .. Roots.name(from):upper() .. " FIRST. ")
-                or "BUILD THE MIRROR LAKE IN TOWN FIRST. ") .. s
+                or "BUILD THE MIRROR LAKE ON THE FARM FIRST. ") .. s
         end
         return s
     end
@@ -579,7 +579,7 @@ function LUI.pressed(x, y, id)
         cue("click")
         showModal({
             title = "RESET EVERYTHING?",
-            lines = { "DEV: THE SAVE IS WIPED, AND A NEW GAME STARTS FROM THE FIRST NIGHT." },
+            lines = { "THE SAVE IS WIPED, AND A NEW GAME STARTS FROM THE FIRST NIGHT, FROM SCRATCH." },
             big = "ALL OF IT",
             buttons = { { label = "RESET", fn = function() LUI.resetAll() end }, { label = "KEEP DREAMING" } },
         })
@@ -857,7 +857,7 @@ end
 
 local function drawTabs()
     local r = R.tabs
-    local buttons = { { "LAYERS", tab == "layers" }, { "TOWN", tab == "town" }, { "ROOTS", tab == "roots" },
+    local buttons = { { "LAYERS", tab == "layers" }, { "FARM", tab == "town" }, { "ROOTS", tab == "roots" },
         { buyMax and "MAX" or "X1", buyMax } }
     local w = floor((r.w - 4) / 4)
     for i, b in ipairs(buttons) do

@@ -16,10 +16,12 @@ Then the dream turns lucid, and phase 2 begins.
 then a second, then a hundred a second, until there's no run to see, only the
 flow). Six dream layers, a dream within a dream: each one dreams up the
 sleepers of the layer above it, from the Hill down to the Aurora, and the
-deeper a layer is the faster its time runs. Dream Points build a town on a
-grid, a city builder where a building does more beside its own district and
-beside a Plaza, and the town floats in the field's sky, each building rising
-on its own cloud where it was placed. Under the field grow the roots, a
+deeper a layer is the faster its time runs. Dream Points rebuild phase 1's
+farm on a grid, a city builder where a building does more beside its own
+district and beside a Haystack: the fence, the dog kennel, the meadow, the
+pen, the mill, the drones and the barn come back one by one, each rising out
+of the dream's hill where it was placed, the dream of the first nights built
+again. Under the field grow the roots, a
 mycelium network of upgrades kept for good (Mycelio's, from underroot), with
 seven dream challenges down its taproot. In front of it all a sheep bounces on
 a cloud: hold the field and it climbs, doodle-jump style, for stars, moons and
@@ -62,11 +64,13 @@ folder's contents: `zip -9 -r counting-sheep.love . -x '.git/*' 'tests/*'`.
 **Controls:** tap or click the field to count a sheep (Space or Enter too). Tap a
 card to buy. Drag or use the wheel to scroll the shop. 1 / 2 / 3 picks ×1 / ×10 /
 Max, D (or the DREAMS button) opens the Dream shop, M mutes, R reduces motion, F11 or Alt+Enter toggles fullscreen, and Esc quits on a computer.
-In phase 2, 1 / 2 / 3 pick LAYERS / TOWN / ROOTS and 4 toggles ×1 / MAX; Space
+In phase 2, 1 / 2 / 3 pick LAYERS / FARM / ROOTS and 4 toggles ×1 / MAX; Space
 catches the golden sheep, and 1 / 2 / 3 choose its gift; hold the field and
 drag to steer the bouncing sheep up; in a nightmare, hold and drag on the field
 to move the dog. On ROOTS, tap a root to read it and again (or its button) to
-grow it. In the void, tap the dark.
+grow it. In the void, tap the dark. The arrow coming round in the top bar
+(every phase) resets everything and starts a new game from scratch, after
+asking.
 
 ## Where it comes from
 
@@ -113,8 +117,8 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `lucid/game.lua` | phase 2's rules: auto-wake in batches, the layers, the town, the roots, the golden choice, time away in closed form. Pure Lua |
 | `lucid/nightmare.lua` | the nightmare: herding's flock, dog and pressure field, the fold, the cloud. Pure Lua |
 | `lucid/bounce.lua` | the bouncing sheep: its cloud, the climb, clouds, stars and moons, and a bot that climbs. Pure Lua |
-| `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, TOWN and ROOTS tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
-| `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the town in the sky, sheep turning to cloud, the flow, the bouncing sheep, the nightmare |
+| `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, FARM and ROOTS tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
+| `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the nightmare |
 | `lucid/roots.lua` | the roots drawn: underroot's network, hyphae growing down from the dreamer |
 | `void/ui.lua` | phase 3, the void: a placeholder to stand in. `ui.lua` hands over to it |
 
@@ -219,24 +223,29 @@ the same happens if the game sat frozen in the background for a while.
 
 - **Auto-wake:** runs a second = `min(cap, sheep a second / sheep a run)`, and
   half that while a nightmare is on. The cap starts at 1 and is `(1 + S)^1.7`
-  with S the Clock Towers' strength; a run needs 60 dream sheep, divided by
-  `1 + S` of Dream Inns. Runs are settled in batches: each step adds runs a
+  with S the Better Fences' strength; a run needs 60 dream sheep, divided by
+  `1 + S` of Dog Kennels. Runs are settled in batches: each step adds runs a
   second × dt to `runAcc` and pays for the whole runs in it, so a thousand
   runs a second cost what one does. Past `flowAt` (30) runs a second the
   screen stops showing runs and shows the flow.
-- **Points a run:** `dpPerRun * legacy * (1 + 0.5 * S bakeries)`, with
+- **Points a run:** `dpPerRun * legacy * (1 + 0.5 * S meadows)`, with
   `legacy = 1 + log10(1 + phase-1 points ever earned) * 0.5` (about ×3 for a
   usual player).
 - **Layers:** a sleeper in layer k dreams up `rate_k` sleepers in layer k-1 a
   second; layer 1's count dream sheep. Price `base * growth^bought` in dream
   sheep (÷ `1 + 0.5 * Architect`); every 10 sleepers in a layer its time runs
-  ×2 (+0.1 a rank of Time Dilation). All of them × `(1 + S mills)` ×
+  ×2 (+0.1 a rank of Time Dilation). All of them × `(1 + S barns)` ×
   `(1 + sqrt(points earned in phase 2) * 0.01 * (1 + 0.5 * Deep Well))` × the
   best height's `(1 + 0.06 * best / 100)`. The growths (1.8 up to 10 a copy)
   beat the ×2 per ten by far, or the chain runs away. In the code a layer is
   still a `dim`.
-- **The town:** a building's strength is its level × (1 + 0.25 per neighbour of
-  its district + 0.5 per Plaza beside it). Prices are `dp` and `sheep`, ×growth
+- **The farm:** a building's strength is its level × (1 + 0.25 per neighbour of
+  its district + 0.5 per Haystack beside it). In the code and the save it's
+  still the `town`, and the buildings keep the old town's ids (`clock` is the
+  Better Fence, `inn` the Dog Kennel, `bakery` the Meadow, `hut` the Breeding
+  Pen, `workshop` the Wool Mill, `observatory` the Counting Drones, `mill` the
+  Barn, `plaza` the Haystack, `fountain` the Wishing Well, `lighthouse`
+  Sheep-OS), so a save's farm is the same one. Prices are `dp` and `sheep`, ×growth
   per copy built or level gained. Every effect is a polynomial in S, never an
   exponential: prices are exponential, so the effect has to lose to them. Land
   is `400 * 1.7^plots` and must touch land you have. Moving a building is
@@ -251,10 +260,12 @@ the same happens if the game sat frozen in the background for a while.
   big-number library can take its place. A greedy player's dream sheep are at
   1E58 after three hours, so plain numbers hold for now.
 
-- **The town in the sky:** each plot of the 5×5 grid has a place in the
-  field's sky (its column across, its row down towards the hill). A building
-  rises out of its cloud when it's put down, a level up rings out, and its
-  levels show as gold pips. Moving one moves it in the sky too.
+- **The farm on the hill:** each plot of the 5×5 grid has a place on the
+  dream's hill (the back row on the skyline, the front row at the bottom of
+  the field, the columns wider apart as they come forward). An empty plot is
+  tilled earth; a building rises out of the ground when it's put down, a
+  level up rings out, and its levels show as gold pips. Moving one moves it
+  on the hill too.
 - **The roots** (`roots`): underroot's Spore Bank network, under the dream.
   Each root grows from the one above it (`at`), a rank at a time, for
   `dp * growth^rank` Dream Points, up to `max`, kept for good. Four branches
@@ -293,7 +304,7 @@ the same happens if the game sat frozen in the background for a while.
 | challenge | rule | goal | reward |
 | --- | --- | --- | --- |
 | Nightmare Season | a nightmare every 8 s after the last | 3 flocks home | a wider fold, nightmares pay double |
-| Stopped Clocks | Clock Towers at half strength | 40 runs/s | the cap's power 1.7 → 1.85 |
+| Broken Fences | Better Fences at half strength | 40 runs/s | the cap's power 1.7 → 1.85 |
 | Thin Air | clouds half as wide | a climb 300 high | stars and the best height count double |
 | Only One | one sleeper a layer | 1E18 dream sheep | time ×2.5 every ten, not ×2 |
 | Shallow Sleep | only the first three layers dream | 1E20 dream sheep | the first three layers ×3 |
@@ -423,14 +434,15 @@ their value comes from what they buy.
   - *LAYERS*: the six dream layers (the Hill, the Clouds, the Sky Meadow, the
     Moon, the Stars, the Aurora), each card its sleepers, what they dream up
     and how fast time runs there; the next one a dashed `???`. ×1 or MAX. An
-    AUTO pill on each one a town building auto-buys; tap it to pause.
-  - *TOWN*: a 5×5 grid, the middle 3×3 open. Pick a building and tap a plot;
+    AUTO pill on each one a farm building auto-buys; tap it to pause.
+  - *FARM*: a 5×5 grid, the middle 3×3 open. Pick a building and tap a plot;
     tap a building to LEVEL UP or MOVE it (free); tap a dashed `+` to BUY LAND.
-    Speed (gold): Clock Tower, Dream Inn, Pillow Bakery. Automation (lilac):
-    Shepherd's Hut, Wool Workshop, Observatory (two layers each), Dream
-    Mill. Parks (green): Plaza, Wishing Fountain, Sheepfold. Lucidity: the
-    Mirror Lake, and the Lighthouse to see, not to build yet. Everything built
-    floats in the field's sky, rising from its cloud as it goes up.
+    Every building is a piece of phase 1's field and barn, dreamt back.
+    Speed (gold): Better Fence, Dog Kennel, Meadow. Automation (lilac):
+    Breeding Pen, Wool Mill, Counting Drones (two layers each), the Barn.
+    Pasture (green): Haystack, Wishing Well, Sheepfold. Lucidity: the Mirror
+    Lake, and Sheep-OS to see, not to build yet. Everything built stands on
+    the dream's hill, rising out of the ground as it goes up.
   - *ROOTS*: the network under the dreamer, drawn as Mycelio's: hyphae
     dotted where they could grow, lit once grown with nutrients running down
     them, a white tip running down a thread as it grows, rings out of a node
@@ -481,13 +493,13 @@ their value comes from what they buy.
 - Achievements
 - A stats screen
 - Phase 3, the void: only its way in and a placeholder to stand in
-- Pending for phase 2: the second prestige layer (the Lucid Lighthouse, shown,
+- Pending for phase 2: the second prestige layer (Sheep-OS on the farm, shown,
   not built), nightmares that grow, a soft cap on Insomnia, surplus sheep
   paying points
 - `ui.lua` hands over to `lucid/ui.lua` but they don't share widgets yet
   (cards, dialogs and banners are drawn in each)
 - Restless nights past the four, or doing one again
-- Settings beyond mute and motion (volume, notation, a reset button)
+- Settings beyond mute, motion and reset (volume, notation)
 - Per-generator upgrades, combos, click frenzies
 - Cloud saves, import and export
 - Localization

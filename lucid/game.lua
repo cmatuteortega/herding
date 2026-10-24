@@ -4,9 +4,9 @@
 -- dream, count dream sheep, a run is over every `sheepPerRun` of them (no
 -- faster than the run cap), and each run pays Dream Points. Runs are settled
 -- in batches, never one reset a frame: a step adds runs a second * dt to a
--- fraction and pays for the whole runs in it. Dream Points build the town, a
--- grid where a building does more beside its own district and beside a
--- Plaza, and grow the roots, a network of upgrades kept for good with the
+-- fraction and pays for the whole runs in it. Dream Points rebuild phase 1's
+-- farm, a grid where a building does more beside its own district and beside
+-- a Haystack, and grow the roots, a network of upgrades kept for good with the
 -- dream challenges down its middle and the Gate of Horn at the bottom; dream
 -- sheep buy sleepers for the layers and the town's materials. A golden sheep
 -- offers a choice of three, now and then a nightmare scatters a flock for the
@@ -118,7 +118,7 @@ Lucid.rank = rank
 --- the town ------------------------------------------------------------------------
 
 -- Each building's effect, after its neighbours: its level alone, more beside
--- its own district and beside a Plaza (a Plaza does nothing on its own).
+-- its own district and beside a Haystack (a Haystack does nothing on its own).
 function Lucid.strength(L, c)
     local id = L.grid[c]
     if not id then return 0 end
@@ -271,12 +271,12 @@ function Lucid.sheepRate(L)
     return N.mul(L.dims[1].amount, Lucid.dimRate(L, 1))
 end
 
--- Dream sheep a run, after Dream Inns.
+-- Dream sheep a run, after Dog Kennels.
 function Lucid.need(L)
     return N.from(D.sheepPerRun / (1 + BY.inn.needDiv * Lucid.sum(L, "inn")))
 end
 
--- The most runs a second, after Clock Towers.
+-- The most runs a second, after Better Fences.
 function Lucid.cap(L)
     local power = BY.clock.capPower + (Lucid.met(L, "stoppedClocks") and CH.stoppedClocks.rewardCapPower or 0)
     return D.runCap * (1 + Lucid.sum(L, "clock") * (under(L, "clockMult") or 1)) ^ power
