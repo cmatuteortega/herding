@@ -159,8 +159,17 @@ jobs:
         working-directory: game
         run: |
           mkdir -p ../love-android/app/src/embed/assets
-          zip -9 -r ../love-android/app/src/embed/assets/game.love ./*.lua lib lucid void -x '*.DS_Store'
+          zip -9 -r ../love-android/app/src/embed/assets/game.love ./*.lua lib lucid astral beyond -x '*.DS_Store'
           unzip -l ../love-android/app/src/embed/assets/game.love | grep -E ' (main|conf)\.lua$'
+          # Every module the code requires must be in it, or the phone shows
+          # "module not found" at launch: a folder left off the list above.
+          packed=$(unzip -Z1 ../love-android/app/src/embed/assets/game.love)
+          missing=0
+          for m in $(grep -rhoE 'require[ (]*"[a-z0-9_.]+"' --include='*.lua' --exclude-dir=tests --exclude-dir=android . | grep -oE '"[^"]+"' | tr -d '"' | grep -vE '^(ffi|love\.)' | sort -u); do
+            f="${m//.//}.lua"
+            if ! grep -qxF "$f" <<<"$packed"; then echo "::error::game.love is missing $f (require \"$m\")"; missing=1; fi
+          done
+          [ "$missing" = 0 ]
           ls -lh ../love-android/app/src/embed/assets/game.love
 
       # The APK to install directly and the bundle Play Console wants, from one
