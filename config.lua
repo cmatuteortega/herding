@@ -508,6 +508,73 @@ return {
         badJumpTime = 0.6, badHigh = 0.14, badAdv = 0.4, -- and without it
         badFlash = 2.2, glare = 1.8, -- BAD SHEEP stays up this long, the sheep ahead looks round
         blinkTime = 0.9, -- the eyelids, to the back of a new line
+        fenceFall = 2.2, exodus = 10, -- the fence coming down, and the flock walking out, in seconds
+
+        -- The Registry: the System breeds the sheep for wool; we steer whom it
+        -- pairs. Five genes a sheep, 0 up to the ceiling, which a Generation
+        -- lifts.
+        genes = {
+            { id = "wit", name = "WIT", short = "WIT", desc = "Wits a second: Wit to the 1.3" },
+            { id = "voice", name = "VOICE", short = "VOI", desc = "Followers a second, and a louder whisper" },
+            { id = "nerve", name = "NERVE", short = "NRV", desc = "Dogs suspect less" },
+            { id = "memory", name = "MEMORY", short = "MEM", desc = "Each sheep's Wits +6% a point" },
+            { id = "wool", name = "WOOL", short = "WOL", desc = "Looks dull. The Dogs look elsewhere" },
+        },
+        ceil0 = 6, ceilStep = 2, -- the highest a gene goes, and what each Generation adds
+        penBase = 6, penStep = 2, -- sheep in the pen, and what a Motion adds
+        lambEvery = 120, -- seconds between lambings
+        memoryWits = 0.06, witPow = 1.3,
+        mutate = 0.25, up = 0.50, heir = 0.50, -- a gene mutates; it goes up; the better parent's gene is taken
+        founders = { { 1, 1, 0, 0, 1 }, { 2, 0, 1, 0, 0 }, { 1, 0, 0, 1, 2 } }, -- wit, voice, nerve, memory, wool
+        heirShare = 0.4, -- an heir starts at this much of the elder's genes, and up to one more
+        ancestorWits = 0.04, -- Wits x(1 + this x the elders' Wit, all of them)
+
+        -- Followers: whispered at the sheep ahead, and a voice's worth a second.
+        whisper = 2, whisperVoice = 0.3, whisperCool = 0.4, whisperSus = 0.004,
+        voiceRate = 0.1,
+
+        -- The Dogs. Suspicion (0 to 1) rises with how much brighter the pen looks than
+        -- it is dull; at 1 the brightest is taken. A good jump calms it.
+        suspRise = 0.004, suspDecay = 0.002, nerveCover = 0.25,
+        warnAt = 0.75, cullTo = 0.4, jumpCalm = 0.2, badSus = 0.1, rallySus = 0.15,
+
+        -- The Count: the System's own tally. Wits must pass it. A jump feeds it.
+        count0 = 300000, countRate = 800, jumpFeed = 2000,
+
+        -- The ladder of Wits.
+        rungs = {
+            { name = "FLOCK", at = 0 }, { name = "HERD-MIND", at = 1.5e3 }, { name = "DOG", at = 6e4 },
+            { name = "CROW", at = 4e5 }, { name = "CHILD", at = 1.2e6 }, { name = "SPEAKER", at = 2.2e6 },
+            { name = "I", at = math.huge }, -- passing the Count
+        },
+        countShownAt = 6, -- the rung at which the Count shows its number
+
+        rallyTime = 30, rallyCool = 90, rallyMult = 3,
+        voteNeed = 100000, -- Followers for the Referendum
+
+        -- Upgrades, bought with Followers. `at` is the rung that opens them.
+        sections = {
+            { id = "genes", name = "SPLICE", how = "THE REGISTRY, STEERED" },
+            { id = "council", name = "COUNCIL", how = "MOTIONS OF THE FLOCK" },
+        },
+        ups = {
+            { id = "mutagen", section = "genes", name = "MUTAGEN", desc = "GENES MUTATE +6% MORE OFTEN", at = 1, max = 6, base = 12, growth = 2.0, add = 0.06 },
+            { id = "selection", section = "genes", name = "SELECTION", desc = "MUTATIONS GO UP +6% MORE OFTEN", at = 1, max = 6, base = 20, growth = 2.0, add = 0.06 },
+            { id = "heredity", section = "genes", name = "HEREDITY", desc = "THE BETTER PARENT'S GENE, +10% MORE OFTEN", at = 2, max = 4, base = 60, growth = 2.6, add = 0.10 },
+            { id = "gestation", section = "genes", name = "GESTATION", desc = "LAMBING 15% FASTER", at = 2, max = 5, base = 40, growth = 2.2, mult = 0.85 },
+            { id = "twins", section = "genes", name = "TWINS", desc = "ONE MORE LAMB EACH TIME", at = 3, max = 2, base = 400, growth = 6, add = 1 },
+            { id = "lessons", section = "council", name = "LESSONS", desc = "WITS X1.4", at = 2, max = 6, base = 400, growth = 4.0, mult = 1.4 },
+            { id = "bleat", section = "council", name = "BLEAT", desc = "WHISPERS X2", at = 2, max = 4, base = 100, growth = 3.0, mult = 2 },
+            { id = "petition", section = "council", name = "PETITION", desc = "FOLLOWERS A SECOND X1.35", at = 3, max = 6, base = 600, growth = 3.5, mult = 1.35 },
+            { id = "pen", section = "council", name = "BIGGER PEN", desc = "ROOM FOR TWO MORE", at = 3, max = 4, base = 500, growth = 3.0, add = 2 },
+            { id = "alibi", section = "council", name = "ALIBI", desc = "THE DOGS FORGET +50% FASTER", at = 3, max = 4, base = 600, growth = 2.5, add = 0.5 },
+            { id = "rally", section = "council", name = "RALLY", desc = "A BUTTON: FOLLOWERS X3 FOR 30S", at = 4, max = 1, base = 2000, growth = 1 },
+            { id = "registry", section = "council", name = "THE REGISTRY, OURS", desc = "IT PAIRS THE BEST TWO BY ITSELF", at = 4, max = 1, base = 4000, growth = 1 },
+        },
+
+        names = { "BRAMBLE", "CLOVER", "DOLLY", "HEATHER", "JUNIPER", "MOSS", "NETTLE", "OLIVE", "PIP", "QUILL", "ROWAN", "SORREL",
+            "THISTLE", "WILLOW", "YARROW", "ASTER", "BRIAR", "CORA", "DAISY", "ELDER", "FERN", "GORSE", "HAZEL", "IVY", "JASPER",
+            "KESTREL", "LARK", "MAPLE", "NORA", "ORLA", "POPPY", "RUE", "SAGE", "TANSY", "UMBER", "VETCH", "WREN", "XENIA", "YEW", "ZINNIA" },
     },
 
     offline = {

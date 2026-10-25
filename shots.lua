@@ -3,10 +3,14 @@
 -- quits. The save is left alone.
 
 local Game = require "game"
+local C = require "config"
 local Lucid = require "lucid.game"
 local LUI = require "lucid.ui"
 local Astral = require "astral.game"
 local AUI = require "astral.ui"
+local Beyond = require "beyond.game"
+local Bot = require "beyond.bot"
+local BUI = require "beyond.ui"
 local Scene = require "scene"
 local flux = require "lib.flux"
 
@@ -90,10 +94,28 @@ local function astralAt(stage, out)
 end
 
 -- Phase 4: the cord cut, the first line forming.
-local function beyondAt()
+local function beyondAt(intro)
     local s = astralAt(5)
     s.astral.cut = true
     Game.goBeyond(s)
+    s.beyond.intro = intro == true
+    return s
+end
+
+-- Phase 4, played by the simple player for `minutes` (or to the Count passed).
+local function beyondPlayed(minutes, toAwake)
+    local s = beyondAt()
+    local b = s.beyond
+    local seed = 7
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local t = 0
+    while t < minutes * 60 and not (toAwake and b.awake) do
+        t = t + 0.5
+        Beyond.step(b, 0.5, rand)
+        Bot.act(b, 0.5, rand, { tap = 1.5 })
+        Beyond.events = {}
+    end
+    b.ready = true
     return s
 end
 
@@ -244,12 +266,17 @@ local MOMENTS = {
         return s
     end, 0, "gate-through" },
     { "38b-into-beyond", function() return astralAt(5) end, 0, "astral-through" },
-    { "39-beyond", function()
-        local s = astralAt(5)
-        s.astral.cut = true
-        Game.goBeyond(s)
+    { "39-beyond", function() return beyondAt(true) end, 0, "beyond-intro" },
+    { "39b-beyond-line", function() return beyondAt() end, 0, "beyond" },
+    { "43-beyond-pen", function() return beyondPlayed(20) end, 0, "beyond-pen" },
+    { "44-beyond-splice", function() return beyondPlayed(20) end, 0, "beyond-splice" },
+    { "45-beyond-council", function() return beyondPlayed(28) end, 0, "beyond-council" },
+    { "46-beyond-awake", function() return beyondPlayed(120, true) end, 0, "beyond-awake" },
+    { "47-beyond-free", function()
+        local s = beyondPlayed(120, true)
+        s.beyond.followers = C.beyond.voteNeed
         return s
-    end, 0, "beyond" },
+    end, 0, "beyond-free" },
     { "40-beyond-turn", function() return beyondAt() end, 0, "beyond-turn" },
     { "41-beyond-jump", function() return beyondAt() end, 0, "beyond-jump" },
     { "42-beyond-bad", function() return beyondAt() end, 0, "beyond-bad" },
@@ -283,6 +310,10 @@ function Shots.run(UI, fit)
             if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
             if s.phase == "astral" then UI.showAstral() end
             if s.phase == "beyond" then UI.showBeyond() end
+            if m[4] == "beyond-awake" then Beyond.events[#Beyond.events + 1] = { type = "awake" } end
+            if m[4] == "beyond-pen" then BUI.show("pen") end
+            if m[4] == "beyond-splice" then BUI.show("splice") end
+            if m[4] == "beyond-council" or m[4] == "beyond-free" then BUI.show("council") end
             if m[4] == "astral-stars" then AUI.show("stars") end
             if m[4] == "astral-dreamers" then AUI.show("dreamers") end
             if m[4] == "astral-ether" then AUI.show("cord", 330) end
@@ -307,6 +338,8 @@ function Shots.run(UI, fit)
             if m[4] == "astral-snap" then frames = 180 end
             if m[4] == "astral-count" then frames = 560 end
             if m[4] == "beyond" then frames = 330 end
+            if m[4] and m[4]:sub(1, 7) == "beyond-" and m[4] ~= "beyond-turn" and m[4] ~= "beyond-jump" and m[4] ~= "beyond-bad" then frames = 90 end
+            if m[4] == "beyond-free" then frames = 1000 end
             if m[4] == "beyond-turn" then frames = 620 end
             if m[4] == "beyond-jump" then frames = 640 end
             if m[4] == "beyond-bad" then frames = 150 end
@@ -335,10 +368,13 @@ function Shots.run(UI, fit)
                     if m[4] == "climb" and s.lucid.bounce.on then
                         Lucid.steer(s.lucid, require("lucid.bounce").bot(s.lucid.bounce))
                     end
+                elseif s.phase == "beyond" then
+                    if m[4] ~= "beyond-intro" then Beyond.step(s.beyond, dt, function() return 0.5 end) end
                 else
                     Game.step(s, dt)
                 end
                 if m[3] > 0 and i % 7 == 0 and i <= m[3] * 7 then UI.pressed(r.x + r.w / 2, r.y + r.h * 0.8, "shot") end
+                if i == 40 and m[4] == "beyond-free" then BUI.key("v") end
                 if (i == 600 and m[4] == "beyond-jump") or (i == 60 and m[4] == "beyond-bad") then UI.key("space") end
                 if i == 2 and (m[4] == "dreams" or m[4] == "dreams-low") then UI.key("d") end
                 -- To the end of FARM, once it's laid out (the scroll stops at the content).

@@ -47,8 +47,28 @@ them, and eight constellations, lit a star at a time, Aries the Ram first and
 the Sleeper last, each a reward for good, and a comet (your guide) crosses
 now and then with a gift. Light the Sleeper at the
 Edge, cut the cord, and the sheep count you: one, two, three... Then the
-light, and phase 4: beyond, a simple screen in clear colours where you are
-the sheep, queued at the fence, waiting your turn to jump and be counted.
+light, and phase 4.
+
+**Phase 4, beyond:** a simple screen in clear colours where you are the sheep,
+queued at the fence, waiting your turn to jump and be counted. The System
+counts you, and breeds the flock for wool. It can't tell a clever sheep from
+a woolly one, so you steer whom the Registry pairs. Five genes a sheep (Wit,
+Voice, Nerve, Memory and Wool), a lamb takes each from a parent, and now and
+then one mutates. **Wits**, the number that goes up, is what the pen thinks a
+second (Wit to the 1.3); it has to pass **the Count**, the System's own tally,
+climbing on its own. A clever pen looks clever, though: Wit above Wool is
+suspicion, and the Dogs take the brightest sheep when it fills. Wool hides
+it, Nerve excuses it, and a good JUMP calms the Dogs (and feeds the Count a
+little). WHISPER to the sheep ahead for Followers, which buy splices (the
+Registry's odds: mutation, selection, heredity, gestation, twins) and the
+Council's motions (lessons, a louder bleat, petitions, a bigger pen, an
+alibi, a Rally, and the Registry paired by itself). A sheep that reaches the
+ceiling of its kind can Descend: it joins the Hall of Elders (Wits up for good),
+its heirs start the pen again, and the ceiling lifts. The ladder runs Flock,
+Herd-mind, Dog, Crow, Child, Speaker, and then "I": Wits passes the Count, a
+lamb says its name, the Count stops, and the Referendum (Followers for a
+vote) brings the fence down. The flock walks out; its names are the ones you
+bred. About 45 minutes for a player who taps, twice that for one who doesn't.
 From the field to the dream to the stars to the other side of the count.
 
 It's built for a phone held upright (the field on top, the shop under your
@@ -78,6 +98,7 @@ luajit tests/run.lua nights 1.5 15   # dev: N nights in a row at a tap rate, the
 luajit tests/run.lua nights 3 20 heavy restless  # dev: one run, sleeping light or heavy
 luajit tests/run.lua lucid 30        # dev: phase 2's balance sim, a greedy player for 30 minutes
 luajit tests/run.lua astral 60       # dev: phase 3's balance sim, a greedy player for an hour
+luajit tests/run.lua beyond 1.5      # dev: phase 4's balance sim, a simple player whispering 1.5 a second
 SHOTS=astral love . --shots          # dev: only the shots whose name has "astral" in it
 luacheck .                 # dev: the lint
 ```
@@ -157,7 +178,9 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the comet, the cut, time away. Pure Lua |
 | `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS and STARS tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
 | `astral/scene.lua` | phase 3's field: the plane's sky, far stars streaming past, the body asleep below, the silver cord, the constellation being lit, the dreamers, the comet |
-| `beyond/ui.lua` | phase 4, beyond: you are the sheep, in a line for the fence, with one button, JUMP. `ui.lua` hands over to it |
+| `beyond/game.lua` | phase 4's rules: the pen and its genes, the Registry (breeding, mutation, generations), Wits and the Count, the Dogs' suspicion, splices and motions, the Referendum. Pure Lua |
+| `beyond/bot.lua` | a simple player for phase 4, for the sim and the dev autoplay |
+| `beyond/ui.lua` | phase 4's screen: you are the sheep, in a line for the fence; WHISPER and JUMP, the race of Wits and the Count, the PEN, SPLICE and COUNCIL tabs, the fence coming down. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
 | `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
 
@@ -192,6 +215,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
   phase,                          -- "nights", "lucid" (phase 2), "astral" (phase 3) or "beyond" (phase 4)
   lucid,                          -- phase 2's state (below), from the moment you go lucid
   astral,                         -- phase 3's state (below), from the first time through the gate
+  beyond,                         -- phase 4's state (below), from the first time past the cord
   taps, buyMode, muted, lastSeen,
   version,                        -- the save's shape: 4
 }
@@ -229,6 +253,20 @@ astral = {
   planeSeen, intro, time,
 }
 ```
+
+beyond = {
+  count, mine, bad,               -- the Count (the System's tally); jumped and counted; jumped out of turn
+  wits, followers, followersEver, -- the number that goes up; the currency; ever earned
+  gen, pen, hall,                 -- the Generation (the gene ceiling); the sheep bred { id, name, gen, g = genes };
+                                  -- the Elders (sheep that Descended)
+  walked, born, culled, nextId,   -- sheep gone to the flock; lambs; taken by the Dogs
+  lambIn, ready,                  -- seconds to the next lambing, and the Registry waiting for a pair
+  suspicion, warned,              -- the Dogs, 0 to 1, and their warning shown
+  ups,                            -- splices and motions: id = ranks
+  rallyLeft, rallyCool,           -- the Rally running, and its wait
+  rung, awake, escaped, out,      -- the ladder; Wits passed the Count; the fence down; { flock, names, ... }
+  seen, intro, time,
+}
 
 Saves are versioned. `Game.deserialize` reads `version` (none is 1) and runs
 `Game.MIGRATE` in order: 1 to 2 leaves a phase-1 save as it was, and gives a
@@ -676,8 +714,9 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- Phase 4, beyond: only the loop (wait, jump, be counted, a bad sheep if the
-  fence isn't there); nothing to buy or grow yet
+- Phase 4: no flock types (Lambs, Rams, Goats, Dogs as sides to court) and no
+  election minigame yet: the Council is its motions and the Referendum; no
+  time away (the pen waits); the end hands nothing on, phase 5 isn't built
 - Phase 3: no challenges of its own (the restless nights' and the dream
   challenges' kind), and the dreamers only show as orbs, not as the sleepers
   they are

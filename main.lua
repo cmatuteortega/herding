@@ -28,6 +28,8 @@ local G = require "gfx"
 local Game = require "game"
 local Lucid = require "lucid.game"
 local Astral = require "astral.game"
+local Beyond = require "beyond.game"
+local Bot = require "beyond.bot"
 local C = require "config"
 local UI = require "ui"
 local Scene = require "scene"
@@ -248,6 +250,7 @@ function love.update(dt)
     while acc >= STEP and n < 4000 do
         if s.phase == "lucid" and s.lucid then Lucid.step(s.lucid, STEP)
         elseif s.phase == "astral" and s.astral then Astral.step(s.astral, STEP)
+        elseif s.phase == "beyond" and s.beyond then Beyond.step(s.beyond, STEP)
         elseif s.phase == "nights" then Game.step(s, STEP) end
         acc, n = acc - STEP, n + 1
     end
@@ -283,7 +286,22 @@ function love.update(dt)
         if tabFor ~= autoplay.tab then autoplay.tab = tabFor; UI.key(tostring(tabFor)) end
         if P.time >= autoplay.left then autoplay.done = true end
     elseif autoplay and s.phase == "beyond" then
-        autoplay.done = true
+        -- Phase 4: through the dialogs, then a simple player (beyond/bot.lua) twice a
+        -- second: it whispers, jumps to calm the Dogs, pairs the best two, buys the
+        -- cheapest splice or motion, descends, and votes once awake. Every ten
+        -- seconds the next tab, to see them all. Done when the fence is down.
+        local b = s.beyond
+        if require("beyond.ui").dialog() then UI.key("return") end
+        autoplay.botT = (autoplay.botT or 0) + dt * speed
+        while autoplay.botT >= 0.5 do
+            autoplay.botT = autoplay.botT - 0.5
+            local did = Bot.act(b, 0.5, nil, { tap = 1.5 })
+            if did.grow and Beyond.rank(b, did.grow) == 1 then autoplay.firsts[#autoplay.firsts + 1] = ("%s@%ds"):format(did.grow, b.time) end
+            if did.descend then autoplay.firsts[#autoplay.firsts + 1] = ("gen%d@%ds"):format(b.gen, b.time) end
+        end
+        local tabFor = math.floor(b.time / 10) % 3 + 1
+        if tabFor ~= autoplay.tab then autoplay.tab = tabFor; UI.key(tostring(tabFor)) end
+        if b.escaped or b.time >= autoplay.left then autoplay.done = true end
     elseif autoplay and s.phase == "lucid" then
         -- Phase 2: catch the golden sheep (take the frenzy), buy layers top
         -- down, build the first thing it can on the first free plot, grow the
@@ -363,7 +381,12 @@ function love.draw()
     love.graphics.draw(canvas, offX, offY, 0, zoom, zoom)
     if autoplay and autoplay.done then
         local s = UI.state()
-        if s.phase == "astral" or s.phase == "beyond" then
+        if s.phase == "beyond" then
+            local b = s.beyond
+            print(("autoplay, beyond: %ds, wits %s (%s/s), count %s, followers %s, gen %d, flock %d, culled %d, rung %s, escaped %s"):format(b.time,
+                N.format(b.wits), N.format(Beyond.witRate(b)), N.format(b.count), N.format(b.followers), b.gen, Beyond.flock(b), b.culled,
+                C.beyond.rungs[Beyond.rungOf(b)].name, tostring(b.escaped)))
+        elseif s.phase == "astral" then
             local P = s.astral
             local lit, all = Astral.litCount(P)
             print(("autoplay, astral: %ds, %s Ether, cord %s, reach %s, %d out, %d snapped, lit %d/%d, phase %s"):format(P.time,

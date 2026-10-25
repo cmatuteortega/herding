@@ -406,6 +406,37 @@ if arg[1] == "astral" then
     return
 end
 
+-- Phase 4's balance: a simple player (beyond/bot.lua) at a tap rate, the
+-- rungs and generations as they come, and when the fence comes down.
+local function beyondSim(tap)
+    local Beyond = require "beyond.game"
+    local Bot = require "beyond.bot"
+    local seed = 7
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local b = Beyond.fresh()
+    local t = 0
+    print(("phase 4, a player whispering %.1f a second:"):format(tap))
+    while not b.escaped and t < 4 * 3600 do
+        t = t + 0.5
+        Beyond.step(b, 0.5, rand)
+        Bot.act(b, 0.5, rand, { tap = tap })
+        for _, e in ipairs(Beyond.events) do
+            if e.type == "rung" or e.type == "descend" or e.type == "cull" or e.type == "awake" then
+                print(("  %4.1f min: %s %s (gen %d, %s Wits, %s Followers)"):format(t / 60, e.type,
+                    e.rung and Beyond.RUNGS[e.rung].name or "", b.gen, N.format(b.wits), N.format(b.followers)))
+            end
+        end
+        Beyond.events = {}
+    end
+    print(("  %s at %.1f min: %d sheep walked out, %d generations, %d taken by the Dogs"):format(
+        b.escaped and "the fence is down" or "still in the line", t / 60, Beyond.flock(b), b.gen, b.culled))
+end
+
+if arg[1] == "beyond" then
+    beyondSim(tonumber(arg[2]) or 1.5)
+    return
+end
+
 if arg[1] == "sim" then
     for _, r in ipairs({ 3, 1.5, 0.5 }) do sim(r) end
     nights(1.5, 12)
@@ -1137,12 +1168,17 @@ test("astral projection: through the gate, and saves", function()
     assert(Game.goBeyond(s)); eq(s.phase, "beyond")
     back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
     eq(back.phase, "beyond")
-    -- Phase 4's tally comes back whole, and a bad one comes back clean.
-    s.beyond = { count = 12, mine = 3, bad = 1 }
+    -- Phase 4's state comes back whole, and a bad one comes back clean.
+    assert(s.beyond and s.beyond.count > 0, "the Count has begun")
+    s.beyond.mine, s.beyond.bad, s.beyond.wits, s.beyond.gen = 3, 1, 1234, 2
     back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
-    eq(back.beyond.count, 12); eq(back.beyond.mine, 3); eq(back.beyond.bad, 1)
-    back = Game.deserialize({ version = 4, phase = "beyond", lucid = { gate = true }, astral = { cut = true }, beyond = { count = -5, mine = "x" } })
-    eq(back.beyond.count, 0); eq(back.beyond.mine, 0); eq(back.beyond.bad, 0)
+    eq(back.beyond.mine, 3); eq(back.beyond.bad, 1); eq(back.beyond.wits, 1234); eq(back.beyond.gen, 2)
+    eq(#back.beyond.pen, #s.beyond.pen)
+    back = Game.deserialize({ version = 4, phase = "beyond", lucid = { gate = true }, astral = { cut = true }, beyond = { count = -5, mine = "x", pen = "no" } })
+    eq(back.beyond.count, 0); eq(back.beyond.mine, 0); eq(back.beyond.bad, 0); eq(#back.beyond.pen, 3)
+    -- The old tally (before the Registry) still loads, with a pen.
+    back = Game.deserialize({ version = 4, phase = "beyond", lucid = { gate = true }, astral = { cut = true } })
+    eq(back.phase, "beyond"); eq(#back.beyond.pen, 3)
     assert(Game.backToStars(back)); eq(back.phase, "astral"); eq(back.astral.cut, false)
 end)
 test("astral projection: the cord", function()
@@ -1249,6 +1285,178 @@ test("astral projection: dreamers, stars, the comet, the end", function()
     P.cycleRate, P.out = 100, false
     local r = Astral.offline(P, 1000)
     close(N.toNumber(r.ether), 100 * 1000 * A.awayShare)
+end)
+test("beyond: the pen, the genes, the Count", function()
+    local Beyond = require "beyond.game"
+    local Bot = require "beyond.bot"
+    local K = C.beyond
+    local seed = 11
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local b = Beyond.fresh()
+    eq(#b.pen, #K.founders); eq(b.count, K.count0); eq(b.gen, 1); eq(Beyond.ceiling(b), K.ceil0)
+    -- Wits: Wit to the power, Memory on top.
+    local sh = b.pen[1]
+    sh.g.wit, sh.g.memory = 4, 5
+    close(Beyond.sheepWits(sh), 4 ^ K.witPow * (1 + K.memoryWits * 5))
+    -- Time: Wits and the Count both go up.
+    local w, c = b.wits, b.count
+    Beyond.step(b, 10, rand)
+    assert(b.wits > w, "Wits rise"); close(b.count - c, K.countRate * 10)
+    -- Whispers: Followers, a cooldown, a little suspicion.
+    local f = b.followers
+    assert(Beyond.whisper(b)); assert(b.followers > f); assert(not Beyond.whisper(b), "the cooldown")
+    Beyond.step(b, K.whisperCool + 0.01, rand)
+    assert(Beyond.whisper(b))
+    -- A good jump calms the Dogs and feeds the Count; a bad one the Dogs.
+    b.suspicion = 0.5
+    local before = b.count
+    Beyond.comply(b); close(b.suspicion, 0.5 - K.jumpCalm); close(b.count - before, K.jumpFeed); eq(b.mine, 1)
+    Beyond.misstep(b); eq(b.bad, 1); close(b.suspicion, 0.5 - K.jumpCalm + K.badSus)
+    -- Breeding: not before the lamb is ready, then a lamb under the ceiling, from the parents' genes.
+    local a, c2 = b.pen[1], b.pen[2]
+    assert(not Beyond.breed(b, a.id, c2.id, rand), "not ready")
+    Beyond.step(b, K.lambEvery, rand)
+    assert(b.ready); assert(not Beyond.breed(b, a.id, a.id, rand), "two different parents")
+    local n = #b.pen
+    assert(Beyond.breed(b, a.id, c2.id, rand)); eq(#b.pen, n + 1); eq(b.born, 1); assert(not b.ready)
+    local lamb = b.pen[#b.pen]
+    for _, g in ipairs(Beyond.GENES) do
+        assert(lamb.g[g.id] >= 0 and lamb.g[g.id] <= Beyond.ceiling(b))
+        assert(math.abs(lamb.g[g.id] - a.g[g.id]) <= math.abs(a.g[g.id] - c2.g[g.id]) + 1, "a gene from a parent, a step off at most")
+    end
+    -- A full pen: the dullest not a parent goes to the flock.
+    b.ups.pen = 0
+    while #b.pen < Beyond.penMax(b) do b.pen[#b.pen + 1] = { id = b.nextId, name = "X", gen = 1, g = { wit = 0, voice = 0, nerve = 0, memory = 0, wool = 0 } }; b.nextId = b.nextId + 1 end
+    b.ready = true
+    local walked = b.walked
+    assert(Beyond.breed(b, a.id, c2.id, rand)); eq(#b.pen, Beyond.penMax(b)); eq(b.walked, walked + 1)
+    assert(Beyond.sheepById(b, a.id) and Beyond.sheepById(b, c2.id), "the parents stay")
+    -- Twins.
+    b.ups.twins = 2; eq(Beyond.lambs(b), 3)
+    b.ups.twins = 0
+end)
+test("beyond: the Dogs", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local b = Beyond.fresh()
+    b.pen[1].g.wit, b.pen[1].g.wool = 6, 0
+    b.pen[2].g.wit, b.pen[2].g.wool = 6, 0
+    b.pen[3].g.wit, b.pen[3].g.wool = 6, 0
+    assert(Beyond.exposure(b) == 6)
+    local rise = Beyond.suspicionRise(b)
+    for _, sh in ipairs(b.pen) do sh.g.nerve = 4 end
+    assert(Beyond.suspicionRise(b) < rise, "nerve excuses")
+    for _, sh in ipairs(b.pen) do sh.g.nerve, sh.g.wool = 0, 6 end
+    eq(Beyond.exposure(b), 0); eq(Beyond.suspicionRise(b), 0)
+    -- Wool hides the wits: nothing rises.
+    Beyond.step(b, 600)
+    eq(b.suspicion, 0)
+    -- Bright and woolless: the warning, then the brightest is taken.
+    for _, sh in ipairs(b.pen) do sh.g.wool = 0 end
+    b.pen[2].g.wit = 9
+    local brightest = b.pen[2].id
+    local warned, culled
+    for _ = 1, 4000 do
+        Beyond.step(b, 1)
+        for _, e in ipairs(Beyond.events) do
+            if e.type == "warn" then warned = true end
+            if e.type == "cull" then culled = e.sheep end
+        end
+        Beyond.events = {}
+        if culled then break end
+    end
+    assert(warned and culled); eq(culled.id, brightest); eq(b.culled, 1); close(b.suspicion, K.cullTo, 0.05)
+    -- Never the last two.
+    b.pen = { b.pen[1], b.pen[2] }
+    b.suspicion = 1
+    Beyond.step(b, 1)
+    eq(#b.pen, 2)
+end)
+test("beyond: splices and motions", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local b = Beyond.fresh()
+    -- Shut until the rung; then bought with Followers, dearer each rank, up to the max.
+    eq(Beyond.upState(b, "lessons"), "shut"); assert(not Beyond.canGrow(b, "lessons"))
+    b.followers = 1e9
+    assert(Beyond.grow(b, "mutagen")); eq(Beyond.rank(b, "mutagen"), 1)
+    assert(Beyond.upPrice(b, "mutagen") > K.ups[1].base)
+    b.rung = 6
+    local m = Beyond.witMult(b)
+    assert(Beyond.grow(b, "lessons")); close(Beyond.witMult(b), m * Beyond.UP.lessons.mult)
+    for _ = 1, 20 do Beyond.grow(b, "gestation") end
+    eq(Beyond.rank(b, "gestation"), Beyond.UP.gestation.max); eq(Beyond.upState(b, "gestation"), "full")
+    assert(Beyond.lambTime(b) < K.lambEvery)
+    assert(not Beyond.grow(b, "gestation"), "full")
+    -- The Registry, ours: it pairs by itself.
+    assert(Beyond.grow(b, "registry"))
+    b.ready = true
+    local born = b.born
+    Beyond.step(b, 1)
+    eq(b.born, born + 1)
+    -- The Rally.
+    assert(not Beyond.canRally(b)); assert(Beyond.grow(b, "rally")); assert(Beyond.canRally(b))
+    local v = Beyond.whisperValue(b)
+    assert(Beyond.rally(b)); close(Beyond.whisperValue(b), v * K.rallyMult); assert(not Beyond.canRally(b))
+    Beyond.step(b, K.rallyTime + 1)
+    close(Beyond.whisperValue(b), v)
+end)
+test("beyond: generations and the end", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local seed = 5
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local b = Beyond.fresh()
+    assert(not Beyond.canDescend(b))
+    b.pen[1].g.wit = K.ceil0
+    assert(Beyond.canDescend(b))
+    local w = Beyond.witMult(b)
+    local elder = b.pen[1]
+    assert(Beyond.descend(b, rand))
+    eq(b.gen, 2); eq(Beyond.ceiling(b), K.ceil0 + K.ceilStep); eq(#b.hall, 1); eq(b.hall[1], elder)
+    eq(#b.pen, #K.founders); assert(Beyond.witMult(b) > w, "the elder's Wits stay")
+    for _, sh in ipairs(b.pen) do assert(sh.g.wit <= K.ceil0 * K.heirShare + 1, "the heirs start lower") end
+    -- The ladder, and the Count passed.
+    eq(Beyond.rungOf(b), 1)
+    b.wits = K.rungs[3].at; eq(Beyond.rungOf(b), 3)
+    b.wits = b.count + 1000
+    Beyond.step(b, 0.1, rand)
+    assert(b.awake); eq(Beyond.rungOf(b), #K.rungs); eq(Beyond.progress(b), 1)
+    local frozen = b.count
+    Beyond.step(b, 10, rand); eq(b.count, frozen)
+    -- The vote needs the Followers.
+    assert(not Beyond.canVote(b))
+    b.followers = K.voteNeed
+    assert(Beyond.canVote(b)); assert(Beyond.vote(b))
+    assert(b.escaped and b.out and b.out.flock == Beyond.flock(b) and #b.out.names == #b.pen + #b.hall)
+    local t = b.time
+    Beyond.step(b, 5, rand); eq(b.time, t) -- over
+    -- It all comes back from a save.
+    local json = require "lib.json"
+    local back = Beyond.deserialize(json.decode(json.encode(Beyond.serialize(b))))
+    assert(back.escaped and back.awake); eq(back.out.flock, b.out.flock); eq(#back.hall, 1); eq(back.hall[1].name, elder.name)
+    eq(back.gen, 2); eq(back.nextId, b.nextId)
+    -- A bad one is cleaned up.
+    back = Beyond.deserialize({ pen = { { id = 3, name = 5, g = { 99, -4, "x" } } }, ups = { lessons = 99, nope = 1 }, escaped = true })
+    eq(#back.pen, 1); eq(back.pen[1].g.voice, 0); eq(back.ups.lessons, Beyond.UP.lessons.max); assert(not back.escaped, "an end with no flock isn't one")
+    back = Beyond.deserialize(nil); eq(#back.pen, #K.founders)
+end)
+test("beyond: a bot plays it through", function()
+    local Beyond = require "beyond.game"
+    local Bot = require "beyond.bot"
+    local seed = 7
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local b = Beyond.fresh()
+    local t = 0
+    while not b.escaped and t < 3 * 3600 do
+        t = t + 0.5
+        Beyond.step(b, 0.5, rand)
+        Bot.act(b, 0.5, rand, { tap = 1.5 })
+        Beyond.events = {}
+    end
+    assert(b.escaped, "a player who taps gets out within three hours")
+    assert(t > 20 * 60 and t < 90 * 60, ("in an hour or so, not %d minutes"):format(t / 60))
+    assert(b.gen >= 3)
 end)
 test("lucid saves", function()
     local L = Lucid.fresh({ dreamPoints = 12, dreamEarned = 100 })

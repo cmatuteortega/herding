@@ -7,6 +7,7 @@ local C = require "config"
 local N = require "num"
 local Lucid = require "lucid.game"
 local Astral = require "astral.game"
+local Beyond = require "beyond.game"
 
 local floor, min, max = math.floor, math.min, math.max
 local function clamp(x, a, b) return min(b, max(a, x)) end
@@ -93,7 +94,7 @@ function Game.fresh()
         -- "nights" (counting sheep), or "lucid": past the first night
         -- shorter than C.lucid.under, phase 2 (lucid/game.lua), for good;
         -- "astral": past the Gate of Horn, phase 3 (astral/game.lua); or
-        -- "beyond": past the cut cord, phase 4 (beyond/ui.lua: we are the sheep).
+        -- "beyond": past the cut cord, phase 4 (beyond/game.lua: we are the sheep).
         phase = "nights",
         lucid = nil, -- phase 2's state, from the moment you go lucid
         astral = nil, -- phase 3's, from the first time through the gate
@@ -546,6 +547,7 @@ end
 function Game.goBeyond(s)
     if s.phase ~= "astral" or not (s.astral and s.astral.cut) then return false end
     s.phase = "beyond"
+    s.beyond = s.beyond or Beyond.fresh()
     return true
 end
 
@@ -579,6 +581,7 @@ function Game.serialize(s)
     o.sheep, o.runTotal, o.allTime = N.serialize(s.sheep), N.serialize(s.runTotal), N.serialize(s.allTime)
     o.lucid = s.lucid and Lucid.serialize(s.lucid) or nil
     o.astral = s.astral and Astral.serialize(s.astral) or nil
+    o.beyond = s.beyond and Beyond.serialize(s.beyond) or nil
     o.version = C.saveVersion
     o.lastSeen = os.time()
     return o
@@ -653,10 +656,12 @@ function Game.deserialize(o)
         s.astral = Astral.deserialize(o.astral)
     end
     if s.phase == "beyond" and not s.astral.cut then s.phase = "astral" end
-    -- Phase 4's state: the sheep counted, ours among them, and our bad jumps.
+    -- Phase 4's state: the Count, the pen, the Followers, from the first time
+    -- past the cord (a save from before has only the old tally).
     if type(o.beyond) == "table" then
-        s.beyond = {}
-        for _, k in ipairs({ "count", "mine", "bad" }) do s.beyond[k] = max(0, floor(tonumber(o.beyond[k]) or 0)) end
+        s.beyond = Beyond.deserialize(o.beyond)
+    elseif s.phase == "beyond" then
+        s.beyond = Beyond.fresh()
     end
     s.stage = max(s.stage, Game.stageOf(s))
     return s
