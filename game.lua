@@ -403,6 +403,19 @@ local function settle(s, night)
     end
 end
 
+-- Dev: the night ends now, as if the drowsiness had run out (a lucid dream
+-- if `lucid`), so the way out can be seen.
+function Game.fallAsleep(s, lucid)
+    if s.asleep or s.phase ~= "nights" then return false end
+    s.asleep, s.golden, s.lastNight = true, nil, s.runTime
+    emit({ type = "asleep" })
+    if lucid and not s.challenge then
+        s.lucidNight = true
+        emit({ type = "lucid" })
+    end
+    return true
+end
+
 -- One fixed step of `dt` seconds. `rand` gives 0..1 (the tests pass seeded dice).
 function Game.step(s, dt, rand)
     if s.asleep or s.phase ~= "nights" then return end

@@ -36,6 +36,8 @@ local banner = { y = 1, text = nil, sub = nil, till = 0 }
 local modal = nil -- { title, lines, big, button, onClose, night, y }
 local endingWaits = false
 local hintGone = { v = 0 }
+local intro = nil -- the way in, a new game's first moments: { t }
+local INTRO_FADE, INTRO_END = 4.2, 5.4 -- the words done, the night lifting; the field's
 
 -- The shop: a row per card, laid out by layoutShop; the pixels it is scrolled.
 local rows, contentH = {}, 0
@@ -107,7 +109,7 @@ function UI.setState(s)
     if beyond() then BUI.setState(s) end
     UI.setReduced(S.reducedMotion)
     shown = N.toNumber(S.sheep)
-    modal, endingWaits, UI.endingIn, banner.text, scroll = nil, false, nil, nil, 0
+    modal, endingWaits, UI.endingIn, banner.text, scroll, intro = nil, false, nil, nil, 0, nil
     tab, expanded = "night", {}
     seen, restlessSeen = {}, {}
     for _, it in ipairs(Game.ITEMS) do if Game.visible(S, it.id) then seen[it.id] = true end end
@@ -367,6 +369,14 @@ function UI.showEnding()
     })
 end
 
+-- The way in, phase 1: the night, the moon, a few words, then the field.
+-- Called for a new game (nothing to come back to).
+function UI.intro()
+    if not S or S.phase ~= "nights" or S.asleep then return end
+    intro = { t = reduced and INTRO_FADE or 0 }
+    UI.cue("dream")
+end
+
 -- Coming back to a save in phase 3.
 function UI.showAstral()
     if not astral() then return end
@@ -559,6 +569,7 @@ local function modalButton()
 end
 
 function UI.pressed(x, y, id)
+    if intro then intro = nil return end -- a tap lets the night lift at once
     if lucid() and not modal then return LUI.pressed(x, y, id) end
     if later() then return laterUI().pressed(x, y, id) end
     if modal then
@@ -663,6 +674,7 @@ function UI.wheel(dy)
 end
 
 function UI.key(key)
+    if intro then intro = nil return end
     if lucid() and not modal then return LUI.key(key) end
     if later() then return laterUI().key(key) end
     if modal then
@@ -685,6 +697,10 @@ end
 
 function UI.update(dt)
     t = t + dt
+    if intro then
+        intro.t = intro.t + dt
+        if intro.t > INTRO_END then intro = nil end
+    end
     if lucid() then return LUI.update(dt) end
     if later() then return laterUI().update(dt) end
     local real = N.toNumber(S.sheep)
@@ -1099,8 +1115,51 @@ local function drawModal()
     m.buttonRect = br
 end
 
+-- The way in: the field under a night of stars and the moon, the words, then
+-- the night lifts in dithered dust.
+local function drawIntro()
+    local p = intro.t
+    local Models = require "models"
+    if p < INTRO_FADE then
+        G.rect("n", 0, 0, vw, vh)
+        local rnd = love.math.newRandomGenerator(5)
+        for _ = 1, floor(vw * vh / 260) do
+            local x, y, ph = rnd:random(0, vw - 1), rnd:random(0, vh - 1), rnd:random() * 6.3
+            local tw = sin(t * 1.1 + ph)
+            if tw > -0.6 then G.rect(tw > 0.5 and "w" or "i", x, y, 1, 1) end
+        end
+        local m = Models.moon(9)
+        local rise = lume.clamp(p / 1.6, 0, 1)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(m.img, floor(vw / 2 + 34) - m.oi, floor(vh * 0.3 - (1 - rise) ^ 2 * 40) - m.oj)
+        local sp = Models.sheep(math.pi - 0.35, (not reduced and sin(t * 1.2) > 0) and 1 or 0, 0, "pj", true)
+        love.graphics.draw(sp.img, floor(vw / 2 - 6) - sp.oi, floor(vh * 0.3 + 30) - sp.oj)
+        local function say(text, at, y, z, k)
+            if p > at then
+                local dens = lume.clamp((p - at) / 0.5, 0, 1)
+                G.label(k, text, floor(vw / 2 - G.textWidth(text, z) / 2), y, z, reduced and 1 or dens, "o")
+            end
+        end
+        say("YOU CAN'T SLEEP.", 1.0, floor(vh * 0.55), 1, "l")
+        say("SO YOU COUNT SHEEP.", 1.9, floor(vh * 0.55) + 10, 1, "c")
+        say("COUNTING SHEEP", 2.8, floor(vh * 0.55) + 26, 2, "y")
+    else
+        local pts = {}
+        local d = 1 - (p - INTRO_FADE) / (INTRO_END - INTRO_FADE)
+        for y = 0, vh - 1 do
+            for x = 0, vw - 1 do if G.dither(x, y, d) then G.plot(pts, x, y) end end
+        end
+        G.points("n", pts)
+    end
+end
+
 -- Draws everything but the field's own picture, which main lays first.
 function UI.draw()
+    UI.drawScreen()
+    if intro then drawIntro() end
+end
+
+function UI.drawScreen()
     if lucid() and not modal then return LUI.draw() end
     if later() then return laterUI().draw() end
     local r = R.scene

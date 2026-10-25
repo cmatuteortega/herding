@@ -49,10 +49,14 @@ local dev = false -- any dev flag: the L key jumps to phase 2
 
 -- Dev: phase 2 now, as if a lucid night had just been slept, with the points a
 -- player usually brings (about twenty nights' worth earned, one night's held).
-local function jumpToLucid(s)
+local function bringPoints(s)
     s.dreams = math.max(s.dreams, 19)
     s.dreamEarned = math.max(s.dreamEarned, 7000)
     s.dreamPoints = math.max(s.dreamPoints, 750)
+end
+
+local function jumpToLucid(s)
+    bringPoints(s)
     s.phase, s.asleep = "lucid", false
     s.lucid = Lucid.fresh(s)
     s.dreamPoints = 0
@@ -77,47 +81,58 @@ local function resetAll(title, line)
     UI.newNight()
     UI.save()
     UI.banner(title or "A NEW GAME", line or "EVERYTHING WAS RESET")
+    UI.intro()
 end
 
 -- Dev: phase 3 now, through the gate, after a dream played the way a usual
 -- player plays it (to the gate).
-local function jumpToAstral(s)
+local function readyAstral(s)
     local L = s.lucid
     L.intro, L.gate = false, true
     L.sheepTotal, L.runs, L.best = N.max(L.sheepTotal, N.from(1e90)), N.max(L.runs, N.from(2e6)), math.max(L.best, 900)
     for _, c in ipairs(C.dream.challenges) do L.done[c.id] = true end
     s.allTime = N.max(s.allTime, N.from(3e14))
+end
+
+local function jumpToAstral(s)
+    readyAstral(s)
     Game.goAstral(s)
     UI.setState(s)
     UI.showAstral()
 end
 
 -- Dev: phase 4 now, the Sleeper lit and the cord cut.
-local function jumpToBeyond(s)
+local function readyBeyond(s)
     local P = s.astral
     for _, c in ipairs(Astral.CONSTELLATIONS) do P.lit[c.id] = #c.stars end
     P.intro, P.out, P.cut, P.paid = false, false, true, true
+end
+
+local function jumpToBeyond(s)
+    readyBeyond(s)
     Game.goBeyond(s)
     UI.setState(s)
     UI.showBeyond()
 end
 
--- Dev: the phase button beside reset, for testing: phase 1 to 2 (as if a lucid
--- night had just been slept), 2 to 3 (through the gate), 3 to 4 (the cord
--- cut), and 4 back to a new game at the first night.
+-- Dev: the phase button beside reset, for testing. Each phase plays its own
+-- ending first, and the next one starts when that is over: phase 1 falls
+-- asleep, a lucid night (its card, then the dream), 2 goes through the gate
+-- (Sheep-OS), 3 cuts the cord (the count, the light), and 4 goes back to a
+-- new game at the first night.
 local function nextPhase()
     local s = UI.state()
     Game.events, Lucid.events, Astral.events = {}, {}, {}
     if s.phase == "nights" then
-        Audio.setAsleep(false)
-        jumpToLucid(s)
+        if s.asleep then return end
+        bringPoints(s)
+        Game.fallAsleep(s, true)
     elseif s.phase == "lucid" then
-        Audio.setLucid(false)
-        jumpToAstral(s)
-        UI.save()
+        readyAstral(s)
+        require("lucid.ui").leave()
     elseif s.phase == "astral" then
-        jumpToBeyond(s)
-        UI.save()
+        readyBeyond(s)
+        require("astral.ui").leave()
     else
         resetAll("PHASE 1", "DEV: A NEW GAME")
     end
@@ -185,6 +200,7 @@ function love.load(args)
     end
     if autoplay then fresh, UI.noSave, dev = true, true, true end
     local s = not fresh and UI.load() or nil
+    local firstTime = s == nil
     UI.setState(s or Game.fresh())
     s = UI.state()
     Audio.setMuted(s.muted)
@@ -207,6 +223,7 @@ function love.load(args)
         UI.showEnding()
     else
         UI.away(os.difftime(os.time(), s.lastSeen))
+        if firstTime and not autoplay then UI.intro() end
     end
     if speed > 1 then print(("counting sheep: speed x%d"):format(speed)) end
 end
