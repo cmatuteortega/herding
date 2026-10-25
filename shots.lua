@@ -274,7 +274,7 @@ function Shots.run(UI, fit)
             if s.phase == "beyond" then UI.showBeyond() end
             if m[4] == "astral-stars" then AUI.show("stars") end
             if m[4] == "astral-dreamers" then AUI.show("dreamers") end
-            if m[4] == "astral-ether" then AUI.show("ether") end
+            if m[4] == "astral-ether" then AUI.show("cord", 330) end
             if m[4] == "astral-count" then AUI.leave() end
             if m[4] == "astral-through" then s.astral.paid = true; Astral.cutCord(s.astral) end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end

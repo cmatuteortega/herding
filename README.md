@@ -97,7 +97,7 @@ the dog. On UPGRADES, tap a card to grow it, or start its dream challenge.
 In astral projection, GO OUT and COME BACK under the field (or Space, or a
 tap on the field while in the body); while out, a tap on the dark (or B) is a
 breath, which calms a tug; tap the pulsing star to light it, and the comet to
-catch it (Space too). 1 / 2 / 3 / 4 pick CORD / DREAMERS / STARS / ETHER;
+catch it (Space too). 1 / 2 / 3 pick CORD / DREAMERS / STARS;
 on CORD, - and + set the Silver Thread's strain and TRANCE pauses going out.
 The arrow coming round in the top bar
 (every phase) resets everything and starts a new game from scratch, after
@@ -154,7 +154,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the flock counted over the fence, the nightmare |
 | `lucid/upgrades.lua` | the upgrades' pictures, for their cards |
 | `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the comet, the cut, time away. Pure Lua |
-| `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS, STARS and ETHER tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
+| `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS and STARS tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
 | `astral/scene.lua` | phase 3's field: the plane's sky, far stars streaming past, the body asleep below, the silver cord, the constellation being lit, the dreamers, the comet |
 | `beyond/ui.lua` | phase 4, beyond: a placeholder to stand in, cream and ink, the void or enlightenment. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |

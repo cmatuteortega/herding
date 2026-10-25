@@ -4,11 +4,10 @@
 --
 -- On top, the Ether; under the field, the cord: its strain as a bar (the
 -- Silver Thread's mark on it), and the button to go out or come back. Then
--- four tabs: CORD (the cord's upgrades, and letting go: the Thread and the
--- Trance), DREAMERS (the other sleepers, found out along the cord), STARS
--- (the constellations, lit a star at a time) and ETHER (the Ether's
--- upgrades, and at the end, cutting the cord). On the
--- field: tap the next star to light it, the comet to catch it, and the dark
+-- three tabs: CORD (every upgrade: the cord's, letting go (the Thread and
+-- the Trance), and the Ether's), DREAMERS (the other sleepers, found out
+-- along the cord) and STARS (the constellations, lit a star at a time, and
+-- after the last, cutting the cord). On the field: tap the next star to light it, the comet to catch it, and the dark
 -- while out to take a breath (it calms a tug), or at home to go out. The
 -- comet's gift, the way in, the time away and the way out (the sheep count
 -- you) are dialogs and banners.
@@ -40,7 +39,7 @@ local R = {}
 local t = 0
 local reduced = false
 
-local tab = "cord" -- or "dreamers", "stars", "ether"
+local tab = "cord" -- or "dreamers", "stars"
 local buyMax = false
 local rows, contentH, scroll, scrollV = {}, 0, 0, 0
 local press = nil
@@ -270,6 +269,7 @@ local function layout()
         add({ summary = true }, 31)
         section("cord")
         section("auto")
+        section("ether")
     elseif tab == "dreamers" then
         add({ header = "THEY DREAM WITH YOU, WHILE YOU'RE OUT", buy = true }, 10, 0)
         for k = 1, #Astral.DREAMERS do
@@ -284,8 +284,7 @@ local function layout()
         local n, all = Astral.litCount(P)
         add({ header = ("CONSTELLATIONS %d/%d: TAP ONE, THEN ITS STAR"):format(n, all) }, 10, 0)
         for _, c in ipairs(Astral.CONSTELLATIONS) do add({ con = c }, CARD_H) end
-    else
-        section("ether")
+        y = y + 2
         add({ header = "THE SILVER CORD" }, 10, 0)
         add({ cut = true }, CARD_H)
     end
@@ -417,8 +416,8 @@ function AUI.pressed(x, y, id)
         return
     end
     if inside(R.tabs, x, y) then
-        local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 4)) + 1, 1, 4)
-        local want = ({ "cord", "dreamers", "stars", "ether" })[k]
+        local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 3)) + 1, 1, 3)
+        local want = ({ "cord", "dreamers", "stars" })[k]
         if want ~= tab then tab, scroll = want, 0 end
         if want == "stars" then starSeen = Astral.litCount(P) end
         cue("click")
@@ -479,8 +478,8 @@ function AUI.key(key)
     end
     if key == "m" then AUI.pressed(R.mute.x + 1, R.mute.y + 1, "key")
     elseif key == "r" then AUI.pressed(R.motion.x + 1, R.motion.y + 1, "key")
-    elseif key == "1" or key == "2" or key == "3" or key == "4" then
-        AUI.pressed(R.tabs.x + (tonumber(key) - 0.5) * R.tabs.w / 4, R.tabs.y + 2, "key")
+    elseif key == "1" or key == "2" or key == "3" then
+        AUI.pressed(R.tabs.x + (tonumber(key) - 0.5) * R.tabs.w / 3, R.tabs.y + 2, "key")
     elseif key == "space" or key == "return" then
         if P.comet and Astral.catchComet(P) then cue("golden") else goOrBack() end
     elseif key == "b" then Astral.breathe(P)
@@ -645,8 +644,8 @@ end
 
 local function drawTabs()
     local r = R.tabs
-    local buttons = { { "CORD", tab == "cord" }, { "DREAMERS", tab == "dreamers" }, { "STARS", tab == "stars" }, { "ETHER", tab == "ether" } }
-    local w = floor((r.w - 4) / 4)
+    local buttons = { { "CORD", tab == "cord" }, { "DREAMERS", tab == "dreamers" }, { "STARS", tab == "stars" } }
+    local w = floor((r.w - 2 * (#buttons - 1)) / #buttons)
     for i, b in ipairs(buttons) do
         local x = r.x + (i - 1) * (w + 2)
         local on = b[2]
@@ -655,10 +654,10 @@ local function drawTabs()
         local s = b[1]
         if G.textWidth(s) > w - 4 then s = s:sub(1, 5) end
         centred(on and "k" or "l", s, x + w / 2, r.y + 4)
-        -- Something to find there, a rose mark: a star that can be lit, on
-        -- STARS; the cord that can be cut, on ETHER.
-        local mark = (i == 3 and Astral.canLight(P, Astral.skyCon(P)) and Astral.litCount(P) == starSeen)
-            or (i == 4 and Astral.canCut(P))
+        -- Something to find there, a rose mark on STARS: a star that can be
+        -- lit, or the cord that can be cut.
+        local mark = i == 3 and (Astral.canLight(P, Astral.skyCon(P)) and Astral.litCount(P) == starSeen
+            or Astral.canCut(P))
         if not on and mark and (reduced or sin(t * 4) > -0.5) then G.art({ "r", "r", "r", ".", "r" }, x + 4, r.y + 3) end
     end
 end
