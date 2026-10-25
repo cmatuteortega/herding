@@ -27,6 +27,9 @@
 -- opens motions, and the Referendum wants a majority of them. Time away goes
 -- on at a share, with the Dogs waiting. Out the other side, each sheep is a
 -- class by its strongest gene: the handoff to phase 5.
+-- It all opens bit by bit: at first the line and a JUMP, then whispering, then
+-- Wits and the race, the PEN, SPLICE and the COUNCIL (config unlock). Each opens
+-- for good; until then the rules refuse it too, so the screen and the bot agree.
 -- The state is `s.beyond`; the three numbers from before (count, mine, bad)
 -- are still in it.
 
@@ -54,6 +57,9 @@ local FLOCKS, FLOCK = B.flocks, {}
 for i, f in ipairs(FLOCKS) do FLOCK[f.id] = i end
 Beyond.FLOCKS, Beyond.FLOCK = FLOCKS, FLOCK
 local E = B.election
+
+-- What opens, in order.
+Beyond.UNLOCKS = { "whisper", "wits", "pen", "splice", "council" }
 
 -- What happened, for the screen and the sound: { type = ..., ... }.
 Beyond.events = {}
@@ -92,6 +98,7 @@ function Beyond.fresh()
         rung = 1, -- the deepest rung reached
         awake = false, escaped = false,
         out = nil, -- the flock that walked out: { flock, names }
+        open = {}, -- id = true: what the screen has opened (UNLOCKS)
         seen = {}, -- the notes the screen has shown, once each
         intro = true,
         time = 0,
@@ -102,6 +109,26 @@ end
 
 local function rank(b, id) return b.ups[id] or 0 end
 Beyond.rank = rank
+
+function Beyond.isOpen(b, id) return b.open[id] == true end
+
+-- Whether each thing is due to open, by where the player has got to.
+local WHEN = {
+    whisper = function(b) return b.mine >= B.unlock.whisper end,
+    wits = function(b) return b.mine >= B.unlock.wits end,
+    pen = function(b) return b.open.wits and b.wits >= B.unlock.pen end,
+    splice = function(b) return b.open.pen and b.followersEver >= B.unlock.splice end,
+    council = function(b) return b.open.pen and b.rung >= B.unlock.council end,
+}
+
+local function unlock(b)
+    for _, id in ipairs(Beyond.UNLOCKS) do
+        if not b.open[id] and WHEN[id](b) then
+            b.open[id] = true
+            emit({ type = "open", id = id })
+        end
+    end
+end
 
 -- What a sheep is for: its strongest gene (the first of them, in the genes' order).
 function Beyond.classOf(sh)
@@ -220,6 +247,7 @@ end
 function Beyond.upState(b, id)
     local u = UP[id]
     if rank(b, id) >= u.max then return "full" end
+    if not b.open[u.section == "genes" and "splice" or "council"] then return "shut" end
     if b.rung < u.at or b.seats < (u.seat or 0) then return "shut" end
     return "open"
 end
@@ -246,7 +274,7 @@ end
 
 --- the flocks --------------------------------------------------------------------------------
 
-function Beyond.flockOpen(b, id) return b.rung >= FLOCKS[FLOCK[id]].at end
+function Beyond.flockOpen(b, id) return b.open.council == true and b.rung >= FLOCKS[FLOCK[id]].at end
 
 function Beyond.setCourt(b, id)
     if not FLOCK[id] or not Beyond.flockOpen(b, id) then return false end
@@ -265,7 +293,7 @@ end
 
 -- A whisper at the sheep ahead: Followers, and the Dogs hear a little.
 function Beyond.whisper(b)
-    if b.whisperCool > 0 or b.escaped then return false end
+    if b.whisperCool > 0 or b.escaped or not b.open.whisper then return false end
     local v = Beyond.whisperValue(b)
     b.followers, b.followersEver = b.followers + v, b.followersEver + v
     b.suspicion = b.suspicion + B.whisperSus
@@ -335,7 +363,7 @@ local function dullest(b, a, c)
 end
 
 function Beyond.canBreed(b, ida, idc)
-    if not b.ready or b.escaped or ida == idc then return false end
+    if not b.ready or b.escaped or ida == idc or not b.open.pen then return false end
     return Beyond.sheepById(b, ida) ~= nil and Beyond.sheepById(b, idc) ~= nil
 end
 
@@ -399,7 +427,7 @@ end
 
 function Beyond.canDescend(b)
     local e = Beyond.eldest(b)
-    return e ~= nil and e.g.wit >= Beyond.ceiling(b) and not b.escaped
+    return e ~= nil and e.g.wit >= Beyond.ceiling(b) and not b.escaped and b.open.pen == true
 end
 
 -- A sheep has reached the limit of its kind: it joins the elders, the rest of
@@ -478,7 +506,7 @@ function Beyond.electionCost(b) return floor(E.cost * E.costGrowth ^ b.seats) en
 -- "locked", "full", "wait", "poor" or "open".
 function Beyond.electionState(b)
     if b.seats >= B.seatsMax then return "full" end
-    if b.rung < E.at then return "locked" end
+    if b.rung < E.at or not b.open.council then return "locked" end
     if b.election then return "on" end
     if b.electionCool > 0 then return "wait" end
     if b.followers < Beyond.electionCost(b) then return "poor" end
@@ -610,6 +638,7 @@ function Beyond.step(b, dt, rand)
         b.rung = r
         emit({ type = "rung", rung = r })
     end
+    unlock(b)
 end
 
 --- time away ----------------------------------------------------------------------------------------------------------
@@ -666,7 +695,8 @@ function Beyond.serialize(b)
     o.workers, o.loyal = {}, {}
     for _, g in ipairs(GENES) do o.workers[g.id] = b.workers[g.id] end
     for _, f in ipairs(FLOCKS) do o.loyal[f.id] = b.loyal[f.id] end
-    o.ups, o.seen = {}, {}
+    o.ups, o.seen, o.open = {}, {}, {}
+    for id, v in pairs(b.open) do if v then o.open[id] = true end end
     for id, k in pairs(b.ups) do o.ups[id] = k end
     for id, v in pairs(b.seen) do if v then o.seen[id] = true end end
     return o
@@ -720,6 +750,12 @@ function Beyond.deserialize(o)
     b.nextId = max(top + 1, floor(num(o.nextId, 1, 1)))
     if type(o.ups) == "table" then
         for id, u in pairs(UP) do b.ups[id] = floor(num(o.ups[id], 0, 0, u.max)) end
+    end
+    -- What was open stays open. A save from before it was gated, well along, has all of it.
+    if type(o.open) == "table" then
+        for _, id in ipairs(Beyond.UNLOCKS) do if o.open[id] == true then b.open[id] = true end end
+    elseif b.time > 120 then
+        for _, id in ipairs(Beyond.UNLOCKS) do b.open[id] = true end
     end
     if type(o.seen) == "table" then
         for id, v in pairs(o.seen) do if v == true and type(id) == "string" then b.seen[id] = true end end

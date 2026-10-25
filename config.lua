@@ -549,6 +549,12 @@ return {
         },
         countShownAt = 6, -- the rung at which the Count shows its number
 
+        -- What the screen shows, bit by bit: at first the line and a JUMP, and the rest
+        -- comes as you go. Each opens for good: whispering after this many counted
+        -- jumps, Wits and the race after this many, the PEN at these Wits, SPLICE once
+        -- this many Followers were earned, the COUNCIL at this rung.
+        unlock = { whisper = 3, wits = 6, pen = 300, splice = 12, council = 2 },
+
         rallyTime = 30, rallyCool = 90, rallyMult = 3,
         voteNeed = 100000, -- Followers for the Referendum
         voteSeats = 3, -- and a majority of the Council's five seats

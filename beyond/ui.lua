@@ -138,6 +138,17 @@ local function say(text, x, y)
 end
 
 local function fmt(v, d) return N.format(v, d) end
+local function isOpen(id) return Bd.open[id] == true end
+
+-- The tabs that have opened, in order.
+local TABS = { { "pen", "PEN" }, { "splice", "SPLICE" }, { "council", "COUNCIL" } }
+local function tabList()
+    local list = {}
+    for _, tb in ipairs(TABS) do
+        if isOpen(tb[1]) then list[#list + 1] = tb end
+    end
+    return list
+end
 local function pct(v) return floor(v * 100 + 0.5) .. "%" end
 
 --- banners and dialogs ---------------------------------------------------------------------------
@@ -168,11 +179,10 @@ local function introModal()
     showModal({
         title = "BEYOND",
         lines = {
-            "YOU ARE A SHEEP IN THE LINE AT THE FENCE. THE SYSTEM COUNTS YOU, AND BREEDS YOU FOR WOOL.",
-            "WHISPER TO THE SHEEP AHEAD FOR FOLLOWERS. STEER THE REGISTRY, SO THE CLEVER BREED WITH THE CLEVER. WITS MUST PASS THE COUNT.",
-            "BUT A CLEVER PEN LOOKS CLEVER: KEEP SOME WOOL ON IT, AND JUMP NOW AND THEN TO CALM THE DOGS.",
+            "YOU ARE A SHEEP IN THE LINE AT THE FENCE. THE SYSTEM COUNTS EVERY ONE OF YOU.",
+            "THE LINE MOVES UP. WHEN THE FENCE IS RIGHT IN FRONT OF YOU, JUMP.",
         },
-        big = "ESCAPE THE HERD",
+        big = "WAIT YOUR TURN",
         buttons = { { label = "BAA", fn = function() Bd.intro = false; BUI.save() end } },
     })
 end
@@ -334,7 +344,7 @@ local function actionList()
     local rallying = Beyond.rallying(Bd)
     if Bd.election then
         list[#list + 1] = { id = "bleat", label = "BLEAT", sub = "HOLD THE ROOM", ok = true, hot = true, fn = BUI.bleat }
-    else
+    elseif isOpen("whisper") then
         list[#list + 1] = { id = "whisper", label = "WHISPER", sub = "+" .. fmt(Beyond.whisperValue(Bd), true), ok = not Bd.escaped, fn = BUI.whisper }
     end
     list[#list + 1] = { id = "jump", label = "JUMP", sub = turn() and "YOUR TURN" or nil, ok = not Bd.escaped, hot = turn(), fn = BUI.jump }
@@ -346,6 +356,11 @@ local function actionList()
         list[#list + 1] = { id = "vote", label = "VOTE", sub = fmt(B.voteNeed), ok = Beyond.canVote(Bd), hot = Beyond.canVote(Bd), fn = BUI.vote }
     end
     local r = R.actions
+    if #list == 1 then
+        -- The jump alone, the whole width and then some: it's all there is.
+        r = rect(R.stats.x, R.stats.y, R.stats.w, R.actions.y + R.actions.h - R.stats.y)
+        list[1].big = true
+    end
     local w = floor((r.w - 3 * (#list - 1)) / #list)
     for i, b in ipairs(list) do b.rect = rect(r.x + (i - 1) * (w + 3), r.y, w, r.h) end
     return list
@@ -383,6 +398,13 @@ function BUI.pressed(x, y, id)
         end
         return
     end
+    for _, b in ipairs(actionList()) do
+        if inside(b.rect, x, y) then
+            down[b.id] = 0.15
+            b.fn()
+            return
+        end
+    end
     if inside(R.mute, x, y) then
         S.muted = not S.muted
         Audio.setMuted(S.muted)
@@ -406,16 +428,9 @@ function BUI.pressed(x, y, id)
         cue("click")
         Audio.setBeyond(false)
         BUI.nextPhase()
-    elseif inside(R.actions, x, y) then
-        for _, b in ipairs(actionList()) do
-            if inside(b.rect, x, y) then
-                down[b.id] = 0.15
-                b.fn()
-                return
-            end
-        end
-    elseif inside(R.tabs, x, y) then
-        setTab(({ "pen", "splice", "council" })[lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 3)) + 1, 1, 3)])
+    elseif inside(R.tabs, x, y) and #tabList() > 0 then
+        local list = tabList()
+        setTab(list[lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / #list)) + 1, 1, #list)][1])
     elseif inside(R.scene, x, y) then
         if Bd.election then
             if smearRect and inside({ x = R.scene.x + smearRect.x, y = R.scene.y + smearRect.y, w = smearRect.w, h = smearRect.h }, x, y) and Beyond.swat(Bd) then
@@ -424,7 +439,7 @@ function BUI.pressed(x, y, id)
             else
                 BUI.bleat()
             end
-        else
+        elseif isOpen("whisper") then
             BUI.whisper()
         end
     elseif inside(R.panel, x, y) then
@@ -471,7 +486,9 @@ function BUI.key(key)
     elseif (key == "space" or key == "return") and Bd.election then down.bleat = 0.15; BUI.bleat()
     elseif key == "space" or key == "return" then down.jump = 0.15; BUI.jump()
     elseif key == "w" then down.whisper = 0.15; if Bd.election then BUI.bleat() else BUI.whisper() end
-    elseif key == "1" or key == "2" or key == "3" then setTab(({ "pen", "splice", "council" })[tonumber(key)])
+    elseif key == "1" or key == "2" or key == "3" then
+        local tb = tabList()[tonumber(key)]
+        if tb then setTab(tb[1]) end
     elseif key == "b" then breed()
     elseif key == "v" then BUI.vote()
     elseif key == "down" or key == "pagedown" then BUI.wheel(-2)
@@ -506,6 +523,15 @@ end
 
 local RUNG_SUB = { nil, "THE FLOCK THINKS AS ONE", "A DOG'S SENSE OF A PLAN", "TOOLS, AND TRICKS", "WHY, ASKS A LAMB", "THE COUNT SHOWS ITS NUMBER" }
 
+-- What each opening says.
+local OPENED = {
+    whisper = { "A WHISPER", "TAP THE SCENE TO WHISPER AT THE SHEEP AHEAD" },
+    wits = { "YOUR WITS", "THE FLOCK THINKS, A LITTLE. THE COUNT COUNTS TOO" },
+    pen = { "THE REGISTRY", "STEER WHOM THE SYSTEM PAIRS" },
+    splice = { "SPLICE", "SPEND FOLLOWERS ON BETTER ODDS" },
+    council = { "THE COUNCIL", "SEATS, FLOCKS AND MOTIONS" },
+}
+
 local function drain()
     local ev = Beyond.events
     Beyond.events = {}
@@ -513,7 +539,11 @@ local function drain()
         if e.type == "rung" and e.rung < #B.rungs then
             showBanner(B.rungs[e.rung].name, RUNG_SUB[e.rung])
             cue("star")
-        elseif e.type == "warn" then
+        elseif e.type == "open" then
+            local o = OPENED[e.id]
+            showBanner(o[1], o[2])
+            cue("star")
+        elseif e.type == "warn" and isOpen("whisper") then
             showBanner("THE DOGS ARE SNIFFING", "JUMP, OR HIDE THE WITS UNDER WOOL")
             cue("nope")
         elseif e.type == "cull" then
@@ -524,7 +554,7 @@ local function drain()
             showBanner("GENERATION " .. e.gen, e.elder.name .. " JOINS THE ELDERS")
         elseif e.type == "lamb" then
             cue("bleat")
-        elseif e.type == "ready" then
+        elseif e.type == "ready" and isOpen("pen") then
             cue("click")
         elseif e.type == "election" then
             showBanner("THE SPEECH", "BLEAT TO HOLD THE ROOM. SWAT THE SMEARS")
@@ -552,6 +582,10 @@ function BUI.update(dt)
         if down[k] <= 0 then down[k] = nil end
     end
     drain()
+    if not isOpen(tab) then
+        local l = tabList()
+        tab = l[1] and l[1][1] or "pen"
+    end
     if banner.text and t > banner.till then banner.text = nil end
     if not press then
         scroll = lume.clamp(scroll + scrollV * dt, 0, maxScroll())
@@ -894,12 +928,16 @@ end
 
 local function drawTop()
     local r = R.top
-    local s = "WITS " .. fmt(Bd.wits)
-    G.box(r.x + 1, r.y + 1, G.textWidth(s) + 6, 11, "m", "s")
-    G.text("o", s, r.x + 4, r.y + 4)
-    local gx = r.x + G.textWidth(s) + 12
-    local g = "GEN " .. Bd.gen
-    if gx + G.textWidth(g) < R.phase.x - 2 then G.text("s", g, gx, r.y + 4) end
+    if isOpen("wits") then
+        local s = "WITS " .. fmt(Bd.wits)
+        G.box(r.x + 1, r.y + 1, G.textWidth(s) + 6, 11, "m", "s")
+        G.text("o", s, r.x + 4, r.y + 4)
+        local gx = r.x + G.textWidth(s) + 12
+        local g = "GEN " .. Bd.gen
+        if isOpen("pen") and gx + G.textWidth(g) < R.phase.x - 2 then G.text("s", g, gx, r.y + 4) end
+    else
+        G.text("s", "BEYOND", r.x + 4, r.y + 4)
+    end
     local m = R.mute
     G.box(m.x + 1, m.y + 1, m.w - 2, m.h - 2, "w", "s")
     G.art({ "...oo", "..o.o", "..o..", "..o..", ".oo..", "ooo..", ".o..." }, m.x + 6, m.y + 3)
@@ -925,6 +963,16 @@ end
 -- Under the view: the race. Wits against the Count, on a log scale, and the rung we are on.
 local function drawRace()
     local r = R.line
+    if not isOpen("wits") then
+        -- Before the race: where we stand in the line.
+        G.text("s", "LINE", r.x, r.y + 4)
+        local text = turn() and "YOUR TURN!" or (pos == 0 and "ALMOST THERE" or (pos .. " SHEEP AHEAD"))
+        local bx = r.x + 24
+        local bw = r.x + r.w - bx
+        G.box(bx, r.y + 1, bw, 11, turn() and "y" or "w", "s")
+        centred("o", text, bx + bw / 2, r.y + 4)
+        return
+    end
     local rung = B.rungs[Beyond.rungOf(Bd)]
     local countText = Beyond.countShown(Bd) and ("COUNT " .. fmt(Bd.count)) or "COUNT ???"
     if Bd.awake then countText = "COUNT " .. fmt(Bd.count) .. " (STOPPED)" end
@@ -942,6 +990,7 @@ local function drawRace()
 end
 
 local function drawStats()
+    if not isOpen("whisper") then return end
     local r = R.stats
     G.box(r.x, r.y, r.w, r.h, "w", "s")
     local rate = Beyond.followerRate(Bd)
@@ -974,6 +1023,11 @@ local function drawActions()
         if b.id == "vote" and b.ok then fill = (reduced or floor(t * 4) % 2 == 0) and "r" or "y" end
         G.box(rc.x + 1, rc.y + 1 + lift, rc.w - 2, rc.h - 2, fill, "o")
         G.rect("w", rc.x + 2, rc.y + 2 + lift, rc.w - 4, 1)
+        if b.big then
+            centred("o", b.label, rc.x + rc.w / 2, rc.y + floor(rc.h / 2) - 8 + lift, 3)
+            centred("p", turn() and "NOW!" or "WHEN THE FENCE IS RIGHT THERE", rc.x + rc.w / 2, rc.y + rc.h - 10 + lift)
+            goto continue
+        end
         local lw = G.textWidth(b.label)
         if lw > rc.w - 4 then b.label = b.label:sub(1, max(3, floor((rc.w - 4) / 4))) end
         if b.sub then
@@ -982,6 +1036,7 @@ local function drawActions()
         else
             centred("o", b.label, rc.x + rc.w / 2, rc.y + 6 + lift)
         end
+        ::continue::
     end
 end
 
@@ -994,11 +1049,14 @@ end
 
 local function drawTabs()
     local r = R.tabs
-    local buttons = {
-        { "PEN", tab == "pen", Bd.ready or Beyond.canDescend(Bd) },
-        { "SPLICE", tab == "splice", anyAffordable("genes") },
-        { "COUNCIL", tab == "council", anyAffordable("council") or Beyond.canVote(Bd) or Beyond.canRun(Bd) },
+    local marks = {
+        pen = Bd.ready or Beyond.canDescend(Bd),
+        splice = anyAffordable("genes"),
+        council = anyAffordable("council") or Beyond.canVote(Bd) or Beyond.canRun(Bd),
     }
+    local buttons = {}
+    for _, tb in ipairs(tabList()) do buttons[#buttons + 1] = { tb[2], tab == tb[1], marks[tb[1]] } end
+    if #buttons == 0 then return end
     local w = floor((r.w - 2 * (#buttons - 1)) / #buttons)
     for i, b in ipairs(buttons) do
         local x = r.x + (i - 1) * (w + 2)
@@ -1016,6 +1074,7 @@ local CARD_H = 30
 local function layout()
     rows = {}
     local y = 0
+    if #tabList() == 0 then contentH = 0 return end
     local function add(row, h, gap)
         row.y, row.h = y, h
         rows[#rows + 1] = row
@@ -1252,7 +1311,32 @@ local function drawFlock(row, x, y, w)
     for i = 1, min(2, #lines) do G.text(open and "p" or "s", lines[i], tx, y + 8 + i * 6) end
 end
 
+-- Before the tabs: a word on what to do, and how far to the next thing.
+local function drawHint()
+    local r = R.panel
+    local text, n, goal
+    if not isOpen("whisper") then
+        text, n, goal = "WAIT IN THE LINE. WHEN THE FENCE IS RIGHT IN FRONT OF YOU, JUMP.", Bd.mine, B.unlock.whisper
+    elseif not isOpen("wits") then
+        text, n, goal = "THE SHEEP AHEAD LISTEN. WHISPER TO THEM, AND KEEP JUMPING.", Bd.mine, B.unlock.wits
+    else
+        text = "THE FLOCK THINKS, A LITTLE. KEEP WHISPERING."
+    end
+    local lines = G.wrap(text, r.w - 16)
+    local h = 10 + #lines * 7 + (goal and 12 or 0)
+    G.box(r.x + 1, r.y + 1, r.w - 2, min(r.h - 2, h), "w", "s")
+    for i, l in ipairs(lines) do G.text("p", l, r.x + 8, r.y + 6 + (i - 1) * 7) end
+    if goal then
+        local dy = r.y + 6 + #lines * 7 + 2
+        for i = 1, goal do
+            G.rect(i <= n and "y" or "b", r.x + 8 + (i - 1) * 7, dy, 5, 4)
+        end
+        G.text("s", "JUMPS", r.x + 8 + goal * 7 + 3, dy - 1)
+    end
+end
+
 local function drawPanel()
+    if #tabList() == 0 then drawHint() return end
     local r = R.panel
     love.graphics.push("all")
     love.graphics.setScissor(r.x - 3, r.y, r.w + 6, r.h)

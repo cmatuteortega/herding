@@ -20,10 +20,13 @@ function Bot.act(b, dt, rand, opts)
         b.botTap = b.botTap - 1
         if Beyond.whisper(b) then did.whisper = (did.whisper or 0) + 1 end
     end
+    -- It jumps when the Dogs need calming, and while there's little else to do (the
+    -- line comes round every ten seconds or so).
     b.botJump = (b.botJump or 0) - dt
-    if (b.suspicion > (opts.calmAt or 0.5)) and b.botJump <= 0 then
+    local early = not Beyond.isOpen(b, "pen")
+    if (b.suspicion > (opts.calmAt or 0.5) or early) and b.botJump <= 0 then
         Beyond.comply(b)
-        b.botJump = opts.jump or 6
+        b.botJump = early and 10 or (opts.jump or 6)
         did.jump = true
     end
     if Beyond.canRally(b) then Beyond.rally(b) did.rally = true end

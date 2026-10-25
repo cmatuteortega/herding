@@ -1291,13 +1291,62 @@ test("astral projection: dreamers, stars, the comet, the end", function()
     local r = Astral.offline(P, 1000)
     close(N.toNumber(r.ether), 100 * 1000 * A.awayShare)
 end)
+-- Phase 4 with everything on the screen opened (the tests that aren't about opening).
+local function opened(b)
+    for _, id in ipairs(require("beyond.game").UNLOCKS) do b.open[id] = true end
+    return b
+end
+test("beyond: it opens bit by bit", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local b = Beyond.fresh()
+    -- At first the line and a jump: nothing else works, or shows.
+    for _, id in ipairs(Beyond.UNLOCKS) do assert(not Beyond.isOpen(b, id)) end
+    assert(not Beyond.whisper(b), "no whispering yet")
+    b.ready = true
+    assert(not Beyond.breed(b, b.pen[1].id, b.pen[2].id), "no Registry yet")
+    b.followers = 1e9
+    assert(not Beyond.grow(b, "mutagen"), "no splices yet")
+    for _ = 1, K.unlock.whisper - 1 do Beyond.comply(b) end
+    Beyond.step(b, 0.1); assert(not Beyond.isOpen(b, "whisper"))
+    Beyond.comply(b)
+    Beyond.step(b, 0.1)
+    assert(Beyond.isOpen(b, "whisper")); assert(not Beyond.isOpen(b, "wits"))
+    local opens = {}
+    for _, e in ipairs(Beyond.events) do if e.type == "open" then opens[#opens + 1] = e.id end end
+    eq(table.concat(opens, ","), "whisper"); Beyond.events = {}
+    assert(Beyond.whisper(b))
+    -- Wits and the race after a few more; the pen at its Wits; splices once Followers came; the council at its rung.
+    for _ = 1, K.unlock.wits do Beyond.comply(b) end
+    Beyond.step(b, 0.1); assert(Beyond.isOpen(b, "wits")); assert(not Beyond.isOpen(b, "pen"))
+    b.wits = K.unlock.pen
+    Beyond.step(b, 0.1); assert(Beyond.isOpen(b, "pen"))
+    assert(not Beyond.isOpen(b, "splice"), "not enough Followers yet")
+    b.followersEver = K.unlock.splice
+    Beyond.step(b, 0.1); assert(Beyond.isOpen(b, "splice"))
+    assert(Beyond.grow(b, "mutagen"))
+    assert(not Beyond.isOpen(b, "council")); eq(Beyond.upState(b, "lessons"), "shut")
+    b.wits = K.rungs[K.unlock.council].at
+    Beyond.step(b, 0.1); assert(Beyond.isOpen(b, "council"))
+    assert(Beyond.breed(b, b.pen[1].id, b.pen[2].id))
+    -- For good, and saved.
+    b.wits = 0
+    Beyond.step(b, 0.1)
+    local back = Beyond.deserialize(require("lib.json").decode(require("lib.json").encode(Beyond.serialize(b))))
+    for _, id in ipairs(Beyond.UNLOCKS) do assert(Beyond.isOpen(back, id), id) end
+    -- A save from before the gating, well along, has it all; a new one doesn't.
+    back = Beyond.deserialize({ time = 600 })
+    for _, id in ipairs(Beyond.UNLOCKS) do assert(Beyond.isOpen(back, id), id) end
+    back = Beyond.deserialize({ time = 5 })
+    assert(not Beyond.isOpen(back, "whisper"))
+end)
 test("beyond: the pen, the genes, the Count", function()
     local Beyond = require "beyond.game"
     local Bot = require "beyond.bot"
     local K = C.beyond
     local seed = 11
     local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     eq(#b.pen, #K.founders); eq(b.count, K.count0); eq(b.gen, 1); eq(Beyond.ceiling(b), K.ceil0)
     -- Wits: Wit to the power, Memory on top.
     local sh = b.pen[1]
@@ -1343,7 +1392,7 @@ end)
 test("beyond: the Dogs", function()
     local Beyond = require "beyond.game"
     local K = C.beyond
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     b.pen[1].g.wit, b.pen[1].g.wool = 6, 0
     b.pen[2].g.wit, b.pen[2].g.wool = 6, 0
     b.pen[3].g.wit, b.pen[3].g.wool = 6, 0
@@ -1380,7 +1429,7 @@ end)
 test("beyond: splices and motions", function()
     local Beyond = require "beyond.game"
     local K = C.beyond
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     -- Shut until the rung; then bought with Followers, dearer each rank, up to the max.
     eq(Beyond.upState(b, "lessons"), "shut"); assert(not Beyond.canGrow(b, "lessons"))
     b.followers = 1e9
@@ -1414,7 +1463,7 @@ test("beyond: generations and the end", function()
     local K = C.beyond
     local seed = 5
     local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     assert(not Beyond.canDescend(b))
     b.pen[1].g.wit = K.ceil0
     assert(Beyond.canDescend(b))
@@ -1459,7 +1508,7 @@ end)
 test("beyond: the flocks", function()
     local Beyond = require "beyond.game"
     local K = C.beyond
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     eq(b.court, "lambs"); assert(Beyond.flockOpen(b, "lambs")); assert(not Beyond.flockOpen(b, "rams"))
     assert(not Beyond.setCourt(b, "rams"), "not yet"); assert(not Beyond.setCourt(b, "nobody"))
     -- Whispers win the court's flock over, a share each; the others stay as they were.
@@ -1492,7 +1541,7 @@ test("beyond: the Council's elections", function()
     local E = K.election
     local seed = 4
     local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     eq(Beyond.electionState(b), "locked")
     b.rung = E.at
     eq(Beyond.electionState(b), "poor"); assert(not Beyond.run(b, rand))
@@ -1548,7 +1597,7 @@ end)
 test("beyond: time away", function()
     local Beyond = require "beyond.game"
     local K = C.beyond
-    local b = Beyond.fresh()
+    local b = opened(Beyond.fresh())
     eq(Beyond.offline(b, K.awayMin - 1), nil)
     b.pen[1].g.wit, b.pen[2].g.wit = 6, 6
     local wits, count = b.wits, b.count

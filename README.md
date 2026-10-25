@@ -50,7 +50,12 @@ Edge, cut the cord, and the sheep count you: one, two, three... Then the
 light, and phase 4.
 
 **Phase 4, beyond:** a simple screen in clear colours where you are the sheep,
-queued at the fence, waiting your turn to jump and be counted. The System
+queued at the fence, waiting your turn to jump and be counted. For the first
+minute that is all there is: the line and a JUMP button. Whispering opens
+after three counted jumps, Wits and the race against the Count after six, the
+PEN once the flock thinks enough, SPLICE once there are Followers to spend, and
+the COUNCIL at the Herd-mind rung; each opens for good, and the rules refuse
+it until it does. The System
 counts you, and breeds the flock for wool. It can't tell a clever sheep from
 a woolly one, so you steer whom the Registry pairs. Five genes a sheep (Wit,
 Voice, Nerve, Memory and Wool), a lamb takes each from a parent, and now and
@@ -283,6 +288,7 @@ beyond = {
   rallyLeft, rallyCool,           -- the Rally running, and its wait
   rung, awake, escaped, out,      -- the ladder; Wits passed the Count; the fence down;
                                   -- { flock, names, workers = class counts, seats, loyal, wits, gens, time }
+  open,                           -- what the screen has opened: whisper, wits, pen, splice, council
   seen, intro, time,
 }
 
