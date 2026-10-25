@@ -1137,6 +1137,12 @@ test("astral projection: through the gate, and saves", function()
     assert(Game.goBeyond(s)); eq(s.phase, "beyond")
     back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
     eq(back.phase, "beyond")
+    -- Phase 4's tally comes back whole, and a bad one comes back clean.
+    s.beyond = { count = 12, mine = 3, bad = 1 }
+    back = Game.deserialize(json.decode(json.encode(Game.serialize(s))))
+    eq(back.beyond.count, 12); eq(back.beyond.mine, 3); eq(back.beyond.bad, 1)
+    back = Game.deserialize({ version = 4, phase = "beyond", lucid = { gate = true }, astral = { cut = true }, beyond = { count = -5, mine = "x" } })
+    eq(back.beyond.count, 0); eq(back.beyond.mine, 0); eq(back.beyond.bad, 0)
     assert(Game.backToStars(back)); eq(back.phase, "astral"); eq(back.astral.cut, false)
 end)
 test("astral projection: the cord", function()

@@ -89,6 +89,14 @@ local function astralAt(stage, out)
     return s
 end
 
+-- Phase 4: the cord cut, the first line forming.
+local function beyondAt()
+    local s = astralAt(5)
+    s.astral.cut = true
+    Game.goBeyond(s)
+    return s
+end
+
 local MOMENTS = {
     { "1-dusk", function() local s = Game.fresh(); s.muted = true; return s end, 6 },
     { "2-field", function() return preset(2e4, { dog = 8, meadow = 6, pen = 2, tapPower = 6, betterFence = 1, barn = 1 }) end, 4 },
@@ -242,6 +250,9 @@ local MOMENTS = {
         Game.goBeyond(s)
         return s
     end, 0, "beyond" },
+    { "40-beyond-turn", function() return beyondAt() end, 0, "beyond-turn" },
+    { "41-beyond-jump", function() return beyondAt() end, 0, "beyond-jump" },
+    { "42-beyond-bad", function() return beyondAt() end, 0, "beyond-bad" },
     { "18-golden-choice", function()
         local s = lucidAt(5, false)
         s.lucid.choosing = true
@@ -296,6 +307,9 @@ function Shots.run(UI, fit)
             if m[4] == "astral-snap" then frames = 180 end
             if m[4] == "astral-count" then frames = 560 end
             if m[4] == "beyond" then frames = 330 end
+            if m[4] == "beyond-turn" then frames = 620 end
+            if m[4] == "beyond-jump" then frames = 640 end
+            if m[4] == "beyond-bad" then frames = 150 end
             if m[4] == "gate-through" then frames = 700 end
             if m[4] == "astral-through" then frames = 1100 end
             for i = 1, frames do
@@ -325,6 +339,7 @@ function Shots.run(UI, fit)
                     Game.step(s, dt)
                 end
                 if m[3] > 0 and i % 7 == 0 and i <= m[3] * 7 then UI.pressed(r.x + r.w / 2, r.y + r.h * 0.8, "shot") end
+                if (i == 600 and m[4] == "beyond-jump") or (i == 60 and m[4] == "beyond-bad") then UI.key("space") end
                 if i == 2 and (m[4] == "dreams" or m[4] == "dreams-low") then UI.key("d") end
                 -- To the end of FARM, once it's laid out (the scroll stops at the content).
                 if i == 3 and m[4] == "town-end" then LUI.show("town", nil, 1e9) end

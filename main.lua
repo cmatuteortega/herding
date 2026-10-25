@@ -21,7 +21,7 @@
 --   love . --lucid      dev: straight into phase 2, lucid dreaming, with points to
 --                       spend (L does the same mid-game, with any dev flag on)
 --   love . --astral     dev: straight into phase 3, astral projection, through the gate
---   love . --beyond     dev: straight into phase 4 (a placeholder), past the cut cord
+--   love . --beyond     dev: straight into phase 4 (you are a sheep in the line), past the cut cord
 --                       (--astral --autoplay N: a scripted player in phase 3)
 
 local G = require "gfx"

@@ -93,7 +93,7 @@ function Game.fresh()
         -- "nights" (counting sheep), or "lucid": past the first night
         -- shorter than C.lucid.under, phase 2 (lucid/game.lua), for good;
         -- "astral": past the Gate of Horn, phase 3 (astral/game.lua); or
-        -- "beyond": past the cut cord, phase 4 (a placeholder).
+        -- "beyond": past the cut cord, phase 4 (beyond/ui.lua: we are the sheep).
         phase = "nights",
         lucid = nil, -- phase 2's state, from the moment you go lucid
         astral = nil, -- phase 3's, from the first time through the gate
@@ -536,7 +536,7 @@ function Game.goBeyond(s)
     return true
 end
 
--- Back from beyond (phase 4 is a placeholder): the stars again, the cord
+-- Back from beyond (a way for testing; the screen has no button for it): the stars again, the cord
 -- whole, as if it had never been cut.
 function Game.backToStars(s)
     if s.phase ~= "beyond" then return false end
@@ -640,6 +640,11 @@ function Game.deserialize(o)
         s.astral = Astral.deserialize(o.astral)
     end
     if s.phase == "beyond" and not s.astral.cut then s.phase = "astral" end
+    -- Phase 4's state: the sheep counted, ours among them, and our bad jumps.
+    if type(o.beyond) == "table" then
+        s.beyond = {}
+        for _, k in ipairs({ "count", "mine", "bad" }) do s.beyond[k] = max(0, floor(tonumber(o.beyond[k]) or 0)) end
+    end
     s.stage = max(s.stage, Game.stageOf(s))
     return s
 end

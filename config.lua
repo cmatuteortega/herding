@@ -494,8 +494,21 @@ return {
         cut = 2e14,
     },
 
-    -- PHASE 4: past the cut cord. A placeholder: the void, or enlightenment.
-    beyond = {},
+    -- PHASE 4: past the cut cord. We are the sheep, in a line for the fence.
+    -- Times are seconds; distances are sheep-lengths up the lane.
+    beyond = {
+        queueMin = 3, queueMax = 5, -- sheep ahead of us in a line
+        firstHop = 1.8, -- until the first sheep hops, and then between hops
+        hopEvery = 1.4,
+        hopTime = 0.9, -- one sheep over the fence
+        walkSpeed = 2.2, -- the line shuffling up, lengths a second
+        trot = 2.6, -- the counted, trotting off
+        reach = 1.3, -- the fence this near is in front of us: a jump clears it
+        jumpTime = 1.15, jumpHigh = 0.3, -- our jump over it (the camera's rise, of the lane)
+        badJumpTime = 0.6, badHigh = 0.14, badAdv = 0.4, -- and without it
+        badFlash = 2.2, glare = 1.8, -- BAD SHEEP stays up this long, the sheep ahead looks round
+        blinkTime = 0.9, -- the eyelids, to the back of a new line
+    },
 
     offline = {
         maxHours = 8,

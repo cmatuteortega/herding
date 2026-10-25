@@ -47,8 +47,9 @@ them, and eight constellations, lit a star at a time, Aries the Ram first and
 the Sleeper last, each a reward for good, and a comet (your guide) crosses
 now and then with a gift. Light the Sleeper at the
 Edge, cut the cord, and the sheep count you: one, two, three... Then the
-light, and phase 4: beyond, the void or enlightenment (a placeholder for now).
-From the field to the dream to the stars to nothing at all.
+light, and phase 4: beyond, a simple screen in clear colours where you are
+the sheep, queued at the fence, waiting your turn to jump and be counted.
+From the field to the dream to the stars to the other side of the count.
 
 It's built for a phone held upright (the field on top, the shop under your
 thumb) and works on a computer (the field on the left, the shop on the right).
@@ -66,7 +67,7 @@ love . --lucid             # dev: straight into phase 2 with 750 DP to spend (an
 love . --lucid --speed 10 --autoplay 600   # dev: phase 2 played by a simple script
 love . --astral            # dev: straight into phase 3, astral projection, through the Gate of Horn
 love . --astral --speed 20 --autoplay 1200 # dev: phase 3 played by a simple script
-love . --beyond            # dev: straight into phase 4, past the cut cord (a placeholder)
+love . --beyond            # dev: straight into phase 4, past the cut cord
                            # (and in game, the 1>2 button beside reset skips to the
                            # next phase: 1 to 2, 2 to 3, 3 to 4, 4 back to a new game)
 luajit tests/run.lua       # dev: the rules' tests, no LÖVE needed
@@ -156,7 +157,7 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the comet, the cut, time away. Pure Lua |
 | `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS and STARS tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
 | `astral/scene.lua` | phase 3's field: the plane's sky, far stars streaming past, the body asleep below, the silver cord, the constellation being lit, the dreamers, the comet |
-| `beyond/ui.lua` | phase 4, beyond: a placeholder to stand in, cream and ink, the void or enlightenment. `ui.lua` hands over to it |
+| `beyond/ui.lua` | phase 4, beyond: you are the sheep, in a line for the fence, with one button, JUMP. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
 | `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
 
@@ -675,8 +676,8 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- Phase 4, beyond: only its way in (the cut cord, the sheep counting you)
-  and a placeholder to stand in
+- Phase 4, beyond: only the loop (wait, jump, be counted, a bad sheep if the
+  fence isn't there); nothing to buy or grow yet
 - Phase 3: no challenges of its own (the restless nights' and the dream
   challenges' kind), and the dreamers only show as orbs, not as the sleepers
   they are
