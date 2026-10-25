@@ -68,19 +68,13 @@ LUI.setReducedAll = function(v) UI.setReduced(v) end
 AUI.save = function() UI.save() end
 AUI.setReducedAll = function(v) UI.setReduced(v) end
 BUI.save = function() UI.save() end
--- Through the Gate of Horn, and back.
+-- Through the Gate of Horn.
 LUI.toAstral = function()
     if Game.goAstral(S) then
         UI.save()
         AUI.setState(S)
         AUI.enter()
     end
-end
-AUI.back = function()
-    Audio.setAstral(false)
-    Game.backToDream(S)
-    UI.save()
-    UI.showLucid()
 end
 -- The cord cut: beyond, and back.
 AUI.toBeyond = function()

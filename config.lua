@@ -373,10 +373,9 @@ return {
     -- that comes back by itself and a Trance that goes out again: the cord
     -- runs itself, the way the night did. Further out are the planes, the
     -- dreamers (other sleepers, dreaming Ether for you), and the
-    -- constellations, lit a star at a time, each a reward kept for good. The
-    -- Akashic Library remembers every sheep you ever counted, in every
-    -- phase, as a multiplier. Light the Sleeper at the Edge, cut the cord,
-    -- and the sheep count you: phase 4.
+    -- constellations, lit a star at a time, each a reward kept for good.
+    -- Light the Sleeper at the Edge, cut the cord, and the sheep count you:
+    -- phase 4.
     -- Every amount in here is a plain number; astral/game.lua uses num.lua.
     astral = {
         -- The way in's length in seconds: Sheep-OS boots, its screen types,
@@ -392,7 +391,7 @@ return {
         speed = 0.15, speedFrom = 5,
         -- Ether a second while out: etherBase * (1 + distance)^etherPower,
         -- times the plane you're in and every multiplier.
-        etherBase = 0.5, etherPower = 0.6,
+        etherBase = 2, etherPower = 0.6,
         -- Back in the body: the Ether gathered is banked, times
         -- 1 + closeCall * strain^3 (a close call pays). Snapped: only
         -- 1 - snapLoss of it, and a longer rest before going out again.
@@ -420,25 +419,18 @@ return {
             { id = "edge", name = "The Edge", at = 6e6, mult = 16, sky = { "p", "u" } },
         },
 
-        -- The Akashic Library: every record of every phase, a decade at a
-        -- time, adds `per` to the multiplier on all Ether: phase 1's sheep
-        -- counted, phase 2's dream sheep, runs (x2), nights dreamt (a fifth
-        -- each), lucidity steps, the best height (a hundredth), and the
-        -- Ether earned out here (x2).
-        akashic = { per = 0.02 },
-
         -- The dreamers: other sleepers, found out along the cord once your
         -- reach (the farthest ever) passes `at`. Bought with Ether, each
         -- dreams `rate` Ether a second, x2 every `every` of a kind, all of
         -- them x(1 + reachPer * log10(1 + reach)).
         dreamerEvery = 25, reachPer = 0.25,
         dreamers = {
-            { id = "child", name = "The Child", desc = "Dreams of ponies, and of you", at = 0, rate = 0.4, base = 20, growth = 1.2 },
-            { id = "shepherd", name = "The Shepherd", desc = "Counts sheep in their sleep, out of habit", at = 150, rate = 5, base = 2000, growth = 1.2 },
-            { id = "insomniac", name = "The Insomniac", desc = "Barely dreams. When they do, it's vivid", at = 3e3, rate = 60, base = 1e5, growth = 1.21 },
-            { id = "collie", name = "The Old Collie", desc = "Runs in its sleep, herding stars", at = 6e4, rate = 900, base = 1e7, growth = 1.22 },
-            { id = "astronaut", name = "The Astronaut", desc = "Asleep in orbit. Closer than anyone", at = 4e5, rate = 1.5e4, base = 1e9, growth = 1.23 },
-            { id = "moon", name = "The Moon", desc = "Dreams the tides, and every night", at = 4e6, rate = 3e5, base = 1e11, growth = 1.25 },
+            { id = "child", name = "The Child", desc = "Dreams of ponies, and of you", at = 0, rate = 1.6, base = 20, growth = 1.2 },
+            { id = "shepherd", name = "The Shepherd", desc = "Counts sheep in their sleep, out of habit", at = 150, rate = 20, base = 2000, growth = 1.2 },
+            { id = "insomniac", name = "The Insomniac", desc = "Barely dreams. When they do, it's vivid", at = 3e3, rate = 240, base = 1e5, growth = 1.21 },
+            { id = "collie", name = "The Old Collie", desc = "Runs in its sleep, herding stars", at = 6e4, rate = 3600, base = 1e7, growth = 1.22 },
+            { id = "astronaut", name = "The Astronaut", desc = "Asleep in orbit. Closer than anyone", at = 4e5, rate = 6e4, base = 1e9, growth = 1.23 },
+            { id = "moon", name = "The Moon", desc = "Dreams the tides, and every night", at = 4e6, rate = 1.2e6, base = 1e11, growth = 1.25 },
         },
 
         -- Upgrades, kept: a rank at a time for ether * growth^rank, up to
@@ -458,8 +450,8 @@ return {
             { id = "trance", at = "thread", section = "auto", name = "Trance", desc = "Goes out again by itself", ether = 1000, max = 1 },
             { id = "light", at = "trance", section = "auto", name = "Light Body", desc = "Rest 30% shorter in the body", ether = 1500, growth = 8, max = 4, restCut = 0.7 },
             { id = "lens", section = "ether", name = "Ether Lens", desc = "+50% Ether, everywhere", ether = 200, growth = 5, max = 25, etherAdd = 0.5 },
-            { id = "librarian", at = "lens", section = "ether", name = "Librarian", desc = "The Akashic records count 25% more", ether = 3000, growth = 8, max = 8, akashicAdd = 0.25 },
-            { id = "farsight", at = "librarian", section = "ether", name = "Far Sight", desc = "Your reach lifts the dreamers 50% more", ether = 2e4, growth = 8, max = 6, reachAdd = 0.5 },
+            { id = "eye", at = "lens", section = "ether", name = "Third Eye", desc = "All Ether x1.15", ether = 3000, growth = 8, max = 8, etherMult = 1.15 },
+            { id = "farsight", at = "eye", section = "ether", name = "Far Sight", desc = "Your reach lifts the dreamers 50% more", ether = 2e4, growth = 8, max = 6, reachAdd = 0.5 },
         },
 
         -- Constellations, lit a star at a time (each star `star` *
@@ -482,7 +474,7 @@ return {
                 stars = { { 0.1, 0.8 }, { 0.1, 0.3 }, { 0.5, 0.3 }, { 0.5, 0.8 }, { 0.9, 0.8 }, { 0.9, 0.3 }, { 0.5, 0.3 } } },
             { id = "fleece", name = "The Golden Fleece", plane = 3, star = 4e8, reward = "Close calls and dreamers x2", closeMult = 2, dreamerMult = 2,
                 stars = { { 0.2, 0.3 }, { 0.45, 0.2 }, { 0.75, 0.25 }, { 0.85, 0.5 }, { 0.7, 0.75 }, { 0.4, 0.8 }, { 0.15, 0.6 }, { 0.5, 0.5 } }, join = { 7, 1 } },
-            { id = "flock", name = "The Great Flock", plane = 4, star = 4e11, reward = "The Akashic records count double", akashicMult = 2,
+            { id = "flock", name = "The Great Flock", plane = 4, star = 4e11, reward = "All Ether x2", etherMult = 2,
                 stars = { { 0.1, 0.6 }, { 0.25, 0.45 }, { 0.4, 0.6 }, { 0.55, 0.42 }, { 0.7, 0.58 }, { 0.85, 0.4 }, { 0.6, 0.2 }, { 0.3, 0.2 }, { 0.1, 0.6 } } },
             { id = "sleeper", name = "The Sleeper", plane = 5, star = 5e12, reward = "The cord can be cut", last = true,
                 stars = { { 0.1, 0.7 }, { 0.3, 0.6 }, { 0.5, 0.62 }, { 0.7, 0.6 }, { 0.9, 0.7 }, { 0.78, 0.4 }, { 0.82, 0.25 }, { 0.68, 0.18 }, { 0.62, 0.35 } } },

@@ -71,9 +71,9 @@ local function astralAt(stage, out)
     P.planeSeen = Astral.planeAt(P.reach)
     for i, n in ipairs({ { cord = 0 }, { cord = 4, drift = 2, thread = 1, lens = 2 },
         { cord = 9, drift = 4, thread = 1, trance = 1, close = 2, lens = 4, calm = 1 },
-        { cord = 14, drift = 6, thread = 1, trance = 1, close = 3, lens = 6, calm = 2, librarian = 2 },
-        { cord = 19, drift = 8, thread = 1, trance = 1, close = 4, lens = 8, calm = 3, librarian = 3, farsight = 1 },
-        { cord = 24, drift = 10, thread = 1, trance = 1, close = 5, lens = 10, calm = 4, librarian = 4, farsight = 2 } }) do
+        { cord = 14, drift = 6, thread = 1, trance = 1, close = 3, lens = 6, calm = 2, eye = 2 },
+        { cord = 19, drift = 8, thread = 1, trance = 1, close = 4, lens = 8, calm = 3, eye = 3, farsight = 1 },
+        { cord = 24, drift = 10, thread = 1, trance = 1, close = 5, lens = 10, calm = 4, eye = 4, farsight = 2 } }) do
         if i == stage + 1 then for id, r in pairs(n) do P.ups[id] = r end end
     end
     for k, d in ipairs(Astral.DREAMERS) do
@@ -226,7 +226,7 @@ local MOMENTS = {
     { "33-astral-out", function() return astralAt(2, true) end, 0, "astral-out" },
     { "34-astral-stars", function() return astralAt(3, true) end, 0, "astral-stars" },
     { "35-astral-dreamers", function() return astralAt(3) end, 0, "astral-dreamers" },
-    { "36-astral-library", function() return astralAt(4) end, 0, "astral-library" },
+    { "36-astral-ether", function() return astralAt(4) end, 0, "astral-ether" },
     { "37-astral-strain", function() return astralAt(4, true) end, 0, "astral-strain" },
     { "37b-astral-snap", function() return astralAt(3, true) end, 0, "astral-snap" },
     { "38-astral-count", function() return astralAt(5) end, 0, "astral-count" },
@@ -274,7 +274,7 @@ function Shots.run(UI, fit)
             if s.phase == "beyond" then UI.showBeyond() end
             if m[4] == "astral-stars" then AUI.show("stars") end
             if m[4] == "astral-dreamers" then AUI.show("dreamers") end
-            if m[4] == "astral-library" then AUI.show("library") end
+            if m[4] == "astral-ether" then AUI.show("ether") end
             if m[4] == "astral-count" then AUI.leave() end
             if m[4] == "astral-through" then s.astral.paid = true; Astral.cutCord(s.astral) end
             if m[4] == "town" then LUI.show("town", Lucid.cell(2, 3)) end

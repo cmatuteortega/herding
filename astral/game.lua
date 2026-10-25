@@ -13,9 +13,8 @@
 -- Ether buys upgrades kept for good, the dreamers (other sleepers found out
 -- along the cord, each dreaming Ether a second into what it gathers while
 -- you're out), and lights the
--- constellations a star at a time, each a reward for good. The Akashic
--- Library is every record of every phase, a multiplier on all Ether. Now
--- and then a comet crosses (the guide's gift: one of three). Light the
+-- constellations a star at a time, each a reward for good. Now and then a
+-- comet crosses (the guide's gift: one of three). Light the
 -- Sleeper, at the Edge, and the cord can be cut: the end of the phase.
 --
 -- Every amount of Ether is a Num and goes through num.lua; the distance, the
@@ -55,24 +54,7 @@ local function emit(e) Astral.events[#Astral.events + 1] = e end
 local function rank(P, id) return P.ups[id] or 0 end
 Astral.rank = rank
 
--- What the Akashic Library reads: the records of the phases before, from
--- phase 1's state (and its `lucid`). Read again on every way in, so a
--- dream played on since counts.
-function Astral.readRecords(P, s)
-    local L = s and s.lucid
-    local n = 0
-    if L and L.done then for _ in pairs(L.done) do n = n + 1 end end
-    P.rec = {
-        sheep = s and N.toNumber(s.allTime) or 0,
-        nights = s and s.dreams or 0,
-        dream = L and N.toNumber(L.sheepTotal) or 0,
-        runs = L and N.toNumber(L.runs) or 0,
-        height = L and L.best or 0,
-        lucidity = n,
-    }
-end
-
-function Astral.fresh(s)
+function Astral.fresh()
     local P = {
         ether = N.zero(), etherEarned = N.zero(),
         out = false, -- projecting
@@ -99,10 +81,8 @@ function Astral.fresh(s)
         time = 0,
         found = {}, -- dreamer id = true, once found (for the banner, once)
         planeSeen = 1, -- the deepest plane reached, for the banner
-        rec = nil,
     }
     for k = 1, #DREAMERS do P.dreamers[k] = 0 end
-    Astral.readRecords(P, s)
     return P
 end
 
@@ -182,30 +162,10 @@ end
 
 local function effect(P, id) return P.effects[id] and P.effects[id] > 0 end
 
--- The Akashic Library's multiplier, and the decades it reads (for the screen).
-function Astral.decades(P)
-    local r = P.rec or {}
-    local function d(v) return log10(1 + max(0, v or 0)) end
-    return {
-        { "SHEEP COUNTED", d(r.sheep), r.sheep or 0 },
-        { "NIGHTS DREAMT", (r.nights or 0) / 5, r.nights or 0 },
-        { "DREAM SHEEP", d(r.dream), r.dream or 0 },
-        { "RUNS", 2 * d(r.runs), r.runs or 0 },
-        { "LUCIDITY", r.lucidity or 0, r.lucidity or 0 },
-        { "BEST HEIGHT", (r.height or 0) / 100, r.height or 0 },
-        { "ETHER", 2 * d(N.toNumber(P.etherEarned)), N.toNumber(P.etherEarned) },
-    }
-end
-function Astral.akashic(P)
-    local sum = 0
-    for _, row in ipairs(Astral.decades(P)) do sum = sum + row[2] end
-    local per = A.akashic.per * (1 + UP.librarian.akashicAdd * rank(P, "librarian")) * reward(P, "akashicMult")
-    return 1 + per * sum
-end
-
--- Every multiplier on all Ether: the library, the Ether Lens, Aries.
+-- Every multiplier on all Ether: the Ether Lens, the Third Eye, Aries and
+-- the Great Flock.
 function Astral.mult(P)
-    return Astral.akashic(P) * (1 + UP.lens.etherAdd * rank(P, "lens")) * reward(P, "etherMult")
+    return (1 + UP.lens.etherAdd * rank(P, "lens")) * UP.eye.etherMult ^ rank(P, "eye") * reward(P, "etherMult")
 end
 
 function Astral.cord(P)
@@ -570,10 +530,9 @@ function Astral.serialize(P)
     return o
 end
 
--- Back from a save; missing or odd fields come back fresh. The records are
--- read again from `s`.
-function Astral.deserialize(o, s)
-    local P = Astral.fresh(s)
+-- Back from a save; missing or odd fields come back fresh.
+function Astral.deserialize(o)
+    local P = Astral.fresh()
     if type(o) ~= "table" then return P end
     for _, k in ipairs(NUMS) do if o[k] ~= nil then P[k] = N.deserialize(o[k]) end end
     for _, k in ipairs({ "dist", "outFor", "tug", "tugLeft", "tugIn", "rest", "reach", "projections", "snaps",
@@ -582,6 +541,8 @@ function Astral.deserialize(o, s)
     end
     for _, k in ipairs({ "out", "autoOff", "cut", "paid", "intro" }) do if type(o[k]) == "boolean" then P[k] = o[k] end end
     if type(o.ups) == "table" then
+        -- The Librarian's ranks, from before the Akashic Library went, are the Third Eye's.
+        if o.ups.librarian and not o.ups.eye then o.ups.eye = o.ups.librarian end
         for id, n in pairs(o.ups) do
             local u = UP[id]
             if u and tonumber(n) then P.ups[id] = max(0, min(u.max, floor(tonumber(n)))) end

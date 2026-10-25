@@ -520,21 +520,12 @@ function Game.goLucid(s)
 end
 
 -- Through the Gate of Horn: out of the dream, into astral projection (phase
--- 3). The lucid state stays in the save as it was, and waits: the gate stays
--- open both ways. The first time through, phase 3's state starts; every
--- time, the Akashic Library reads the records again.
+-- 3). The lucid state stays in the save as it was, but there's no way back:
+-- the gate opens one way. The first time through, phase 3's state starts.
 function Game.goAstral(s)
     if s.phase ~= "lucid" or not (s.lucid and s.lucid.gate) then return false end
     s.phase = "astral"
-    s.astral = s.astral or Astral.fresh(s)
-    Astral.readRecords(s.astral, s)
-    return true
-end
-
--- Back through the gate from astral projection: the dream again, as it was.
-function Game.backToDream(s)
-    if s.phase ~= "astral" then return false end
-    s.phase = "lucid"
+    s.astral = s.astral or Astral.fresh()
     return true
 end
 
@@ -646,7 +637,7 @@ function Game.deserialize(o)
     -- Phase 3's state, from the first time through the gate (or the
     -- placeholder's save, coming in now).
     if type(o.astral) == "table" or later then
-        s.astral = Astral.deserialize(o.astral, s)
+        s.astral = Astral.deserialize(o.astral)
     end
     if s.phase == "beyond" and not s.astral.cut then s.phase = "astral" end
     s.stage = max(s.stage, Game.stageOf(s))

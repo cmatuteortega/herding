@@ -6,8 +6,8 @@
 -- Silver Thread's mark on it), and the button to go out or come back. Then
 -- four tabs: CORD (the cord's upgrades, and letting go: the Thread and the
 -- Trance), DREAMERS (the other sleepers, found out along the cord), STARS
--- (the constellations, lit a star at a time) and LIBRARY (the Akashic
--- records, the Ether's upgrades, and at the end, cutting the cord). On the
+-- (the constellations, lit a star at a time) and ETHER (the Ether's
+-- upgrades, and at the end, cutting the cord). On the
 -- field: tap the next star to light it, the comet to catch it, and the dark
 -- while out to take a breath (it calms a tug), or at home to go out. The
 -- comet's gift, the way in, the time away and the way out (the sheep count
@@ -30,7 +30,6 @@ local A = C.astral
 
 local AUI = {}
 AUI.save = function() end -- set by ui.lua
-AUI.back = function() end -- set by ui.lua: back through the gate, to the dream
 AUI.resetAll = function() end -- set by ui.lua
 AUI.nextPhase = function() end -- set by ui.lua (dev): on to phase 4
 AUI.toBeyond = function() end -- set by ui.lua: past the cut cord
@@ -41,7 +40,7 @@ local R = {}
 local t = 0
 local reduced = false
 
-local tab = "cord" -- or "dreamers", "stars", "library"
+local tab = "cord" -- or "dreamers", "stars", "ether"
 local buyMax = false
 local rows, contentH, scroll, scrollV = {}, 0, 0, 0
 local press = nil
@@ -150,7 +149,7 @@ local function explain()
             "",
             "BUT THE CORD STRAINS. COME BACK IN TIME AND THE ETHER IS YOURS, MORE FOR A CLOSE CALL. LET IT SNAP AND YOU LOSE HALF. WHEN THE BODY TUGS, TAP THE DARK: BREATHE.",
             "",
-            "FURTHER OUT: THE PLANES, OTHER DREAMERS, AND THE CONSTELLATIONS, LIT A STAR AT A TIME. THE LIBRARY REMEMBERS EVERY SHEEP YOU EVER COUNTED.",
+            "FURTHER OUT: THE PLANES, OTHER DREAMERS, AND THE CONSTELLATIONS, LIT A STAR AT A TIME. LIGHT THE LAST AND THE CORD CAN BE CUT.",
         },
         big = "DON'T LET GO. YET.",
         buttons = { { label = "GO OUT", fn = function() P.intro = false; Astral.project(P); AUI.save() end } },
@@ -162,7 +161,6 @@ function AUI.enter()
     Audio.setLucid(false)
     Audio.setBeyond(false)
     Audio.setAstral(true)
-    Astral.readRecords(P, S)
     AScene.reset()
     if P.intro then explain() end
 end
@@ -287,13 +285,9 @@ local function layout()
         add({ header = ("CONSTELLATIONS %d/%d: TAP ONE, THEN ITS STAR"):format(n, all) }, 10, 0)
         for _, c in ipairs(Astral.CONSTELLATIONS) do add({ con = c }, CARD_H) end
     else
-        add({ header = "THE AKASHIC LIBRARY: EVERY RECORD, EVERY PHASE" }, 10, 0)
-        add({ records = true }, 8 + #Astral.decades(P) * 7 + 10)
-        y = y + 2
         section("ether")
         add({ header = "THE SILVER CORD" }, 10, 0)
         add({ cut = true }, CARD_H)
-        add({ back = true }, CARD_H)
     end
     contentH = y
 end
@@ -366,9 +360,6 @@ local function tapRow(row, x)
                 return
             end
         end
-    elseif row.back then
-        cue("click")
-        AUI.back()
     elseif row.cut then
         if P.cut then AUI.leave() return end
         if not Astral.canCut(P) then cue("nope") return end
@@ -427,7 +418,7 @@ function AUI.pressed(x, y, id)
     end
     if inside(R.tabs, x, y) then
         local k = lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 4)) + 1, 1, 4)
-        local want = ({ "cord", "dreamers", "stars", "library" })[k]
+        local want = ({ "cord", "dreamers", "stars", "ether" })[k]
         if want ~= tab then tab, scroll = want, 0 end
         if want == "stars" then starSeen = Astral.litCount(P) end
         cue("click")
@@ -654,7 +645,7 @@ end
 
 local function drawTabs()
     local r = R.tabs
-    local buttons = { { "CORD", tab == "cord" }, { "DREAMERS", tab == "dreamers" }, { "STARS", tab == "stars" }, { "LIBRARY", tab == "library" } }
+    local buttons = { { "CORD", tab == "cord" }, { "DREAMERS", tab == "dreamers" }, { "STARS", tab == "stars" }, { "ETHER", tab == "ether" } }
     local w = floor((r.w - 4) / 4)
     for i, b in ipairs(buttons) do
         local x = r.x + (i - 1) * (w + 2)
@@ -665,7 +656,7 @@ local function drawTabs()
         if G.textWidth(s) > w - 4 then s = s:sub(1, 5) end
         centred(on and "k" or "l", s, x + w / 2, r.y + 4)
         -- Something to find there, a rose mark: a star that can be lit, on
-        -- STARS; the cord that can be cut, on LIBRARY.
+        -- STARS; the cord that can be cut, on ETHER.
         local mark = (i == 3 and Astral.canLight(P, Astral.skyCon(P)) and Astral.litCount(P) == starSeen)
             or (i == 4 and Astral.canCut(P))
         if not on and mark and (reduced or sin(t * 4) > -0.5) then G.art({ "r", "r", "r", ".", "r" }, x + 4, r.y + 3) end
@@ -791,20 +782,6 @@ local function drawCon(row, x, y, w)
     for i = 1, min(2, #lines) do G.text(open and "p" or "s", lines[i], tx, y + 8 + i * 6) end
 end
 
-local function drawRecords(row, x, y, w)
-    G.box(x + 1, y + 1, w - 2, row.h - 2, "k", "e")
-    local cy = y + 4
-    for _, rec in ipairs(Astral.decades(P)) do
-        G.text("l", rec[1], x + 5, cy)
-        local v = N.format(rec[3])
-        G.text("x", v, x + w - 40 - G.textWidth(v), cy)
-        local d = "+" .. N.format(rec[2], true)
-        G.text("e", d, x + w - 5 - G.textWidth(d), cy)
-        cy = cy + 7
-    end
-    G.text("y", "ALL ETHER X" .. N.format(Astral.akashic(P), true), x + 5, cy + 2)
-end
-
 local function drawCut(row, x, y, w)
     local h = row.h
     local last = Astral.CONSTELLATIONS[#Astral.CONSTELLATIONS]
@@ -823,25 +800,6 @@ local function drawCut(row, x, y, w)
     local say = Astral.done(P, last.id) and "AND LET GO. THE END OF ASTRAL PROJECTION." or ("LIGHT " .. last.name:upper() .. ", AT THE EDGE, FIRST")
     local lines = G.wrap(say, px - x - 41)
     for i = 1, min(2, #lines) do G.text(ok and "p" or "i", lines[i], x + 37, y + 8 + i * 6) end
-end
-
--- Back through the Gate of Horn, to the dream as it was: the library reads
--- it again on the way back.
-local function drawBack(row, x, y, w)
-    local h = row.h
-    G.box(x + 1, y + 1, w - 2, h - 2, "s")
-    G.box(x + 4, y + 4, 28, h - 8, "u")
-    local sp = Models.sheep(t * 0.3, 0, 0, "cloud", false, 0.45)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.draw(sp.img, floor(x + 18) - sp.oi, floor(y + h / 2 + 3) - sp.oj)
-    local label = "GO BACK"
-    local pw = G.textWidth(label) + 8
-    local px = x + w - pw - 4
-    G.box(px, y + 4, pw, h - 8, "c")
-    G.text("o", label, px + 4, y + 10)
-    G.text("o", "THE GATE OF HORN", x + 37, y + 5)
-    local lines = G.wrap("BACK TO THE DREAM. THE LIBRARY READS IT AGAIN WHEN YOU COME OUT.", px - x - 41)
-    for i = 1, min(2, #lines) do G.text("p", lines[i], x + 37, y + 8 + i * 6) end
 end
 
 local function drawPanel()
@@ -863,9 +821,7 @@ local function drawPanel()
             elseif row.up then drawUp(row, r.x, y, r.w)
             elseif row.dreamer then drawDreamer(row, r.x, y, r.w)
             elseif row.con then drawCon(row, r.x, y, r.w)
-            elseif row.records then drawRecords(row, r.x, y, r.w)
-            elseif row.cut then drawCut(row, r.x, y, r.w)
-            elseif row.back then drawBack(row, r.x, y, r.w) end
+            elseif row.cut then drawCut(row, r.x, y, r.w) end
         end
     end
     love.graphics.pop()

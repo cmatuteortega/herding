@@ -79,8 +79,8 @@ local function resetAll(title, line)
     UI.banner(title or "A NEW GAME", line or "EVERYTHING WAS RESET")
 end
 
--- Dev: phase 3 now, through the gate, with the records a usual player
--- brings from phase 2 (a dream played to the gate).
+-- Dev: phase 3 now, through the gate, after a dream played the way a usual
+-- player plays it (to the gate).
 local function jumpToAstral(s)
     local L = s.lucid
     L.intro, L.gate = false, true

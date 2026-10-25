@@ -44,9 +44,8 @@ that goes out again, so the cord runs itself the way the night did. Further
 out are the planes (the Etheric, the Astral, the Mental, the Causal, the
 Edge), other dreamers who dream Ether into the cord while you're out with
 them, and eight constellations, lit a star at a time, Aries the Ram first and
-the Sleeper last, each a reward for good. The Akashic Library remembers every
-sheep you ever counted, in every phase, as a multiplier on everything, and a
-comet (your guide) crosses now and then with a gift. Light the Sleeper at the
+the Sleeper last, each a reward for good, and a comet (your guide) crosses
+now and then with a gift. Light the Sleeper at the
 Edge, cut the cord, and the sheep count you: one, two, three... Then the
 light, and phase 4: beyond, the void or enlightenment (a placeholder for now).
 From the field to the dream to the stars to nothing at all.
@@ -98,7 +97,7 @@ the dog. On UPGRADES, tap a card to grow it, or start its dream challenge.
 In astral projection, GO OUT and COME BACK under the field (or Space, or a
 tap on the field while in the body); while out, a tap on the dark (or B) is a
 breath, which calms a tug; tap the pulsing star to light it, and the comet to
-catch it (Space too). 1 / 2 / 3 / 4 pick CORD / DREAMERS / STARS / LIBRARY;
+catch it (Space too). 1 / 2 / 3 / 4 pick CORD / DREAMERS / STARS / ETHER;
 on CORD, - and + set the Silver Thread's strain and TRANCE pauses going out.
 The arrow coming round in the top bar
 (every phase) resets everything and starts a new game from scratch, after
@@ -154,8 +153,8 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `lucid/ui.lua` | phase 2's screen: auto-wake, the LAYERS, FARM and UPGRADES tabs, dialogs, the way in and the way out. `ui.lua` hands over to it |
 | `lucid/scene.lua` | phase 2's field: the violet sky and aurora, the farm rebuilt on the hill, sheep turning to cloud, the flow, the bouncing sheep, the flock counted over the fence, the nightmare |
 | `lucid/upgrades.lua` | the upgrades' pictures, for their cards |
-| `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the Akashic Library, the comet, the cut, time away. Pure Lua |
-| `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS, STARS and LIBRARY tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
+| `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the comet, the cut, time away. Pure Lua |
+| `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS, STARS and ETHER tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
 | `astral/scene.lua` | phase 3's field: the plane's sky, far stars streaming past, the body asleep below, the silver cord, the constellation being lit, the dreamers, the comet |
 | `beyond/ui.lua` | phase 4, beyond: a placeholder to stand in, cream and ink, the void or enlightenment. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
@@ -226,7 +225,6 @@ astral = {
   lit, sky,                       -- stars lit by constellation; the one picked for the sky
   comet, cometIn, choosing, effects, -- the comet, its gift on offer (not saved), gifts running
   cut, paid,                      -- the cord cut (phase 4); the cut paid for (free again after)
-  rec,                            -- the records the library reads, from phases 1 and 2
   planeSeen, intro, time,
 }
 ```
@@ -237,9 +235,9 @@ save that went lucid in the old placeholder its phase-2 state, with the points
 it held; 2 to 3 changes nothing (the roots, the best height and the gate start
 fresh); 3 to 4 turns the old placeholder's phase, "void", into "astral",
 which starts fresh. Phase 1's fields stay where they were; phase 2 lives in
-`lucid` and phase 3 in `astral`, and each keeps the one before it as it was
-(back through the gate, the dream is as it was; the library reads it again
-on the way out).
+`lucid` and phase 3 in `astral`, and each keeps the one before it as it was.
+A phase 3 save from before the Akashic Library went brings its Librarian's
+ranks to the Third Eye, and its records are dropped.
 
 The rules step 30 times a second on a fixed timestep, inside LÖVE's frame. The
 screen reads the state every frame and only changes it through `game.lua`'s
@@ -395,10 +393,8 @@ the same happens if the game sat frozen in the background for a while.
   (COUNT SHEEP, DREAM SHEEP, LUCIDITY ... MAX, WAKE UP? N, LEAVE THE BODY?
   Y), the digital rain comes down over it and thins away, and the dreamer's
   sheep drifts up into a violet glow: ASTRAL PROJECTION. Then the phase is
-  "astral" (`Game.goAstral`). The gate stays open both ways: THE GATE OF
-  HORN at the end of LIBRARY goes back to the dream, and GO THROUGH on
-  Sheep-OS's card and on the Gate of Horn's, at the end of UPGRADES, comes
-  out again.
+  "astral" (`Game.goAstral`). The gate opens one way: there's no going back
+  to the dream from astral projection.
 - **Dream challenges** (`challenges`): at the end of the upgrades, once the
   town's Mirror Lake stands (400K DP and 1E30 sheep), one after the other.
   Starting one sets the layers and dream sheep back to the start and, while it
@@ -448,9 +444,10 @@ flow comes at 5.6 minutes.
   them. The strain is `(distance / cord)^2` plus any tug, and 1 snaps it. The
   cord is 60, ×1.5 a rank of Longer Cord (`growth` 2.6, the steepest price
   that doesn't stall: each rank raises the Ether a second only ×1.28).
-- **Ether:** out, `0.5 * (1 + distance)^0.6` a second, times the plane's
+- **Ether:** out, `2 * (1 + distance)^0.6` a second, times the plane's
   multiplier (×1, 2, 4, 8, 16 from the Etheric at 0 to the Edge at 6M), the
-  Akashic Library, the Ether Lens (+50% a rank) and Aries (×2). The dreamers
+  Ether Lens (+50% a rank), the Third Eye (×1.15 a rank, up to 8), Aries (×2)
+  and the Great Flock (×2). The dreamers
   add theirs to it, only while you're out. Back, it's banked ×(1 + close
   call × strain³) (close call 1, +50% a rank, ×2 for the Golden Fleece);
   snapped, ×0.5 (×0.9 with the Collie) and a 6 second rest, not 3.
@@ -459,15 +456,14 @@ flow comes at 5.6 minutes.
   half at once, half over 1.2 seconds, draining at 0.04 a second. A breath
   takes 30% off (+15% a rank of Steady Breath). The half at once is what makes
   the Silver Thread's setting a bet: the sim's greedy player cuts the cord at
-  52 minutes with it at 80%, 46 at 85%, 41 at 90%, and at 95% the cord snaps
-  on 70% of projections and it never gets out (`AUTOAT=0.95 luajit
-  tests/run.lua astral 90`).
-- **The Akashic Library:** `1 + 0.02 * decades` (×1.25 a Librarian, ×2 the
-  Great Flock), the decades being log10 of phase 1's sheep counted, phase 2's
-  dream sheep, its runs (×2) and the Ether earned (×2), plus a fifth of the
-  nights dreamt, the lucidity steps and the best height's hundreds. About
-  ×3.7 for a usual player coming in. It's read again each time through the
-  gate, so going back to the dream and playing on raises it.
+  49 minutes with it at 80%, 43 at 85%, 37 at 90%, and at 95% the cord snaps
+  on 60% of projections and it takes 80 (`AUTOAT=0.95 luajit tests/run.lua
+  astral 90`).
+- **No records carried in:** phase 3 starts the same however far the dream
+  was played. It used to have an Akashic Library, a multiplier from phases 1
+  and 2's records (×3.7 coming in, ×21 by the end); the Ether base, the
+  dreamers' rates (×4), the Third Eye in the Librarian's place and the Great
+  Flock's ×2 stand in for it, at the same pace.
 - **Dreamers:** six, each found once your reach passes `at`, priced
   `base * growth^owned` in Ether, `rate` Ether a second each, ×2 every 25 of
   a kind, ×(1 + 0.25 * log10(1 + reach)) (+50% of that a rank of Far
@@ -480,20 +476,19 @@ flow comes at 5.6 minutes.
   the rate it was running (the last projections' Ether a second, an average
   kept as it goes); without them, it waits in the body.
 
-From `luajit tests/run.lua astral 60` (a greedy player bringing the records
-of a usual run, coming back at 80% by hand until the Silver Thread and then
+From `luajit tests/run.lua astral 60` (a greedy player, coming back at 80% by hand until the Silver Thread and then
 setting it to 85%, breathing on four tugs in five, taking every comet's
 Ether, lighting every star it can, growing the cheapest upgrade under a third
 of its Ether, buying the dreamer that pays back soonest with a fifth):
 
-| minute | 2 | 6 | 10 | 14 | 20 | 30 | 40 | 44 |
+| minute | 2 | 6 | 10 | 14 | 20 | 30 | 40 | 42 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| cord | 270 | 4.6K | 23K | 118K | 1.3M | 3M | 10M | 15M |
-| constellations lit | 2 | 3 | 4 | 5 | 6 | 6 | 8 | 8 |
+| cord | 135 | 3K | 23K | 79K | 1.3M | 4.5M | 15M | 23M |
+| constellations lit | 1 | 3 | 4 | 5 | 6 | 6 | 8 | 8 |
 
-The planes come at 2.6 (the Astral), 8.6 (the Mental), 18.7 (the Causal) and
-33 minutes (the Edge), the Sleeper is lit at 39 and the cord cut at 45.7. In
-the first quarter hour there's something new 25 times, at most 167 seconds
+The planes come at 2.5 (the Astral), 9.4 (the Mental), 18.7 (the Causal) and
+31 minutes (the Edge), the Sleeper is lit at 37 and the cord cut at 43. In
+the first quarter hour there's something new 25 times, at most 180 seconds
 apart. A person who comes back earlier, misses tugs or lets the cord snap
 lands later.
 
