@@ -271,10 +271,11 @@ local MOMENTS = {
     { "43-beyond-pen", function() return beyondPlayed(20) end, 0, "beyond-pen" },
     { "44-beyond-splice", function() return beyondPlayed(20) end, 0, "beyond-splice" },
     { "45-beyond-council", function() return beyondPlayed(28) end, 0, "beyond-council" },
+    { "48-beyond-speech", function() return beyondPlayed(18) end, 0, "beyond-speech" },
     { "46-beyond-awake", function() return beyondPlayed(120, true) end, 0, "beyond-awake" },
     { "47-beyond-free", function()
         local s = beyondPlayed(120, true)
-        s.beyond.followers = C.beyond.voteNeed
+        s.beyond.followers, s.beyond.seats = C.beyond.voteNeed, C.beyond.voteSeats
         return s
     end, 0, "beyond-free" },
     { "40-beyond-turn", function() return beyondAt() end, 0, "beyond-turn" },
@@ -310,6 +311,13 @@ function Shots.run(UI, fit)
             if s.phase == "lucid" and m[4] ~= "enter" then UI.showLucid() end
             if s.phase == "astral" then UI.showAstral() end
             if s.phase == "beyond" then UI.showBeyond() end
+            if m[4] == "beyond-speech" then
+                local b = s.beyond
+                b.followers, b.rung = 1e6, math.max(b.rung, C.beyond.election.at)
+                b.electionCool, b.election = 0, nil
+                Beyond.run(b)
+                BUI.show("council")
+            end
             if m[4] == "beyond-awake" then Beyond.events[#Beyond.events + 1] = { type = "awake" } end
             if m[4] == "beyond-pen" then BUI.show("pen") end
             if m[4] == "beyond-splice" then BUI.show("splice") end
@@ -340,6 +348,7 @@ function Shots.run(UI, fit)
             if m[4] == "beyond" then frames = 330 end
             if m[4] and m[4]:sub(1, 7) == "beyond-" and m[4] ~= "beyond-turn" and m[4] ~= "beyond-jump" and m[4] ~= "beyond-bad" then frames = 90 end
             if m[4] == "beyond-free" then frames = 1000 end
+            if m[4] == "beyond-speech" then frames = 150 end
             if m[4] == "beyond-turn" then frames = 620 end
             if m[4] == "beyond-jump" then frames = 640 end
             if m[4] == "beyond-bad" then frames = 150 end

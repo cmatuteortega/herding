@@ -551,6 +551,39 @@ return {
 
         rallyTime = 30, rallyCool = 90, rallyMult = 3,
         voteNeed = 100000, -- Followers for the Referendum
+        voteSeats = 3, -- and a majority of the Council's five seats
+
+        -- The flocks in the line, courted one at a time: a whisper (and a share of
+        -- the Followers that come on their own) wins the court's flock over, slower
+        -- the more it resists. Loyalty is 0 to 1; each flock's gift grows with it.
+        loyaltyBase = 6000, courtPassive = 0.5,
+        flocks = {
+            { id = "lambs", name = "LAMBS", at = 1, resist = 1, desc = "EAGER AND EASY. WHISPERS UP TO X2" },
+            { id = "goats", name = "GOATS", at = 2, resist = 2, desc = "CYNICS WHO TRUST NO COUNT. THE DOGS SUSPECT HALF AS FAST" },
+            { id = "rams", name = "RAMS", at = 3, resist = 3, desc = "LEADERS, STUBBORN. FOLLOWERS A SECOND UP TO X2" },
+            { id = "dogs", name = "DOGS", at = 4, resist = 6, desc = "THE SYSTEM'S OWN. THEY LOOK AWAY: THE DOGS FORGET UP TO X3 FASTER" },
+        },
+        lambsWhisper = 1.0, goatsCalm = 0.5, ramsRate = 1.0, dogsForget = 2.0,
+
+        -- The Council's seats, won in an election: a speech of thirty seconds, tapping
+        -- the bleat while the rival pulls support away and the Dogs' smears have to
+        -- be swatted. A seat lifts Wits and Followers for good and opens motions; the
+        -- Referendum wants a majority.
+        seatsMax = 5, seatWits = 1.12, seatFollowers = 1.1,
+        election = {
+            at = 3, -- the rung that opens it
+            time = 30, cost = 300, costGrowth = 2.8, cooldown = 45,
+            start = 0.45, need = 0.5, -- support to begin with, and to win at the end (1 wins at once)
+            push = 0.015, bleatCool = 0.12, loyaltyPush = 0.35, -- a bleat; the flocks' loyalty adds to it
+            rival = 0.024, rivalSeat = 0.0045, -- support lost a second, and more for each seat held
+            smearIn = { 3.5, 6 }, smearWindow = 1.7, smearHit = 0.07,
+        },
+
+        -- Away: the pen goes on at this share, up to this many hours; the Dogs wait.
+        awayShare = 0.5, awayHours = 6, awayMin = 60,
+
+        -- What a sheep is for, out there: by its strongest gene, for phase 5.
+        classes = { wit = "ENGINEERS", voice = "SPEAKERS", nerve = "GUARDS", memory = "SCHOLARS", wool = "WEAVERS" },
 
         -- Upgrades, bought with Followers. `at` is the rung that opens them.
         sections = {
@@ -566,10 +599,10 @@ return {
             { id = "lessons", section = "council", name = "LESSONS", desc = "WITS X1.4", at = 2, max = 6, base = 400, growth = 4.0, mult = 1.4 },
             { id = "bleat", section = "council", name = "BLEAT", desc = "WHISPERS X2", at = 2, max = 4, base = 100, growth = 3.0, mult = 2 },
             { id = "petition", section = "council", name = "PETITION", desc = "FOLLOWERS A SECOND X1.35", at = 3, max = 6, base = 600, growth = 3.5, mult = 1.35 },
-            { id = "pen", section = "council", name = "BIGGER PEN", desc = "ROOM FOR TWO MORE", at = 3, max = 4, base = 500, growth = 3.0, add = 2 },
-            { id = "alibi", section = "council", name = "ALIBI", desc = "THE DOGS FORGET +50% FASTER", at = 3, max = 4, base = 600, growth = 2.5, add = 0.5 },
-            { id = "rally", section = "council", name = "RALLY", desc = "A BUTTON: FOLLOWERS X3 FOR 30S", at = 4, max = 1, base = 2000, growth = 1 },
-            { id = "registry", section = "council", name = "THE REGISTRY, OURS", desc = "IT PAIRS THE BEST TWO BY ITSELF", at = 4, max = 1, base = 4000, growth = 1 },
+            { id = "pen", section = "council", name = "BIGGER PEN", desc = "ROOM FOR TWO MORE", at = 3, seat = 1, max = 4, base = 500, growth = 3.0, add = 2 },
+            { id = "alibi", section = "council", name = "ALIBI", desc = "THE DOGS FORGET +50% FASTER", at = 3, seat = 1, max = 4, base = 600, growth = 2.5, add = 0.5 },
+            { id = "rally", section = "council", name = "RALLY", desc = "A BUTTON: FOLLOWERS X3 FOR 30S", at = 4, seat = 2, max = 1, base = 2000, growth = 1 },
+            { id = "registry", section = "council", name = "THE REGISTRY, OURS", desc = "IT PAIRS THE BEST TWO BY ITSELF", at = 4, seat = 2, max = 1, base = 4000, growth = 1 },
         },
 
         names = { "BRAMBLE", "CLOVER", "DOLLY", "HEATHER", "JUNIPER", "MOSS", "NETTLE", "OLIVE", "PIP", "QUILL", "ROWAN", "SORREL",

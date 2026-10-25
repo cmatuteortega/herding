@@ -18,8 +18,17 @@
 --
 -- A sheep reaching the ceiling of its kind can Descend: it joins the Hall of
 -- Elders (Wits x for good), the pen starts over from its heirs, and the ceiling
--- lifts. The state is `s.beyond`; the three numbers from before (count, mine,
--- bad) are still in it.
+-- lifts.
+--
+-- The line is four flocks (Lambs, Goats, Rams, Dogs), courted one at a time:
+-- whispers win the court's flock over, each with its own gift. The Council has
+-- five seats, won in an election (a speech of thirty seconds: bleat to hold
+-- the support, swat the Dogs' smears); a seat lifts Wits and Followers for good,
+-- opens motions, and the Referendum wants a majority of them. Time away goes
+-- on at a share, with the Dogs waiting. Out the other side, each sheep is a
+-- class by its strongest gene: the handoff to phase 5.
+-- The state is `s.beyond`; the three numbers from before (count, mine, bad)
+-- are still in it.
 
 local C = require "config"
 
@@ -40,6 +49,11 @@ for i, u in ipairs(B.ups) do
     UPS[i], UP[it.id] = it, it
 end
 Beyond.UPS, Beyond.UP, Beyond.SECTIONS = UPS, UP, B.sections
+
+local FLOCKS, FLOCK = B.flocks, {}
+for i, f in ipairs(FLOCKS) do FLOCK[f.id] = i end
+Beyond.FLOCKS, Beyond.FLOCK = FLOCKS, FLOCK
+local E = B.election
 
 -- What happened, for the screen and the sound: { type = ..., ... }.
 Beyond.events = {}
@@ -67,6 +81,9 @@ function Beyond.fresh()
         gen = 1, -- the Generation: the ceiling is its
         pen = {}, hall = {}, -- the sheep we breed, and the elders
         walked = 0, born = 0, culled = 0, -- sheep gone out of the pen to the flock; lambs; taken by the Dogs
+        workers = { wit = 0, voice = 0, nerve = 0, memory = 0, wool = 0 }, -- those gone, by what they're for
+        loyal = { lambs = 0, goats = 0, rams = 0, dogs = 0 }, court = "lambs", -- the flocks' loyalty; the one being courted
+        seats = 0, electionCool = 0, election = nil, -- the Council; the wait after a speech; the speech under way (not saved)
         nextId = 1,
         lambIn = B.lambEvery, ready = false,
         suspicion = 0, warned = false,
@@ -85,6 +102,22 @@ end
 
 local function rank(b, id) return b.ups[id] or 0 end
 Beyond.rank = rank
+
+-- What a sheep is for: its strongest gene (the first of them, in the genes' order).
+function Beyond.classOf(sh)
+    local best, bv = GENES[1].id, -1
+    for _, g in ipairs(GENES) do
+        if sh.g[g.id] > bv then best, bv = g.id, sh.g[g.id] end
+    end
+    return best
+end
+
+-- A sheep out of the pen, to the flock.
+local function retire(b, sh)
+    b.walked = b.walked + 1
+    local c = Beyond.classOf(sh)
+    b.workers[c] = b.workers[c] + 1
+end
 
 function Beyond.ceiling(b) return B.ceil0 + B.ceilStep * (b.gen - 1) end
 function Beyond.penMax(b) return B.penBase + UP.pen.add * rank(b, "pen") end
@@ -111,7 +144,7 @@ end
 function Beyond.witMult(b)
     local elders = 0
     for _, e in ipairs(b.hall) do elders = elders + e.g.wit end
-    return (1 + B.ancestorWits * elders) * UP.lessons.mult ^ rank(b, "lessons")
+    return (1 + B.ancestorWits * elders) * UP.lessons.mult ^ rank(b, "lessons") * B.seatWits ^ b.seats
 end
 
 function Beyond.witRate(b)
@@ -125,10 +158,12 @@ local function rallyMult(b) return b.rallyLeft > 0 and B.rallyMult or 1 end
 
 function Beyond.followerRate(b)
     return sum(b, "voice") * B.voiceRate * UP.petition.mult ^ rank(b, "petition") * rallyMult(b)
+        * B.seatFollowers ^ b.seats * (1 + B.ramsRate * b.loyal.rams)
 end
 
 function Beyond.whisperValue(b)
     return (B.whisper + B.whisperVoice * sum(b, "voice")) * UP.bleat.mult ^ rank(b, "bleat") * rallyMult(b)
+        * (1 + B.lambsWhisper * b.loyal.lambs)
 end
 
 -- How much brighter the pen looks than it is dull.
@@ -137,10 +172,10 @@ function Beyond.exposure(b)
 end
 
 function Beyond.suspicionRise(b)
-    return B.suspRise * Beyond.exposure(b) / (1 + B.nerveCover * avg(b, "nerve"))
+    return B.suspRise * Beyond.exposure(b) / (1 + B.nerveCover * avg(b, "nerve")) * (1 - B.goatsCalm * b.loyal.goats)
 end
 function Beyond.suspicionFall(b)
-    return B.suspDecay * (1 + UP.alibi.add * rank(b, "alibi"))
+    return B.suspDecay * (1 + UP.alibi.add * rank(b, "alibi")) * (1 + B.dogsForget * b.loyal.dogs)
 end
 
 function Beyond.countRate(b) return b.awake and 0 or B.countRate end
@@ -181,12 +216,19 @@ function Beyond.upPrice(b, id)
     return floor(u.base * u.growth ^ k)
 end
 
--- "shut" (the rung's not reached), "full", "open".
+-- "shut" (the rung's not reached, or a seat not won), "full", "open".
 function Beyond.upState(b, id)
     local u = UP[id]
     if rank(b, id) >= u.max then return "full" end
-    if b.rung < u.at then return "shut" end
+    if b.rung < u.at or b.seats < (u.seat or 0) then return "shut" end
     return "open"
+end
+
+-- What a shut upgrade waits on.
+function Beyond.upWaits(b, id)
+    local u = UP[id]
+    if b.rung < u.at then return "AT " .. B.rungs[u.at].name end
+    return "NEEDS SEAT " .. u.seat
 end
 
 function Beyond.canGrow(b, id)
@@ -202,6 +244,23 @@ function Beyond.grow(b, id)
     return true
 end
 
+--- the flocks --------------------------------------------------------------------------------
+
+function Beyond.flockOpen(b, id) return b.rung >= FLOCKS[FLOCK[id]].at end
+
+function Beyond.setCourt(b, id)
+    if not FLOCK[id] or not Beyond.flockOpen(b, id) then return false end
+    b.court = id
+    return true
+end
+
+-- Followers worth of effort win over the court's flock a share of the way.
+local function court(b, worth)
+    local f = FLOCKS[FLOCK[b.court]]
+    if not f or not Beyond.flockOpen(b, f.id) then return end
+    b.loyal[f.id] = min(1, b.loyal[f.id] + worth / (B.loyaltyBase * f.resist))
+end
+
 --- acting ----------------------------------------------------------------------------------
 
 -- A whisper at the sheep ahead: Followers, and the Dogs hear a little.
@@ -210,6 +269,7 @@ function Beyond.whisper(b)
     local v = Beyond.whisperValue(b)
     b.followers, b.followersEver = b.followers + v, b.followersEver + v
     b.suspicion = b.suspicion + B.whisperSus
+    court(b, v)
     b.whisperCool = B.whisperCool
     emit({ type = "whisper", value = v })
     return true
@@ -294,7 +354,7 @@ function Beyond.breed(b, ida, idc, rand)
                 for i, sh in ipairs(b.pen) do
                     if sh == out then table.remove(b.pen, i) break end
                 end
-                b.walked = b.walked + 1
+                retire(b, out)
             end
         end
         b.pen[#b.pen + 1] = l
@@ -350,7 +410,7 @@ function Beyond.descend(b, rand)
     rand = rand or math.random
     local elder = Beyond.eldest(b)
     b.hall[#b.hall + 1] = elder
-    b.walked = b.walked + #b.pen - 1
+    for _, sh in ipairs(b.pen) do if sh ~= elder then retire(b, sh) end end
     b.gen = b.gen + 1
     b.pen = {}
     local ceil = Beyond.ceiling(b)
@@ -385,7 +445,7 @@ end
 --- the Referendum ------------------------------------------------------------------------------------------
 
 function Beyond.canVote(b)
-    return b.awake and not b.escaped and b.followers >= B.voteNeed
+    return b.awake and not b.escaped and b.followers >= B.voteNeed and b.seats >= B.voteSeats
 end
 
 -- The flock, counted: every sheep that walks out.
@@ -400,9 +460,107 @@ function Beyond.vote(b)
     local names = {}
     for _, sh in ipairs(b.hall) do names[#names + 1] = sh.name end
     for _, sh in ipairs(b.pen) do names[#names + 1] = sh.name end
-    b.out = { flock = Beyond.flock(b), names = names, wits = b.wits, gens = b.gen, time = b.time }
+    -- The handoff: the flock by what each is for, and what the phase leaves with it.
+    local workers = {}
+    for _, g in ipairs(GENES) do workers[g.id] = b.workers[g.id] end
+    for _, sh in ipairs(b.pen) do local c = Beyond.classOf(sh) workers[c] = workers[c] + 1 end
+    for _, sh in ipairs(b.hall) do local c = Beyond.classOf(sh) workers[c] = workers[c] + 1 end
+    b.out = { flock = Beyond.flock(b), names = names, wits = b.wits, gens = b.gen, time = b.time,
+        workers = workers, seats = b.seats, loyal = { lambs = b.loyal.lambs, goats = b.loyal.goats, rams = b.loyal.rams, dogs = b.loyal.dogs } }
     emit({ type = "escaped", flock = b.out.flock })
     return true
+end
+
+--- the Council ---------------------------------------------------------------------------------------------------
+
+function Beyond.electionCost(b) return floor(E.cost * E.costGrowth ^ b.seats) end
+
+-- "locked", "full", "wait", "poor" or "open".
+function Beyond.electionState(b)
+    if b.seats >= B.seatsMax then return "full" end
+    if b.rung < E.at then return "locked" end
+    if b.election then return "on" end
+    if b.electionCool > 0 then return "wait" end
+    if b.followers < Beyond.electionCost(b) then return "poor" end
+    return "open"
+end
+
+function Beyond.canRun(b) return Beyond.electionState(b) == "open" and not b.escaped end
+
+local function between(rand, lo, hi) return lo + rand() * (hi - lo) end
+
+-- A speech: it costs Followers, and the support starts level with the rival's.
+function Beyond.run(b, rand)
+    if not Beyond.canRun(b) then return false end
+    rand = rand or math.random
+    b.followers = b.followers - Beyond.electionCost(b)
+    b.election = { t = 0, support = E.start, bleatCool = 0, smear = nil, smearIn = between(rand, E.smearIn[1], E.smearIn[2]), smears = 0, missed = 0 }
+    emit({ type = "election" })
+    return true
+end
+
+-- What a bleat is worth, by the flocks won over.
+function Beyond.bleatPush(b)
+    local loyalty = 0
+    for _, v in pairs(b.loyal) do loyalty = loyalty + v end
+    return E.push * (1 + E.loyaltyPush * loyalty)
+end
+
+function Beyond.bleat(b)
+    local e = b.election
+    if not e or e.bleatCool > 0 then return false end
+    e.support = min(1, e.support + Beyond.bleatPush(b))
+    e.bleatCool = E.bleatCool
+    return true
+end
+
+-- Swat a smear, in time.
+function Beyond.swat(b)
+    local e = b.election
+    if not e or not e.smear then return false end
+    e.smear = nil
+    return true
+end
+
+-- The rival's pull a second.
+function Beyond.rivalPull(b) return E.rival + E.rivalSeat * b.seats end
+
+local function endElection(b, won)
+    local e = b.election
+    b.election = nil
+    b.electionCool = E.cooldown
+    if won then
+        b.seats = b.seats + 1
+        emit({ type = "seat", seats = b.seats })
+    else
+        emit({ type = "lost", support = e.support })
+    end
+end
+
+local function electionStep(b, dt, rand)
+    local e = b.election
+    e.t = e.t + dt
+    e.bleatCool = max(0, e.bleatCool - dt)
+    e.support = e.support - Beyond.rivalPull(b) * dt
+    if e.smear then
+        e.smear.t = e.smear.t + dt
+        if e.smear.t >= E.smearWindow then
+            e.support = e.support - E.smearHit
+            e.missed = e.missed + 1
+            e.smear = nil
+            emit({ type = "smeared" })
+        end
+    else
+        e.smearIn = e.smearIn - dt
+        if e.smearIn <= 0 then
+            e.smear = { t = 0, x = rand() }
+            e.smears = e.smears + 1
+            e.smearIn = between(rand, E.smearIn[1], E.smearIn[2])
+        end
+    end
+    if e.support >= 1 then endElection(b, true)
+    elseif e.support <= 0 then endElection(b, false)
+    elseif e.t >= E.time then endElection(b, e.support >= E.need) end
 end
 
 --- time ----------------------------------------------------------------------------------------------------------
@@ -415,9 +573,12 @@ function Beyond.step(b, dt, rand)
     local f = Beyond.followerRate(b) * dt
     b.followers, b.followersEver = b.followers + f, b.followersEver + f
     if not b.awake then b.count = b.count + B.countRate * dt end
+    court(b, f * B.courtPassive)
     b.whisperCool = max(0, b.whisperCool - dt)
     b.rallyLeft = max(0, b.rallyLeft - dt)
     b.rallyCool = max(0, b.rallyCool - dt)
+    b.electionCool = max(0, b.electionCool - dt)
+    if b.election then electionStep(b, dt, rand) end
     -- Lambing.
     if not b.ready then
         b.lambIn = max(0, b.lambIn - dt)
@@ -451,6 +612,31 @@ function Beyond.step(b, dt, rand)
     end
 end
 
+--- time away ----------------------------------------------------------------------------------------------------------
+
+-- Away for `secs`: the pen goes on at a share of it, up to a few hours, with
+-- the Registry bred if it's ours. The Dogs wait, and no speech is made. The
+-- Count keeps counting. Returns what was gained, or nil.
+function Beyond.offline(b, secs, rand)
+    if b.escaped or secs < B.awayMin then return nil end
+    rand = rand or math.random
+    local was = { wits = b.wits, followers = b.followers, count = b.count, born = b.born, seats = b.seats, awake = b.awake }
+    local left = min(secs, B.awayHours * 3600) * B.awayShare
+    b.election = nil
+    local quiet = Beyond.events
+    while left > 0 do
+        local dt = min(left, 5)
+        Beyond.step(b, dt, rand)
+        b.suspicion = min(b.suspicion, B.warnAt - 0.05)
+        left = left - dt
+    end
+    -- What came up on the way isn't news.
+    Beyond.events = quiet
+    return { secs = min(secs, B.awayHours * 3600), capped = secs > B.awayHours * 3600,
+        wits = b.wits - was.wits, followers = b.followers - was.followers, count = b.count - was.count,
+        born = b.born - was.born, awoke = b.awake and not was.awake }
+end
+
 --- saves ----------------------------------------------------------------------------------------------------------------
 
 local function num(v, default, lo, hi)
@@ -476,6 +662,10 @@ function Beyond.serialize(b)
     o.pen, o.hall = {}, {}
     for i, sh in ipairs(b.pen) do o.pen[i] = serializeSheep(sh) end
     for i, sh in ipairs(b.hall) do o.hall[i] = serializeSheep(sh) end
+    o.election = nil -- a speech passes
+    o.workers, o.loyal = {}, {}
+    for _, g in ipairs(GENES) do o.workers[g.id] = b.workers[g.id] end
+    for _, f in ipairs(FLOCKS) do o.loyal[f.id] = b.loyal[f.id] end
     o.ups, o.seen = {}, {}
     for id, k in pairs(b.ups) do o.ups[id] = k end
     for id, v in pairs(b.seen) do if v then o.seen[id] = true end end
@@ -498,6 +688,15 @@ function Beyond.deserialize(o)
     b.suspicion = num(o.suspicion, 0, 0, 1)
     b.warned = o.warned == true
     b.rallyLeft, b.rallyCool = num(o.rallyLeft, 0, 0, 3600), num(o.rallyCool, 0, 0, 3600)
+    b.seats = floor(num(o.seats, 0, 0, B.seatsMax))
+    b.electionCool = num(o.electionCool, 0, 0, 3600)
+    if type(o.workers) == "table" then
+        for _, g in ipairs(GENES) do b.workers[g.id] = floor(num(o.workers[g.id], 0)) end
+    end
+    if type(o.loyal) == "table" then
+        for _, f in ipairs(FLOCKS) do b.loyal[f.id] = num(o.loyal[f.id], 0, 0, 1) end
+    end
+    if type(o.court) == "string" and FLOCK[o.court] then b.court = o.court end
     b.awake, b.escaped = o.awake == true, o.escaped == true
     b.intro = o.intro ~= false
     b.time = num(o.time, 0)
@@ -526,7 +725,10 @@ function Beyond.deserialize(o)
         for id, v in pairs(o.seen) do if v == true and type(id) == "string" then b.seen[id] = true end end
     end
     if type(o.out) == "table" then
-        b.out = { flock = floor(num(o.out.flock, 0)), names = {}, wits = num(o.out.wits, 0), gens = floor(num(o.out.gens, 1)), time = num(o.out.time, 0) }
+        b.out = { flock = floor(num(o.out.flock, 0)), names = {}, wits = num(o.out.wits, 0), gens = floor(num(o.out.gens, 1)), time = num(o.out.time, 0),
+            workers = {}, seats = floor(num(o.out.seats, 0, 0, B.seatsMax)), loyal = {} }
+        for _, g in ipairs(GENES) do b.out.workers[g.id] = floor(num(type(o.out.workers) == "table" and o.out.workers[g.id], 0)) end
+        for _, f in ipairs(FLOCKS) do b.out.loyal[f.id] = num(type(o.out.loyal) == "table" and o.out.loyal[f.id], 0, 0, 1) end
         if type(o.out.names) == "table" then
             for i = 1, min(#o.out.names, 200) do
                 if type(o.out.names[i]) == "string" then b.out.names[#b.out.names + 1] = o.out.names[i]:sub(1, 20) end

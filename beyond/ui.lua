@@ -11,8 +11,11 @@
 -- under the view, the race of Wits against the Count; then the Followers and
 -- the Dogs' suspicion, the buttons (WHISPER, JUMP, and RALLY and VOTE once
 -- they open), and three tabs: PEN (the sheep, and the Registry's pairing),
--- SPLICE (the Registry's odds, bought with Followers) and COUNCIL (the
--- flock's motions, and at the end, the Referendum).
+-- SPLICE (the Registry's odds, bought with Followers) and COUNCIL (a speech
+-- for a seat, the flocks to court, the motions, and at the end, the Referendum).
+-- In a speech the scene is the stage: BLEAT (the button, space, or a tap on
+-- the scene) to hold the support against the rival's pull, and tap the
+-- Dogs' smears before they land.
 --
 -- JUMP (the button, or space) with the fence in front of you clears it, and
 -- you are counted, and blink to the back of a new line: it calms the Dogs and
@@ -59,6 +62,7 @@ local banner = { text = nil, sub = nil, from = 0, till = 0 }
 local modal = nil -- { title, lines, big, buttons = { { label, fn } } }
 local modals = {} -- waiting
 local fin = nil -- the fence coming down: { t }
+local smearRect = nil -- the smear to swat, in the scene's own pixels, while one is up
 
 -- The line. `pos` sheep are ahead of us; the fence stands `fz` sheep-lengths up
 -- the lane (it eases down to pos + 1 as the line shuffles up). Distances are
@@ -185,17 +189,39 @@ local function awakeModal()
     })
 end
 
+-- Back after `seconds` away: the pen went on.
+function BUI.away(seconds)
+    if not Bd or Bd.escaped then return end
+    local r = Beyond.offline(Bd, seconds)
+    if not r then return end
+    local lines = { "THE PEN WENT ON FOR " .. duration(r.secs) .. "." .. (r.capped and (" (AT MOST " .. B.awayHours .. " HOURS.)") or "")
+        .. " THE COUNT KEPT COUNTING, AND THE DOGS WAITED." }
+    lines[#lines + 1] = "+" .. fmt(r.followers) .. " FOLLOWERS AND " .. r.born .. (r.born == 1 and " LAMB" or " LAMBS") .. "."
+    showModal({ title = "WHILE YOU WERE AWAY...", lines = lines, big = "+" .. fmt(r.wits) .. " WITS", buttons = { { label = "BAA" } } })
+    if r.awoke then
+        Beyond.events[#Beyond.events + 1] = { type = "awake" }
+    end
+    BUI.save()
+end
+
 local function endModal()
     local o = Bd.out or { flock = 0, names = {}, gens = 1, time = 0 }
     local names = {}
     for i = 1, min(#o.names, 10) do names[#names + 1] = o.names[i] end
     local list = table.concat(names, ", ") .. (#o.names > 10 and (", AND " .. (#o.names - 10) .. " MORE") or "")
+    -- What they are for out there: the classes, most first.
+    local classes = {}
+    for _, g in ipairs(Beyond.GENES) do classes[#classes + 1] = { B.classes[g.id], (o.workers or {})[g.id] or 0 } end
+    table.sort(classes, function(a, b) return a[2] > b[2] end)
+    local jobs = {}
+    for _, c in ipairs(classes) do if c[2] > 0 then jobs[#jobs + 1] = c[1] .. " " .. fmt(c[2]) end end
     showModal({
         title = "THE FENCE IS DOWN",
         lines = {
             fmt(o.flock) .. " SHEEP WALKED OUT, AFTER " .. o.gens .. (o.gens == 1 and " GENERATION" or " GENERATIONS")
                 .. " AND " .. duration(o.time) .. ". NOBODY COUNTED THEM.",
             list,
+            table.concat(jobs, ", ") .. ".",
             "OUT THERE IS AN ECONOMY, AND NO SHEPHERD. PHASE 5 COMES NEXT.",
         },
         big = fmt(o.flock) .. " FREE",
@@ -225,6 +251,31 @@ function BUI.whisper()
     say("+" .. fmt(v, true), scene.w / 2 + (floor(t * 7) % 2 == 0 and 14 or -14), scene.hor + scene.k * 0.3)
     cue("tap")
     return true
+end
+
+-- In a speech: the bleat, or a smear swatted.
+function BUI.bleat()
+    if Beyond.bleat(Bd) then
+        cue("tap")
+        if floor(t * 10) % 5 == 0 then say("BAA!", scene.w / 2 + (floor(t * 13) % 3 - 1) * 24, scene.hor + scene.k * 0.5) end
+        return true
+    end
+    return false
+end
+
+local function run()
+    if Beyond.run(Bd) then
+        cue("golden")
+        BUI.save()
+        return true
+    end
+    cue("nope")
+    return false
+end
+
+local function courtFlock(id)
+    if Beyond.setCourt(Bd, id) then cue("click") else cue("nope") end
+    BUI.save()
 end
 
 function BUI.vote()
@@ -281,7 +332,11 @@ end
 local function actionList()
     local list = {}
     local rallying = Beyond.rallying(Bd)
-    list[#list + 1] = { id = "whisper", label = "WHISPER", sub = "+" .. fmt(Beyond.whisperValue(Bd), true), ok = not Bd.escaped, fn = BUI.whisper }
+    if Bd.election then
+        list[#list + 1] = { id = "bleat", label = "BLEAT", sub = "HOLD THE ROOM", ok = true, hot = true, fn = BUI.bleat }
+    else
+        list[#list + 1] = { id = "whisper", label = "WHISPER", sub = "+" .. fmt(Beyond.whisperValue(Bd), true), ok = not Bd.escaped, fn = BUI.whisper }
+    end
     list[#list + 1] = { id = "jump", label = "JUMP", sub = turn() and "YOUR TURN" or nil, ok = not Bd.escaped, hot = turn(), fn = BUI.jump }
     if Beyond.rank(Bd, "rally") > 0 then
         local label = rallying and ("RALLY " .. ceil(Bd.rallyLeft)) or (Bd.rallyCool > 0 and ("RALLY " .. ceil(Bd.rallyCool)) or "RALLY")
@@ -313,6 +368,8 @@ local function tapRow(row)
     elseif row.breed then breed()
     elseif row.descend then descend()
     elseif row.up then grow(row.up.id)
+    elseif row.run then run()
+    elseif row.flock then courtFlock(row.flock.id)
     elseif row.vote then BUI.vote() end
 end
 
@@ -360,7 +417,16 @@ function BUI.pressed(x, y, id)
     elseif inside(R.tabs, x, y) then
         setTab(({ "pen", "splice", "council" })[lume.clamp(floor((x - R.tabs.x) / (R.tabs.w / 3)) + 1, 1, 3)])
     elseif inside(R.scene, x, y) then
-        BUI.whisper()
+        if Bd.election then
+            if smearRect and inside({ x = R.scene.x + smearRect.x, y = R.scene.y + smearRect.y, w = smearRect.w, h = smearRect.h }, x, y) and Beyond.swat(Bd) then
+                cue("land")
+                say("SWAT!", smearRect.x + smearRect.w / 2, smearRect.y + 4)
+            else
+                BUI.bleat()
+            end
+        else
+            BUI.whisper()
+        end
     elseif inside(R.panel, x, y) then
         press = { id = id, y0 = y, scroll0 = scroll, moved = false, last = y }
         scrollV = 0
@@ -402,8 +468,9 @@ function BUI.key(key)
     Audio.start()
     if key == "m" then BUI.pressed(R.mute.x + 1, R.mute.y + 1)
     elseif key == "r" then BUI.pressed(R.motion.x + 1, R.motion.y + 1)
+    elseif (key == "space" or key == "return") and Bd.election then down.bleat = 0.15; BUI.bleat()
     elseif key == "space" or key == "return" then down.jump = 0.15; BUI.jump()
-    elseif key == "w" then down.whisper = 0.15; BUI.whisper()
+    elseif key == "w" then down.whisper = 0.15; if Bd.election then BUI.bleat() else BUI.whisper() end
     elseif key == "1" or key == "2" or key == "3" then setTab(({ "pen", "splice", "council" })[tonumber(key)])
     elseif key == "b" then breed()
     elseif key == "v" then BUI.vote()
@@ -459,6 +526,18 @@ local function drain()
             cue("bleat")
         elseif e.type == "ready" then
             cue("click")
+        elseif e.type == "election" then
+            showBanner("THE SPEECH", "BLEAT TO HOLD THE ROOM. SWAT THE SMEARS")
+        elseif e.type == "seat" then
+            showBanner("A SEAT ON THE COUNCIL", "SEAT " .. e.seats .. " OF " .. B.seatsMax)
+            cue("star")
+            cue("golden")
+        elseif e.type == "lost" then
+            showBanner("THE ROOM WENT TO THE RIVAL", "TRY AGAIN IN A WHILE")
+            cue("nope")
+        elseif e.type == "smeared" then
+            say("SMEARED!", scene.w / 2, scene.hor + scene.k * 0.4)
+            cue("nope")
         elseif e.type == "awake" then
             cue("golden")
             awakeModal()
@@ -710,6 +789,10 @@ local function woken(k)
     return ((k * 7 + 3) % 10) / 10 < Beyond.progress(Bd)
 end
 
+local function centred(k, s, cx, y, z)
+    G.text(k, s, floor(cx - G.textWidth(s, z) / 2), y, z)
+end
+
 local function drawScene()
     -- Up in the air (a jump's arc): the camera rises, and what's near drops away.
     local camH, adv = 0, 0
@@ -762,6 +845,35 @@ local function drawScene()
         G.text("p", s2, floor(scene.w / 2 - G.textWidth(s2) / 2), by + 21)
     end
 
+    -- A speech: the support, and the smear to swat.
+    smearRect = nil
+    local el = Bd.election
+    if el then
+        local px, pw = 6, scene.w - 12
+        G.box(px, 4, pw, 28, "w", "o")
+        local head = ("THE SPEECH  %dS"):format(ceil(B.election.time - el.t))
+        G.text("o", head, px + 4, 7)
+        local bx, bw = px + 4, pw - 8
+        G.box(bx, 16, bw, 9, "r", "o")
+        local fill = floor(bw * lume.clamp(el.support, 0, 1))
+        if fill > 0 then G.rect("g", bx, 16, fill, 9) end
+        G.rect("w", bx, 16, max(0, fill), 1)
+        G.rect("o", bx + floor(bw * B.election.need), 14, 1, 13)
+        G.text("o", "YOU", bx + 2, 18)
+        local rv = "RIVAL"
+        G.text("o", rv, bx + bw - 2 - G.textWidth(rv), 18)
+        if el.smear then
+            local sw, sh = 46, 16
+            local sx = floor(6 + el.smear.x * (scene.w - sw - 12))
+            local sy = floor(scene.hor + scene.k * 0.18)
+            smearRect = { x = sx, y = sy, w = sw, h = sh }
+            local left = 1 - el.smear.t / B.election.smearWindow
+            G.box(sx, sy, sw, sh, (reduced or floor(t * 8) % 2 == 0) and "r" or "y", "o")
+            centred("o", "SMEAR!", sx + sw / 2, sy + 3)
+            G.rect("o", sx + 2, sy + sh - 5, floor((sw - 4) * max(0, left)), 2)
+        end
+    end
+
     -- Numbers rising.
     for _, f in ipairs(floats) do
         G.label("o", f.text, floor(f.x - G.textWidth(f.text) / 2), floor(f.y - f.t * 14), 1, f.t > 1 and (1.4 - f.t) / 0.4 or 1, "w")
@@ -779,10 +891,6 @@ local function drawScene()
 end
 
 --- the screen round it: the bar on top, the race, the stats, the buttons, the tabs ------------
-
-local function centred(k, s, cx, y, z)
-    G.text(k, s, floor(cx - G.textWidth(s, z) / 2), y, z)
-end
 
 local function drawTop()
     local r = R.top
@@ -889,7 +997,7 @@ local function drawTabs()
     local buttons = {
         { "PEN", tab == "pen", Bd.ready or Beyond.canDescend(Bd) },
         { "SPLICE", tab == "splice", anyAffordable("genes") },
-        { "COUNCIL", tab == "council", anyAffordable("council") or Beyond.canVote(Bd) },
+        { "COUNCIL", tab == "council", anyAffordable("council") or Beyond.canVote(Bd) or Beyond.canRun(Bd) },
     }
     local w = floor((r.w - 2 * (#buttons - 1)) / #buttons)
     for i, b in ipairs(buttons) do
@@ -924,6 +1032,12 @@ local function layout()
         end
     elseif tab == "splice" or tab == "council" then
         local id = tab == "splice" and "genes" or "council"
+        if tab == "council" then
+            add({ header = ("THE COUNCIL. %d OF %d SEATS."):format(Bd.seats, B.seatsMax) }, 10, 0)
+            add({ run = true }, CARD_H)
+            add({ header = "THE FLOCKS. WHOM TO COURT:" }, 10, 0)
+            for _, f in ipairs(Beyond.FLOCKS) do add({ flock = f }, CARD_H) end
+        end
         for _, sec in ipairs(Beyond.SECTIONS) do
             if sec.id == id then add({ header = sec.name .. ": " .. sec.how }, 10, 0) end
         end
@@ -1043,7 +1157,7 @@ local function drawUp(row, x, y, w)
     end
     local tx = x + 33
     G.text(shut and "s" or "o", u.name, tx, y + 5)
-    local say_ = shut and ("AT " .. B.rungs[u.at].name) or u.desc
+    local say_ = shut and Beyond.upWaits(Bd, u.id) or u.desc
     local lines = G.wrap(say_, px - tx - 4)
     for i = 1, min(2, #lines) do G.text(shut and "s" or "p", lines[i], tx, y + 8 + i * 6) end
 end
@@ -1066,9 +1180,76 @@ local function drawVote(row, x, y, w)
     G.text("p", "FOLLOWERS", px + pw - 4 - G.textWidth("FOLLOWERS"), y + 15)
     local tx = x + 33
     G.text(ok and "o" or "s", "VOTE", tx, y + 5)
-    local say_ = Bd.escaped and "THE FENCE IS DOWN" or (Bd.awake and "A MAJORITY OF THE FLOCK. THEN THE FENCE COMES DOWN." or "THE FLOCK IS ASLEEP. PASS THE COUNT FIRST.")
+    local say_
+    if Bd.escaped then say_ = "THE FENCE IS DOWN"
+    elseif not Bd.awake then say_ = "THE FLOCK IS ASLEEP. PASS THE COUNT FIRST."
+    elseif Bd.seats < B.voteSeats then say_ = ("A MAJORITY OF THE COUNCIL FIRST: %d OF %d SEATS."):format(Bd.seats, B.voteSeats)
+    else say_ = "A MAJORITY OF THE FLOCK. THEN THE FENCE COMES DOWN." end
     local lines = G.wrap(say_, px - tx - 4)
     for i = 1, min(2, #lines) do G.text(ok and "p" or "s", lines[i], tx, y + 8 + i * 6) end
+end
+
+-- The seat to run for: five pips for the seats, and what the speech costs.
+local function drawRun(row, x, y, w)
+    local h = row.h
+    local st = Beyond.electionState(Bd)
+    local ok = st == "open"
+    if ok and not reduced and sin(t * 3.4) > 0 then G.box(x, y, w, h, "y", "y") end
+    G.box(x + 1, y + 1, w - 2, h - 2, ok and "w" or (st == "locked" and "b" or "w"), ok and "o" or "s")
+    G.box(x + 4, y + 4, 24, h - 8, "m", "s")
+    -- A lectern.
+    G.rect("o", x + 14, y + 9, 4, 12); G.box(x + 9, y + 8, 14, 4, "w", "o")
+    local label, sub
+    if st == "open" or st == "poor" then label, sub = fmt(Beyond.electionCost(Bd)), "FOLLOWERS"
+    elseif st == "wait" then label, sub = ceil(Bd.electionCool) .. "S", "NEXT SPEECH"
+    elseif st == "on" then label, sub = "ON", "BLEAT!"
+    elseif st == "full" then label, sub = "FULL", nil
+    else label, sub = "LOCKED", nil end
+    local pw = max(G.textWidth(label), sub and G.textWidth(sub) or 0) + 8
+    local px = x + w - pw - 4
+    G.box(px, y + 4, pw, h - 8, ok and "y" or "b", "s")
+    G.text("o", label, px + pw - 4 - G.textWidth(label), y + 7)
+    if sub then G.text(ok and "h" or "p", sub, px + pw - 4 - G.textWidth(sub), y + 15) end
+    local tx = x + 33
+    G.text(st == "locked" and "s" or "o", "RUN FOR A SEAT", tx, y + 5)
+    local say_ = st == "locked" and ("AT " .. B.rungs[B.election.at].name) or "A SPEECH: BLEAT, AND SWAT THE SMEARS. SEATS LIFT WITS AND FOLLOWERS."
+    local lines = G.wrap(say_, px - tx - 4)
+    for i = 1, min(2, #lines) do G.text(st == "locked" and "s" or "p", lines[i], tx, y + 8 + i * 6) end
+    for i = 1, B.seatsMax do
+        G.rect(i <= Bd.seats and "y" or "s", tx + (i - 1) * 6, y + h - 7, 4, 3)
+    end
+end
+
+local FLOCK_COLOURS = { lambs = "a", goats = "h", rams = "p", dogs = "o" }
+
+local function drawFlock(row, x, y, w)
+    local f, h = row.flock, row.h
+    local open = Beyond.flockOpen(Bd, f.id)
+    local courting = Bd.court == f.id
+    local lv = Bd.loyal[f.id]
+    G.box(x + 1, y + 1, w - 2, h - 2, open and (courting and "y" or "w") or "b", courting and "h" or "s")
+    G.box(x + 4, y + 4, 24, h - 8, "m", "s")
+    -- A head in the flock's colour.
+    local k = open and FLOCK_COLOURS[f.id] or "s"
+    G.disc(k, x + 16, y + h / 2 + 1, 6)
+    G.rect("w", x + 13, y + h / 2 - 1, 2, 2); G.rect("w", x + 18, y + h / 2 - 1, 2, 2)
+    local label = not open and "LOCKED" or (courting and "COURTING" or "COURT")
+    local pw = G.textWidth(label) + 8
+    local px = x + w - pw - 4
+    G.box(px, y + 4, pw, h - 8, courting and "y" or "b", "s")
+    G.text("o", label, px + pw - 4 - G.textWidth(label), y + 7)
+    G.text(courting and "h" or "p", pct(lv), px + pw - 4 - G.textWidth(pct(lv)), y + 15)
+    local tx = x + 33
+    G.text(open and "o" or "s", f.name, tx, y + 5)
+    local bw = px - tx - 6
+    if open and bw > 8 then
+        G.box(tx + G.textWidth(f.name) + 4, y + 5, bw - G.textWidth(f.name) - 4, 5, "b", "s")
+        local fill = floor((bw - G.textWidth(f.name) - 6) * lv)
+        if fill > 0 then G.rect(k == "o" and "p" or k, tx + G.textWidth(f.name) + 5, y + 6, fill, 3) end
+    end
+    local say_ = open and f.desc or ("AT " .. B.rungs[f.at].name)
+    local lines = G.wrap(say_, px - tx - 4)
+    for i = 1, min(2, #lines) do G.text(open and "p" or "s", lines[i], tx, y + 8 + i * 6) end
 end
 
 local function drawPanel()
@@ -1085,6 +1266,8 @@ local function drawPanel()
             elseif row.descend then drawDescend(row, r.x, y, r.w)
             elseif row.elder then drawElder(row, r.x, y, r.w)
             elseif row.up then drawUp(row, r.x, y, r.w)
+            elseif row.run then drawRun(row, r.x, y, r.w)
+            elseif row.flock then drawFlock(row, r.x, y, r.w)
             elseif row.vote then drawVote(row, r.x, y, r.w) end
         end
     end

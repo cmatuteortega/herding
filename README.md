@@ -68,7 +68,21 @@ its heirs start the pen again, and the ceiling lifts. The ladder runs Flock,
 Herd-mind, Dog, Crow, Child, Speaker, and then "I": Wits passes the Count, a
 lamb says its name, the Count stops, and the Referendum (Followers for a
 vote) brings the fence down. The flock walks out; its names are the ones you
-bred. About 45 minutes for a player who taps, twice that for one who doesn't.
+bred. About 40 minutes for a player who taps, a good deal more for one who
+doesn't.
+
+The line is four flocks, courted one at a time (whispers win the court's
+flock over, the harder ones more slowly): Lambs make whispers louder, Goats
+make the Dogs suspect half as fast, Rams bring Followers on their own, and the
+Dogs themselves, turned, forget faster. The Council has five seats, each won in
+a speech of thirty seconds: BLEAT to hold the support against the rival's
+pull, and swat the Dogs' smears before they land. A seat lifts Wits and
+Followers for good and opens motions (a bigger pen, an alibi, the Rally, the
+Registry paired by itself), and the Referendum wants a majority of them. Away,
+the pen goes on at half speed for up to six hours, the Count counting and the
+Dogs waiting. Out the other side, each sheep is a class by its strongest gene
+(Engineers, Speakers, Guards, Scholars, Weavers): that, and the seats and the
+flocks' loyalty, is what phase 5 starts from (`b.out`).
 From the field to the dream to the stars to the other side of the count.
 
 It's built for a phone held upright (the field on top, the shop under your
@@ -178,9 +192,9 @@ small helpers) and **json.lua** 0.1.2 (the save file).
 | `astral/game.lua` | phase 3's rules: the cord (out, strain, tugs, breaths, back, the snap), the planes, the dreamers, the constellations, the comet, the cut, time away. Pure Lua |
 | `astral/ui.lua` | phase 3's screen: the cord's bar and button, the CORD, DREAMERS and STARS tabs, dialogs, the way out (the sheep count you). `ui.lua` hands over to it |
 | `astral/scene.lua` | phase 3's field: the plane's sky, far stars streaming past, the body asleep below, the silver cord, the constellation being lit, the dreamers, the comet |
-| `beyond/game.lua` | phase 4's rules: the pen and its genes, the Registry (breeding, mutation, generations), Wits and the Count, the Dogs' suspicion, splices and motions, the Referendum. Pure Lua |
+| `beyond/game.lua` | phase 4's rules: the pen and its genes, the Registry (breeding, mutation, generations), Wits and the Count, the Dogs' suspicion, the flocks' loyalty, the Council's elections, splices and motions, time away, the Referendum and the handoff. Pure Lua |
 | `beyond/bot.lua` | a simple player for phase 4, for the sim and the dev autoplay |
-| `beyond/ui.lua` | phase 4's screen: you are the sheep, in a line for the fence; WHISPER and JUMP, the race of Wits and the Count, the PEN, SPLICE and COUNCIL tabs, the fence coming down. `ui.lua` hands over to it |
+| `beyond/ui.lua` | phase 4's screen: you are the sheep, in a line for the fence; WHISPER and JUMP, the race of Wits and the Count, the PEN, SPLICE and COUNCIL tabs (seats, flocks, motions), the speech, the fence coming down. `ui.lua` hands over to it |
 | `assets/icon/` | the launcher icon, two 40px layers in the palette: the dusk and the hill, and the sheep |
 | `android/icon.py` | bakes the Android launcher icon (legacy and adaptive) out of `assets/icon/` (underroot's) |
 
@@ -263,8 +277,12 @@ beyond = {
   lambIn, ready,                  -- seconds to the next lambing, and the Registry waiting for a pair
   suspicion, warned,              -- the Dogs, 0 to 1, and their warning shown
   ups,                            -- splices and motions: id = ranks
+  loyal, court,                   -- the flocks' loyalty (lambs, goats, rams, dogs: 0 to 1); the one being courted
+  seats, electionCool,            -- the Council's seats won; the wait after a speech (a speech isn't saved)
+  workers,                        -- sheep gone out of the pen, by class (the strongest gene)
   rallyLeft, rallyCool,           -- the Rally running, and its wait
-  rung, awake, escaped, out,      -- the ladder; Wits passed the Count; the fence down; { flock, names, ... }
+  rung, awake, escaped, out,      -- the ladder; Wits passed the Count; the fence down;
+                                  -- { flock, names, workers = class counts, seats, loyal, wits, gens, time }
   seen, intro, time,
 }
 
@@ -714,9 +732,9 @@ their value comes from what they buy.
 
 - Achievements
 - A stats screen
-- Phase 4: no flock types (Lambs, Rams, Goats, Dogs as sides to court) and no
-  election minigame yet: the Council is its motions and the Referendum; no
-  time away (the pen waits); the end hands nothing on, phase 5 isn't built
+- Phase 4: the flocks only have the one gift each, and the speech is the one
+  minigame (no other kind of campaign); phase 5 isn't built, so the end hands
+  its flock on (`b.out`) to nothing yet
 - Phase 3: no challenges of its own (the restless nights' and the dream
   challenges' kind), and the dreamers only show as orbs, not as the sleepers
   they are

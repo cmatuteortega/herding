@@ -421,7 +421,7 @@ local function beyondSim(tap)
         Beyond.step(b, 0.5, rand)
         Bot.act(b, 0.5, rand, { tap = tap })
         for _, e in ipairs(Beyond.events) do
-            if e.type == "rung" or e.type == "descend" or e.type == "cull" or e.type == "awake" then
+            if e.type == "rung" or e.type == "descend" or e.type == "cull" or e.type == "awake" or e.type == "seat" or e.type == "lost" then
                 print(("  %4.1f min: %s %s (gen %d, %s Wits, %s Followers)"):format(t / 60, e.type,
                     e.rung and Beyond.RUNGS[e.rung].name or "", b.gen, N.format(b.wits), N.format(b.followers)))
             end
@@ -430,6 +430,8 @@ local function beyondSim(tap)
     end
     print(("  %s at %.1f min: %d sheep walked out, %d generations, %d taken by the Dogs"):format(
         b.escaped and "the fence is down" or "still in the line", t / 60, Beyond.flock(b), b.gen, b.culled))
+    local l = b.loyal
+    print(("  %d seats, loyalty lambs %.0f%% goats %.0f%% rams %.0f%% dogs %.0f%%"):format(b.seats, l.lambs * 100, l.goats * 100, l.rams * 100, l.dogs * 100))
 end
 
 if arg[1] == "beyond" then
@@ -1179,6 +1181,9 @@ test("astral projection: through the gate, and saves", function()
     -- The old tally (before the Registry) still loads, with a pen.
     back = Game.deserialize({ version = 4, phase = "beyond", lucid = { gate = true }, astral = { cut = true } })
     eq(back.phase, "beyond"); eq(#back.beyond.pen, 3)
+    eq(Game.handoff(back), nil)
+    back.beyond.escaped, back.beyond.out = true, { flock = 9, workers = {} }
+    eq(Game.handoff(back).flock, 9)
     assert(Game.backToStars(back)); eq(back.phase, "astral"); eq(back.astral.cut, false)
 end)
 test("astral projection: the cord", function()
@@ -1388,7 +1393,9 @@ test("beyond: splices and motions", function()
     eq(Beyond.rank(b, "gestation"), Beyond.UP.gestation.max); eq(Beyond.upState(b, "gestation"), "full")
     assert(Beyond.lambTime(b) < K.lambEvery)
     assert(not Beyond.grow(b, "gestation"), "full")
-    -- The Registry, ours: it pairs by itself.
+    -- The Registry, ours: it pairs by itself, once the Council has seats.
+    assert(not Beyond.grow(b, "registry"), "no seat yet"); eq(Beyond.upWaits(b, "registry"), "NEEDS SEAT 2")
+    b.seats = 2
     assert(Beyond.grow(b, "registry"))
     b.ready = true
     local born = b.born
@@ -1396,6 +1403,7 @@ test("beyond: splices and motions", function()
     eq(b.born, born + 1)
     -- The Rally.
     assert(not Beyond.canRally(b)); assert(Beyond.grow(b, "rally")); assert(Beyond.canRally(b))
+    assert(Beyond.setCourt(b, "dogs")) -- (the lambs' gift would drift with the wait)
     local v = Beyond.whisperValue(b)
     assert(Beyond.rally(b)); close(Beyond.whisperValue(b), v * K.rallyMult); assert(not Beyond.canRally(b))
     Beyond.step(b, K.rallyTime + 1)
@@ -1424,22 +1432,138 @@ test("beyond: generations and the end", function()
     assert(b.awake); eq(Beyond.rungOf(b), #K.rungs); eq(Beyond.progress(b), 1)
     local frozen = b.count
     Beyond.step(b, 10, rand); eq(b.count, frozen)
-    -- The vote needs the Followers.
+    -- The vote needs the Followers, and a majority of the Council.
     assert(not Beyond.canVote(b))
     b.followers = K.voteNeed
+    assert(not Beyond.canVote(b), "no seats")
+    b.seats = K.voteSeats
+    b.workers = { wit = 4, voice = 3, nerve = 2, memory = 1, wool = 0 }
     assert(Beyond.canVote(b)); assert(Beyond.vote(b))
     assert(b.escaped and b.out and b.out.flock == Beyond.flock(b) and #b.out.names == #b.pen + #b.hall)
+    -- The handoff: every sheep a class, the pen and the elders with those gone.
+    local total = 0
+    for _, g in ipairs(Beyond.GENES) do total = total + b.out.workers[g.id] end
+    eq(total, 10 + #b.pen + #b.hall); eq(b.out.seats, K.voteSeats)
     local t = b.time
     Beyond.step(b, 5, rand); eq(b.time, t) -- over
     -- It all comes back from a save.
     local json = require "lib.json"
     local back = Beyond.deserialize(json.decode(json.encode(Beyond.serialize(b))))
     assert(back.escaped and back.awake); eq(back.out.flock, b.out.flock); eq(#back.hall, 1); eq(back.hall[1].name, elder.name)
-    eq(back.gen, 2); eq(back.nextId, b.nextId)
+    eq(back.gen, 2); eq(back.nextId, b.nextId); eq(back.out.seats, K.voteSeats); eq(back.out.workers.wit, b.out.workers.wit)
     -- A bad one is cleaned up.
     back = Beyond.deserialize({ pen = { { id = 3, name = 5, g = { 99, -4, "x" } } }, ups = { lessons = 99, nope = 1 }, escaped = true })
     eq(#back.pen, 1); eq(back.pen[1].g.voice, 0); eq(back.ups.lessons, Beyond.UP.lessons.max); assert(not back.escaped, "an end with no flock isn't one")
     back = Beyond.deserialize(nil); eq(#back.pen, #K.founders)
+end)
+test("beyond: the flocks", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local b = Beyond.fresh()
+    eq(b.court, "lambs"); assert(Beyond.flockOpen(b, "lambs")); assert(not Beyond.flockOpen(b, "rams"))
+    assert(not Beyond.setCourt(b, "rams"), "not yet"); assert(not Beyond.setCourt(b, "nobody"))
+    -- Whispers win the court's flock over, a share each; the others stay as they were.
+    local v = Beyond.whisperValue(b)
+    assert(Beyond.whisper(b))
+    close(b.loyal.lambs, v / (K.loyaltyBase * K.flocks[1].resist)); eq(b.loyal.goats, 0)
+    -- The gifts, at full loyalty.
+    b.rung = 6
+    b.loyal = { lambs = 0, goats = 0, rams = 0, dogs = 0 }
+    b.pen[1].g.wit, b.pen[1].g.voice = 6, 3
+    local w, sus, fall, rate = Beyond.whisperValue(b), Beyond.suspicionRise(b), Beyond.suspicionFall(b), Beyond.followerRate(b)
+    b.loyal = { lambs = 1, goats = 1, rams = 1, dogs = 1 }
+    close(Beyond.whisperValue(b), w * (1 + K.lambsWhisper), 1e-9)
+    close(Beyond.suspicionRise(b), sus * (1 - K.goatsCalm))
+    close(Beyond.suspicionFall(b), fall * (1 + K.dogsForget))
+    close(Beyond.followerRate(b), rate * (1 + K.ramsRate), 1)
+    -- Harder flocks take longer; loyalty stops at 1; the Followers that come on their own count.
+    b.loyal = { lambs = 0, goats = 0, rams = 0, dogs = 0 }
+    assert(Beyond.setCourt(b, "dogs"))
+    b.pen[1].g.voice = 5
+    Beyond.step(b, 100)
+    assert(b.loyal.dogs > 0 and b.loyal.dogs < 1); eq(b.loyal.lambs, 0)
+    b.loyal.dogs = 0.99999; b.followers = 0
+    Beyond.whisper(b)
+    eq(b.loyal.dogs, 1)
+end)
+test("beyond: the Council's elections", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local E = K.election
+    local seed = 4
+    local function rand() seed = (seed * 16807) % 2147483647 return seed / 2147483647 end
+    local b = Beyond.fresh()
+    eq(Beyond.electionState(b), "locked")
+    b.rung = E.at
+    eq(Beyond.electionState(b), "poor"); assert(not Beyond.run(b, rand))
+    b.followers = 1e9
+    eq(Beyond.electionState(b), "open")
+    local cost = Beyond.electionCost(b)
+    assert(Beyond.run(b, rand)); close(b.followers, 1e9 - cost); eq(Beyond.electionState(b), "on")
+    assert(not Beyond.run(b, rand), "one at a time")
+    -- Not bleating: the rival wins it, and there's a wait.
+    local lost
+    for _ = 1, 1000 do
+        Beyond.step(b, 0.1, rand)
+        for _, e in ipairs(Beyond.events) do if e.type == "lost" then lost = true end end
+        Beyond.events = {}
+        if not b.election then break end
+    end
+    assert(lost); eq(b.seats, 0); assert(b.electionCool > 0); eq(Beyond.electionState(b), "wait")
+    Beyond.step(b, E.cooldown + 1, rand)
+    -- Bleating: the support climbs, a bleat has a cooldown, and the win is a seat.
+    assert(Beyond.run(b, rand))
+    assert(Beyond.bleat(b)); assert(not Beyond.bleat(b), "the cooldown")
+    local m = Beyond.witMult(b)
+    local won
+    for _ = 1, 2000 do
+        Beyond.step(b, 0.05, rand)
+        if b.election then
+            if b.election.smear then Beyond.swat(b) end
+            b.election.bleatCool = 0
+            Beyond.bleat(b); Beyond.bleat(b)
+        end
+        for _, e in ipairs(Beyond.events) do if e.type == "seat" then won = true end end
+        Beyond.events = {}
+        if not b.election then break end
+    end
+    assert(won); eq(b.seats, 1); close(Beyond.witMult(b), m * K.seatWits)
+    -- A smear unswatted costs support.
+    b.electionCool = 0
+    assert(Beyond.run(b, rand))
+    b.election.smear = { t = 0, x = 0.5 }
+    local before = b.election.support
+    Beyond.step(b, E.smearWindow + 0.1, rand)
+    assert(b.election.support < before - E.smearHit * 0.9)
+    -- The rival pulls harder with every seat; all five is the most.
+    assert(Beyond.rivalPull(b) > E.rival)
+    b.election = nil
+    b.seats = K.seatsMax
+    eq(Beyond.electionState(b), "full")
+    -- A speech isn't saved; seats and the wait are.
+    b.electionCool = 12
+    local back = Beyond.deserialize(require("lib.json").decode(require("lib.json").encode(Beyond.serialize(b))))
+    eq(back.seats, K.seatsMax); eq(back.election, nil); close(back.electionCool, 12)
+end)
+test("beyond: time away", function()
+    local Beyond = require "beyond.game"
+    local K = C.beyond
+    local b = Beyond.fresh()
+    eq(Beyond.offline(b, K.awayMin - 1), nil)
+    b.pen[1].g.wit, b.pen[2].g.wit = 6, 6
+    local wits, count = b.wits, b.count
+    local r = Beyond.offline(b, 3600)
+    assert(r and r.wits > 0 and b.wits > wits and r.count > 0)
+    close(b.count - count, K.countRate * 3600 * K.awayShare, 1e-6)
+    -- The Dogs wait, however bright the pen.
+    for _, sh in ipairs(b.pen) do sh.g.wit, sh.g.wool = 8, 0 end
+    Beyond.offline(b, 6 * 3600)
+    assert(b.suspicion < K.warnAt); eq(b.culled, 0)
+    -- A cap; and nothing once out.
+    r = Beyond.offline(b, 30 * 3600)
+    assert(r.capped); close(r.secs, K.awayHours * 3600)
+    b.escaped = true
+    eq(Beyond.offline(b, 3600), nil)
 end)
 test("beyond: a bot plays it through", function()
     local Beyond = require "beyond.game"

@@ -551,6 +551,13 @@ function Game.goBeyond(s)
     return true
 end
 
+-- What phase 5 starts from, once the fence is down: the flock that walked out,
+-- by class, with the seats won and the flocks' loyalty (nil until then).
+function Game.handoff(s)
+    local b = s.beyond
+    return b and b.escaped and b.out or nil
+end
+
 -- Back from beyond (a way for testing; the screen has no button for it): the stars again, the cord
 -- whole, as if it had never been cut.
 function Game.backToStars(s)

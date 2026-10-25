@@ -213,6 +213,7 @@ function love.load(args)
         if toBeyond then jumpToBeyond(s) end
     elseif s.phase == "beyond" then
         UI.showBeyond()
+        UI.away(os.difftime(os.time(), s.lastSeen))
     elseif s.phase == "astral" then
         UI.showAstral()
         UI.away(os.difftime(os.time(), s.lastSeen))

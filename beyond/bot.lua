@@ -27,6 +27,19 @@ function Bot.act(b, dt, rand, opts)
         did.jump = true
     end
     if Beyond.canRally(b) then Beyond.rally(b) did.rally = true end
+    -- The court: the dearest flock open, and a speech whenever it can pay for one.
+    for i = #Beyond.FLOCKS, 1, -1 do
+        if Beyond.setCourt(b, Beyond.FLOCKS[i].id) then break end
+    end
+    if Beyond.canRun(b) and Beyond.run(b, rand) then did.run = true end
+    if b.election then
+        -- Bleats as fast as the hand goes (the sim steps are longer than the cooldown), smears swatted.
+        for _ = 1, math.max(1, math.floor((opts.bleat or 3) * dt + 0.5)) do
+            b.election.bleatCool = 0
+            Beyond.bleat(b)
+        end
+        Beyond.swat(b)
+    end
     if b.ready then
         local a, c = Beyond.bestPair(b)
         if a and c and Beyond.breed(b, a.id, c.id, rand) then did.breed = true end
@@ -34,6 +47,8 @@ function Bot.act(b, dt, rand, opts)
     if Beyond.canDescend(b) and Beyond.descend(b, rand) then did.descend = true end
     if b.awake then
         if Beyond.vote(b) then did.vote = true end
+    elseif b.election then
+        -- Not while the speech goes on.
     else
         local best, bp
         for _, u in ipairs(Beyond.UPS) do

@@ -290,7 +290,7 @@ end
 function UI.away(seconds)
     if lucid() then return LUI.away(seconds) end
     if astral() then return AUI.away(seconds) end
-    if beyond() then return end
+    if beyond() then return BUI.away(seconds) end
     local r = Game.offline(S, seconds)
     if not r or seconds < C.offline.minSeconds or not N.gte(r.gain, N.from(1)) then return end
     UI.showModal({
