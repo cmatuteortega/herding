@@ -1,4 +1,6 @@
--- Phase 4, beyond: past the cut cord, the page turned over. Every phase before
+-- Phase 4, beyond: past the cut cord, the page turned over (laid out like the
+-- phases before it: a bar on top, the view in its frame, the line, and the
+-- panel with its one button under it). Every phase before
 -- was the dark (dusk, the night, the dream, the planes); this is the light, a
 -- simple screen in the clear colours (cream, mint, grass), and in it WE are
 -- the sheep. The point of view is a sheep's: we look up the lane at the backs of
@@ -26,7 +28,6 @@ local B = C.beyond
 
 local BUI = {}
 BUI.save = function() end -- set by ui.lua
-BUI.back = function() end -- set by ui.lua: back to the stars (no button for it now)
 BUI.resetAll = function() end -- set by ui.lua: wipe the save, a new game
 BUI.nextPhase = function() end -- set by ui.lua (dev): round to phase 1
 
@@ -34,8 +35,9 @@ local S
 local vw, vh = 320, 240
 local t = 0 -- the clock
 local reduced = false
-local button, reset, phase
-local scene = { h = 200, hor = 76, k = 124 } -- the view: its height, the horizon, horizon to our feet
+local R = {}
+local function rect(x, y, w, h) return { x = floor(x), y = floor(y), w = floor(w), h = floor(h) } end
+local scene = { w = 300, h = 200, hor = 76, k = 124 } -- the view: its height, the horizon, horizon to our feet
 local sizeK = 3 -- a sheep's size at our feet; it shrinks off up the lane
 local confirm = 0 -- until when the reset button waits for its second tap
 local RESET_ART = { "..ooo.o", ".o...oo", "o...ooo", "o......", "o.....o", ".o...o.", "..ooo.." }
@@ -62,18 +64,39 @@ function BUI.setState(s)
     b.count, b.mine, b.bad = b.count or 0, b.mine or 0, b.bad or 0
 end
 function BUI.setReduced(v) reduced = v end
+BUI.setReducedAll = function(v) BUI.setReduced(v) end -- set by ui.lua, which owns the setting
 
 function BUI.fit(w, h, inset)
     vw, vh = w, h
-    local bw = min(vw - 40, 130)
-    button = { x = floor(vw / 2 - bw / 2), y = vh - inset.b - 24, w = bw, h = 18 }
-    reset = { x = vw - inset.r - 3 - 17, y = inset.t + 2, w = 17, h = 13 }
-    phase = { x = reset.x - 20, y = reset.y, w = 17, h = 13 }
-    scene.h = button.y - 8
+    local l, top, r, bot = inset.l + 3, inset.t + 2, vw - inset.r - 3, vh - inset.b - 2
+    R.top = rect(l, top, r - l, 13)
+    R.mute = rect(r - 17, top, 17, 13)
+    R.motion = rect(r - 37, top, 17, 13)
+    R.reset = rect(r - 57, top, 17, 13)
+    R.phase = rect(r - 77, top, 17, 13)
+    local y = top + 16
+    if vh >= vw * 1.15 then
+        local sh = max(110, floor((bot - y) * 0.5))
+        R.scene = rect(l + 1, y, r - l - 2, sh)
+        R.line = rect(l, y + sh + 4, r - l, 13)
+        R.panel = rect(l, R.line.y + 17, r - l, bot - (R.line.y + 17))
+    else
+        local pw = max(160, min(230, floor((r - l) * 0.42)))
+        local sx = r - pw
+        R.scene = rect(l + 1, y, sx - l - 7, bot - y - 18)
+        R.line = rect(l, R.scene.y + R.scene.h + 4, sx - l - 5, 13)
+        R.panel = rect(sx, y + 17, pw, bot - (y + 17))
+    end
+    -- In the panel: the tally, and under it the one button.
+    R.tally = rect(R.panel.x, R.panel.y, R.panel.w, 31)
+    R.jump = rect(R.panel.x, R.tally.y + R.tally.h + 4, R.panel.w, min(44, max(24, R.panel.h - R.tally.h - 4)))
+    scene.w, scene.h = R.scene.w, R.scene.h
     scene.hor = floor(scene.h * 0.38)
     scene.k = scene.h - scene.hor
-    sizeK = max(1.6, min(vw / 30, scene.h / 38))
+    sizeK = max(1.6, min(scene.w / 30, scene.h / 38))
 end
+
+function BUI.sceneRect() return R.scene end
 
 -- How many sheep are in the next line: it varies, the same way each time.
 local function newLine(n)
@@ -109,10 +132,20 @@ end
 
 function BUI.pressed(x, y)
     Audio.start()
-    if inside(button, x, y) then
+    if inside(R.jump, x, y) then
         down = 0.15
         BUI.jump()
-    elseif inside(reset, x, y) then
+    elseif inside(R.mute, x, y) then
+        S.muted = not S.muted
+        Audio.setMuted(S.muted)
+        Audio.cue("click")
+        BUI.save()
+    elseif inside(R.motion, x, y) then
+        S.reducedMotion = not S.reducedMotion
+        BUI.setReducedAll(S.reducedMotion)
+        Audio.cue("click")
+        BUI.save()
+    elseif inside(R.reset, x, y) then
         Audio.cue("click")
         if confirm > t then
             confirm = 0
@@ -121,7 +154,7 @@ function BUI.pressed(x, y)
         else
             confirm = t + 3
         end
-    elseif inside(phase, x, y) then
+    elseif inside(R.phase, x, y) then
         Audio.cue("click")
         Audio.setBeyond(false)
         BUI.nextPhase()
@@ -132,10 +165,8 @@ function BUI.released() end
 function BUI.wheel() end
 
 function BUI.key(key)
-    if key == "m" then
-        S.muted = not S.muted
-        Audio.setMuted(S.muted)
-        BUI.save()
+    if key == "m" then BUI.pressed(R.mute.x + 1, R.mute.y + 1)
+    elseif key == "r" then BUI.pressed(R.motion.x + 1, R.motion.y + 1)
     elseif key == "space" or key == "return" then
         Audio.start()
         down = 0.15
@@ -147,7 +178,7 @@ end
 local function counted()
     local b = S.beyond
     b.count, b.mine = b.count + 1, b.mine + 1
-    say("COUNTED! " .. b.mine, vw / 2, scene.hor + scene.k * 0.5)
+    say("COUNTED! " .. b.mine, scene.w / 2, scene.hor + scene.k * 0.5)
     Audio.cue("land")
     Audio.cue("star")
     blink = { t = 0, swapped = false }
@@ -200,7 +231,7 @@ function BUI.update(dt)
             hopper = nil
             pos = pos - 1
             S.beyond.count = S.beyond.count + 1
-            say(tostring(S.beyond.count), vw / 2 + (pos % 2 == 0 and 16 or -16), scene.hor + scene.k * 0.2)
+            say(tostring(S.beyond.count), scene.w / 2 + (pos % 2 == 0 and 16 or -16), scene.hor + scene.k * 0.2)
             Audio.cue("land")
             tNext = B.hopEvery
         end
@@ -241,29 +272,29 @@ local function stepSize(s) return max(0.4, floor(s / 0.2 + 0.5) * 0.2) end
 
 local function sky()
     local hor = scene.hor
-    G.rect("c", 0, 0, vw, hor + 1)
+    G.rect("c", 0, 0, scene.w, hor + 1)
     -- Haze toward the horizon.
     local pts = {}
     local band = min(hor, 46)
     for y = hor - band, hor do
         local d = (y - (hor - band)) / band
-        for x = 0, vw - 1 do
+        for x = 0, scene.w - 1 do
             if G.dither(x, y, d * 0.9) then G.plot(pts, x, y) end
         end
     end
     G.points("w", pts)
     -- The sun, and clouds drifting.
-    G.disc("y", floor(vw * 0.78), floor(hor * 0.38), max(5, floor(sizeK * 3)))
+    G.disc("y", floor(scene.w * 0.78), floor(hor * 0.38), max(5, floor(sizeK * 3)))
     local drift = reduced and 0 or t * 2
     for i, c in ipairs({ { 0.2, 0.3 }, { 0.55, 0.18 }, { 0.9, 0.5 } }) do
-        local x = floor((c[1] * vw + drift * (0.6 + i * 0.2)) % (vw + 60) - 30)
+        local x = floor((c[1] * scene.w + drift * (0.6 + i * 0.2)) % (scene.w + 60) - 30)
         local y, r = floor(hor * c[2]), 4 + i
         G.disc("w", x, y, r)
         G.disc("w", x + r, y + 1, r - 1)
         G.disc("w", x - r, y + 2, r - 2)
     end
     -- Far hills.
-    for x = 0, vw - 1, 2 do
+    for x = 0, scene.w - 1, 2 do
         local hh = 5 + floor(4 * sin(x * 0.035) + 3 * sin(x * 0.09 + 1))
         G.rect("g", x, hor - hh, 2, hh + 1)
     end
@@ -271,11 +302,11 @@ end
 
 local function ground(adv, camH)
     local hor, k = scene.hor, scene.k
-    G.rect("m", 0, hor + 1, vw, scene.h - hor)
+    G.rect("m", 0, hor + 1, scene.w, scene.h - hor)
     -- The lane, a worn path widening toward us.
-    local cx = vw / 2
+    local cx = scene.w / 2
     for y = hor + 1, scene.h - 1 do
-        local hw = floor(vw * (0.05 + 0.30 * (y - hor) / (k + camH)))
+        local hw = floor(scene.w * (0.05 + 0.30 * (y - hor) / (k + camH)))
         G.rect("w", cx - hw, y, hw * 2, 1)
     end
     -- Tufts, going by as the line moves up.
@@ -286,7 +317,7 @@ local function ground(adv, camH)
         local y = floor(hor + (k + camH) * w)
         if y > hor + 1 and y < scene.h - 1 then
             local hx = ((i * 7919) % 1000) / 1000
-            local x = floor(cx + (hx - 0.5) * vw * (0.4 + 1.6 * w))
+            local x = floor(cx + (hx - 0.5) * scene.w * (0.4 + 1.6 * w))
             for j = 0, max(1, floor(3 * sizeK * w)) - 1 do G.plot(i % 3 == 0 and dark or light, x, y - j) end
         end
     end
@@ -297,7 +328,7 @@ end
 local function fence(z, camH)
     local w = wOf(z)
     local y = floor(scene.hor + (scene.k + camH) * w)
-    local x = floor(vw / 2)
+    local x = floor(scene.w / 2)
     local sk = sizeK * w
     local fw, fh = max(8, floor(24 * sk)), max(5, floor(14 * sk))
     local pw = max(2, floor(2.2 * sk))
@@ -316,7 +347,7 @@ end
 -- round to look at us).
 local function sheep(z, camH, lift, squash, leg, round)
     local w = wOf(z)
-    local x = floor(vw / 2)
+    local x = floor(scene.w / 2)
     local y = scene.hor + (scene.k + camH) * w
     local sz = stepSize(sizeK * w)
     ellipse("t", x, floor(y), 6 * sz, sz * 1.8)
@@ -328,7 +359,7 @@ local function hooves(camH)
     local y = scene.h - 3 + camH * 1.4
     local bob = (not reduced and fz > pos + 1.02) and floor(sin(t * 11) + 1) or 0
     for i, sx in ipairs({ -1, 1 }) do
-        local x = floor(vw / 2 + sx * min(vw * 0.16, 26))
+        local x = floor(scene.w / 2 + sx * min(scene.w * 0.16, 26))
         local yy = y - (i == 1 and bob or 1 - bob)
         if yy < scene.h + 8 then
             G.box(x - 5, yy - 9, 10, 10, "p", "o")
@@ -343,13 +374,13 @@ local function eyelids()
     local c = sin(min(1, blink.t / B.blinkTime) * pi) -- 0 open, 1 shut
     local lid = floor(scene.h / 2 * min(1, c * 1.15) + 0.5)
     if lid <= 0 then return end
-    G.rect("w", 0, 0, vw, lid)
-    G.rect("b", 0, lid - 1, vw, 1)
-    G.rect("w", 0, scene.h - lid, vw, lid)
-    G.rect("b", 0, scene.h - lid, vw, 1)
+    G.rect("w", 0, 0, scene.w, lid)
+    G.rect("b", 0, lid - 1, scene.w, 1)
+    G.rect("w", 0, scene.h - lid, scene.w, lid)
+    G.rect("b", 0, scene.h - lid, scene.w, 1)
 end
 
-function BUI.draw()
+local function drawScene()
     -- Up in the air (a jump's arc): the camera rises, and what's near drops away.
     local camH, adv = 0, 0
     if jump then
@@ -388,60 +419,105 @@ function BUI.draw()
     hooves(camH)
     eyelids()
 
-    -- The counting, top left.
-    local b = S.beyond
-    G.label("w", "COUNTED " .. b.count, 6, 5)
-    G.label("w", "YOU " .. b.mine, 6, 13)
-    if b.bad > 0 then G.label("r", "BAD " .. b.bad, 6, 21) end
-
-    -- Where we stand in the line.
-    if not jump and not blink and flash <= t then
-        local turn = pos == 0 and fz <= B.reach
-        local text = turn and "YOUR TURN!" or (pos == 0 and "ALMOST..." or (pos .. " AHEAD"))
-        if not turn or reduced or floor(t * 3) % 2 == 0 then
-            G.label(turn and "y" or "w", text, floor(vw / 2 - G.textWidth(text) / 2), scene.h - 30)
-        end
-    end
-
     -- BAD SHEEP.
     if flash > t then
         local bob = reduced and 0 or floor(sin(t * 14) * 1.5)
         local s1, s2 = "BAD SHEEP!", "WAIT YOUR TURN"
         local bw = G.textWidth(s1, 2) + 16
-        local bx, by = floor(vw / 2 - bw / 2), floor(scene.hor + scene.k * 0.25) + bob
+        local bx, by = floor(scene.w / 2 - bw / 2), floor(scene.hor + scene.k * 0.25) + bob
         G.box(bx, by, bw, 32, "r", "o")
-        G.text("o", s1, floor(vw / 2 - G.textWidth(s1, 2) / 2), by + 5, 2)
-        G.text("p", s2, floor(vw / 2 - G.textWidth(s2) / 2), by + 21)
+        G.text("o", s1, floor(scene.w / 2 - G.textWidth(s1, 2) / 2), by + 5, 2)
+        G.text("p", s2, floor(scene.w / 2 - G.textWidth(s2) / 2), by + 21)
     end
 
     -- Numbers rising.
     for _, f in ipairs(floats) do
         G.label("o", f.text, floor(f.x - G.textWidth(f.text) / 2), floor(f.y - f.t * 14), 1, f.t > 1 and (1.4 - f.t) / 0.4 or 1, "w")
     end
+end
 
-    -- The bar under the view, and its one button.
-    G.rect("o", 0, scene.h, vw, 1)
-    G.rect("w", 0, scene.h + 1, vw, vh - scene.h)
-    local bt = button
-    local ready = pos == 0 and fz <= B.reach and not jump
-    local lift = down > 0 and 1 or 0
-    local fill = ready and ((reduced or floor(t * 4) % 2 == 0) and "y" or "h") or "m"
-    G.box(bt.x, bt.y + lift, bt.w, bt.h, fill, "o")
-    G.rect("w", bt.x + 1, bt.y + lift + 1, bt.w - 2, 1)
-    local s = "JUMP"
-    G.text("o", s, floor(bt.x + bt.w / 2 - G.textWidth(s, 2) / 2), bt.y + lift + 4, 2)
+--- the screen round it: the bar on top, the line, the panel and its button -----------
 
+local function centred(k, s, cx, y, z)
+    G.text(k, s, floor(cx - G.textWidth(s, z) / 2), y, z)
+end
+
+local function turn() return pos == 0 and fz <= B.reach and not jump and not blink end
+
+local function drawTop()
+    local r = R.top
+    centred("s", "BEYOND", r.x + r.w / 2, r.y + 4)
+    local s = "COUNTED " .. S.beyond.count
+    G.box(r.x + 1, r.y + 1, G.textWidth(s) + 6, 11, "m", "s")
+    G.text("o", s, r.x + 4, r.y + 4)
+    local m = R.mute
+    G.box(m.x + 1, m.y + 1, m.w - 2, m.h - 2, "w", "s")
+    G.art({ "...oo", "..o.o", "..o..", "..o..", ".oo..", "ooo..", ".o..." }, m.x + 6, m.y + 3)
+    if S.muted then for i = 0, 8 do G.rect("r", m.x + 4 + i, m.y + 2 + i, 1, 1) end end
+    local mo = R.motion
+    G.box(mo.x + 1, mo.y + 1, mo.w - 2, mo.h - 2, "w", "s")
+    if S.reducedMotion then G.rect("o", mo.x + 4, mo.y + 6, 9, 1)
+    else G.art({ ".oo...oo.", "o..o.o..o", "....o...." }, mo.x + 4, mo.y + 5) end
     -- The reset button: an arrow coming round, and its question while it waits.
-    G.box(reset.x + 1, reset.y + 1, reset.w - 2, reset.h - 2, "w", confirm > t and "h" or "s")
-    G.art(RESET_ART, reset.x + 5, reset.y + 3)
+    local re = R.reset
+    G.box(re.x + 1, re.y + 1, re.w - 2, re.h - 2, "w", confirm > t and "h" or "s")
+    G.art(RESET_ART, re.x + 5, re.y + 3)
     -- The phase button (dev): round to phase 1, a new game.
-    G.box(phase.x + 1, phase.y + 1, phase.w - 2, phase.h - 2, "w", "s")
-    G.text("o", "4>1", phase.x + 3, phase.y + 4)
+    local ph = R.phase
+    G.box(ph.x + 1, ph.y + 1, ph.w - 2, ph.h - 2, "w", "s")
+    G.text("o", "4>1", ph.x + 3, ph.y + 4)
     if confirm > t then
         local q = "TAP AGAIN TO RESET ALL"
-        G.label("h", q, floor(max(4, reset.x + reset.w - G.textWidth(q))), reset.y + reset.h + 3)
+        G.label("h", q, floor(max(4, re.x + re.w - G.textWidth(q))), re.y + re.h + 3)
     end
-    if S and S.muted then G.label("w", "MUTED", 6, scene.h - 12) end
+end
+
+-- Under the view: where we stand in the line.
+local function drawLine()
+    local r = R.line
+    G.text("s", "LINE", r.x, r.y + 4)
+    local text = turn() and "YOUR TURN!" or (pos == 0 and "ALMOST THERE" or (pos .. (pos == 1 and " SHEEP AHEAD" or " SHEEP AHEAD")))
+    local bx = r.x + 24
+    local bw = r.x + r.w - bx
+    G.box(bx, r.y + 1, bw, 11, turn() and "y" or "w", "s")
+    centred("o", text, bx + bw / 2, r.y + 4)
+end
+
+local function drawPanel()
+    -- The tally.
+    local r = R.tally
+    G.box(r.x, r.y, r.w, r.h, "w", "s")
+    local b = S.beyond
+    G.text("s", "SHEEP COUNTED", r.x + 5, r.y + 5)
+    G.text("o", tostring(b.count), r.x + r.w - 5 - G.textWidth(tostring(b.count)), r.y + 5)
+    G.text("s", "JUMPED, AND COUNTED", r.x + 5, r.y + 13)
+    G.text("o", tostring(b.mine), r.x + r.w - 5 - G.textWidth(tostring(b.mine)), r.y + 13)
+    G.text("s", "BAD SHEEP", r.x + 5, r.y + 21)
+    G.text(b.bad > 0 and "p" or "o", tostring(b.bad), r.x + r.w - 5 - G.textWidth(tostring(b.bad)), r.y + 21)
+    -- The one button.
+    local bt = R.jump
+    local lift = down > 0 and 1 or 0
+    local fill = turn() and ((reduced or floor(t * 4) % 2 == 0) and "y" or "h") or "m"
+    G.box(bt.x + 1, bt.y + 1 + lift, bt.w - 2, bt.h - 2, fill, "o")
+    G.rect("w", bt.x + 2, bt.y + 2 + lift, bt.w - 4, 1)
+    centred("o", "JUMP", bt.x + bt.w / 2, bt.y + floor(bt.h / 2) - 4 + lift, 2)
+end
+
+function BUI.draw()
+    G.rect("w", 0, 0, vw, vh)
+    drawTop()
+    -- The view, in its frame.
+    local r = R.scene
+    G.box(r.x, r.y, r.w, r.h, "c")
+    love.graphics.push("all")
+    love.graphics.setScissor(r.x, r.y, r.w, r.h)
+    love.graphics.translate(r.x, r.y)
+    drawScene()
+    love.graphics.pop()
+    G.rect("o", r.x, r.y + r.h, r.w, 2)
+    drawLine()
+    drawPanel()
+    if S and S.muted then G.label("w", "MUTED", r.x + 4, r.y + r.h - 10) end
 end
 
 return BUI

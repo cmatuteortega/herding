@@ -68,6 +68,7 @@ LUI.setReducedAll = function(v) UI.setReduced(v) end
 AUI.save = function() UI.save() end
 AUI.setReducedAll = function(v) UI.setReduced(v) end
 BUI.save = function() UI.save() end
+BUI.setReducedAll = function(v) UI.setReduced(v) end
 -- Through the Gate of Horn.
 LUI.toAstral = function()
     if Game.goAstral(S) then
@@ -155,6 +156,7 @@ end
 function UI.sceneRect()
     if lucid() then return LUI.sceneRect() end
     if astral() then return AUI.sceneRect() end
+    if beyond() then return BUI.sceneRect() end
     return R.scene
 end
 
